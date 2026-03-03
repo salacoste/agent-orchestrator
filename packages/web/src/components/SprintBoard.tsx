@@ -7,6 +7,7 @@ import { EpicProgress, type EpicSummary } from "./EpicProgress";
 interface StoryCard {
   id: string;
   title: string;
+  url?: string;
   state: string;
   bmadStatus: string;
   epic: string | null;
@@ -143,7 +144,18 @@ export function SprintBoard({ projectId }: { projectId: string }) {
                     className="rounded-[5px] border border-[var(--color-border-muted)] bg-[var(--color-bg-base)] p-2.5 hover:border-[var(--color-border-default)] transition-colors"
                   >
                     <div className="text-[10px] font-mono text-[var(--color-text-muted)] mb-1">
-                      {story.id}
+                      {story.url && !story.url.startsWith("file://") ? (
+                        <a
+                          href={story.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:text-[var(--color-accent)] hover:underline"
+                        >
+                          {story.id}
+                        </a>
+                      ) : (
+                        story.id
+                      )}
                     </div>
                     <div className="text-[12px] text-[var(--color-text-primary)] mb-1.5 line-clamp-2">
                       {story.title}

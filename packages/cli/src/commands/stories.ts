@@ -4,6 +4,7 @@ import { type Issue, isTerminalSession, loadConfig } from "@composio/ao-core";
 import { header, padCol } from "../lib/format.js";
 import { getTracker } from "../lib/plugins.js";
 import { getSessionManager } from "../lib/create-session-manager.js";
+import { resolveProject } from "../lib/resolve-project.js";
 
 // Column widths for the stories table
 const COL = {
@@ -67,26 +68,7 @@ export function registerStories(program: Command): void {
           process.exit(1);
         }
 
-        // Resolve project — use the argument, pick the only one, or error if multiple
-        const projectIds = Object.keys(config.projects);
-        let projectId: string;
-        if (projectArg) {
-          if (!config.projects[projectArg]) {
-            console.error(
-              chalk.red(`Unknown project: ${projectArg}\nAvailable: ${projectIds.join(", ")}`),
-            );
-            process.exit(1);
-          }
-          projectId = projectArg;
-        } else if (projectIds.length === 1 && projectIds[0]) {
-          projectId = projectIds[0];
-        } else {
-          console.error(
-            chalk.red(`Multiple projects found. Specify one: ${projectIds.join(", ")}`),
-          );
-          process.exit(1);
-        }
-
+        const projectId = resolveProject(config, projectArg);
         const projectConfig = config.projects[projectId];
         const tracker = getTracker(config, projectId);
 

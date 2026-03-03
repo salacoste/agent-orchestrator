@@ -4,6 +4,7 @@ import { loadConfig, type Issue, type Session } from "@composio/ao-core";
 import { getTracker } from "../lib/plugins.js";
 import { getSessionManager } from "../lib/create-session-manager.js";
 import { header } from "../lib/format.js";
+import { resolveProject } from "../lib/resolve-project.js";
 
 /** Ordered sprint columns */
 const COLUMNS = ["backlog", "ready-for-dev", "in-progress", "review", "done"] as const;
@@ -41,31 +42,6 @@ function columnColor(col: string): string {
     default:
       return chalk.white(col);
   }
-}
-
-/** Resolve the project ID from argument or pick the only project. */
-function resolveProject(
-  config: ReturnType<typeof loadConfig>,
-  projectArg: string | undefined,
-): string {
-  const projectIds = Object.keys(config.projects);
-
-  if (projectArg) {
-    if (!config.projects[projectArg]) {
-      console.error(
-        chalk.red(`Unknown project: ${projectArg}\nAvailable: ${projectIds.join(", ")}`),
-      );
-      process.exit(1);
-    }
-    return projectArg;
-  }
-
-  if (projectIds.length === 1 && projectIds[0]) {
-    return projectIds[0];
-  }
-
-  console.error(chalk.red(`Multiple projects found. Specify one: ${projectIds.join(", ")}`));
-  process.exit(1);
 }
 
 interface SprintData {

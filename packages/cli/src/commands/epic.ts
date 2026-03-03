@@ -14,6 +14,7 @@ import { type Issue, type ProjectConfig, loadConfig } from "@composio/ao-core";
 import { readEpicTitle } from "@composio/ao-plugin-tracker-bmad";
 import { getTracker } from "../lib/plugins.js";
 import { header } from "../lib/format.js";
+import { resolveProject } from "../lib/resolve-project.js";
 
 function progressBar(done: number, total: number, width = 16): string {
   if (total === 0) return "\u2591".repeat(width);
@@ -149,25 +150,7 @@ export function registerEpic(program: Command): void {
           process.exit(1);
         }
 
-        // Resolve project
-        const projectIds = Object.keys(config.projects);
-        let projectId: string;
-
-        if (projectArg) {
-          if (!config.projects[projectArg]) {
-            console.error(chalk.red(`Unknown project: ${projectArg}`));
-            process.exit(1);
-          }
-          projectId = projectArg;
-        } else if (projectIds.length === 1 && projectIds[0]) {
-          projectId = projectIds[0];
-        } else {
-          console.error(
-            chalk.red(`Multiple projects found. Specify one: ${projectIds.join(", ")}`),
-          );
-          process.exit(1);
-        }
-
+        const projectId = resolveProject(config, projectArg);
         const project = config.projects[projectId];
         const tracker = getTracker(config, projectId);
 

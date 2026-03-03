@@ -95,6 +95,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       const storyData = {
         id: issue.id,
         title: issue.title,
+        url: issue.url,
         state: issue.state,
         bmadStatus,
         epic,

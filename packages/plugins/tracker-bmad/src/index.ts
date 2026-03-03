@@ -389,7 +389,8 @@ function createBmadTracker(): Tracker {
 
           const sibStoryContent = readFileOrNull(storyFilePath(sibId, project));
           const sibTitle = sibStoryContent ? extractTitle(sibStoryContent, sibId) : sibId;
-          siblings.push(`- ${sibId}: ${sibTitle} [${sibEntry.status}]`);
+          const sibStatus = typeof sibEntry.status === "string" ? sibEntry.status : "backlog";
+          siblings.push(`- ${sibId}: ${sibTitle} [${sibStatus}]`);
         }
 
         if (siblings.length > 0) {
@@ -482,7 +483,7 @@ function createBmadTracker(): Tracker {
         throw new Error(`Issue '${identifier}' not found in sprint-status.yaml`);
       }
 
-      const oldStatus = entry.status;
+      const oldStatus = typeof entry.status === "string" ? entry.status : "backlog";
       const newStatus = reverseMapState(update.state);
 
       entry.status = newStatus;

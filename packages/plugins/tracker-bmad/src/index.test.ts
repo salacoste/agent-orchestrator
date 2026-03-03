@@ -680,6 +680,25 @@ Deployment details.
 
     expect(prompt).not.toContain("## Related Stories (same epic)");
   });
+
+  it("renders sibling status as 'backlog' when sibling has missing status", async () => {
+    const yamlWithMalformedSibling = `development_status:
+  1-1-user-authentication:
+    status: ready-for-dev
+    epic: epic-1
+  1-2-no-status:
+    epic: epic-1
+  epic-1:
+    status: epic-in-progress`;
+    setupFs({ sprintStatus: yamlWithMalformedSibling });
+    const tracker = create();
+    const prompt = await tracker.generatePrompt("1-1-user-authentication", PROJECT);
+
+    expect(prompt).toContain("## Related Stories (same epic)");
+    expect(prompt).toContain("1-2-no-status:");
+    expect(prompt).toContain("[backlog]");
+    expect(prompt).not.toContain("[undefined]");
+  });
 });
 
 describe("listIssues", () => {
@@ -870,6 +889,20 @@ describe("updateIssue", () => {
     const writeOrder = mockWriteFileSync.mock.invocationCallOrder[0];
     const historyOrder = vi.mocked(appendHistory).mock.invocationCallOrder[0];
     expect(historyOrder).toBeGreaterThan(writeOrder!);
+  });
+
+  it("records oldStatus as 'backlog' when entry has missing status", async () => {
+    setupFs({
+      sprintStatus: `
+development_status:
+  1-1-no-status:
+    epic: epic-1
+`,
+    });
+    const tracker = create();
+    await tracker.updateIssue!("1-1-no-status", { state: "closed" }, PROJECT);
+
+    expect(appendHistory).toHaveBeenCalledWith(PROJECT, "1-1-no-status", "backlog", "done");
   });
 });
 

@@ -388,6 +388,21 @@ describe("issueLabel", () => {
     const label = tracker.issueLabel!("https://example.com/other", PROJECT);
     expect(label).toBe("https://example.com/other");
   });
+
+  it("extracts slug from nested path with story- prefix", () => {
+    const tracker = create();
+    const label = tracker.issueLabel!(
+      "file:///home/user/project/_bmad-output/impl/story-2-1-payment.md",
+      PROJECT,
+    );
+    expect(label).toBe("2-1-payment");
+  });
+
+  it("returns plain identifier as-is when not a URL", () => {
+    const tracker = create();
+    const label = tracker.issueLabel!("1-1-user-authentication", PROJECT);
+    expect(label).toBe("1-1-user-authentication");
+  });
 });
 
 describe("generatePrompt", () => {

@@ -90,7 +90,18 @@ export function SprintBoard({ projectId }: { projectId: string }) {
     return <div className="text-red-400 text-sm p-4">{error || "No data"}</div>;
   }
 
-  const { stats } = data;
+  // Compute stats — use filtered counts when epic filter is active
+  const stats = (() => {
+    if (!activeEpic) return data.stats;
+    const epicData = data.epics?.find((e) => e.epicId === activeEpic);
+    if (!epicData) return data.stats;
+    return {
+      total: epicData.total,
+      done: epicData.done,
+      inProgress: epicData.inProgress,
+      open: epicData.open,
+    };
+  })();
   const pct = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
 
   return (

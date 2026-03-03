@@ -126,9 +126,11 @@ async function gatherSessionInfo(
         if (tracker) {
           const issueData = await tracker.getIssue(issue, project);
           issueTitle = issueData.title;
-          // Get the raw status from labels (last label is typically the status)
+          // Last label is the BMad status (e.g. "in-progress", "done")
           issueStatus =
-            issueData.labels.length > 1 ? issueData.labels[issueData.labels.length - 1] : null;
+            issueData.labels.length > 0
+              ? (issueData.labels[issueData.labels.length - 1] ?? null)
+              : null;
         }
       }
     } catch {

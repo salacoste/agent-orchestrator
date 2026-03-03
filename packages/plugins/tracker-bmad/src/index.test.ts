@@ -356,6 +356,11 @@ describe("branchName", () => {
     const tracker = create();
     expect(tracker.branchName("some/nested/id", PROJECT)).toBe("feat/some-nested-id");
   });
+
+  it("sanitizes @{ sequence from identifier", () => {
+    const tracker = create();
+    expect(tracker.branchName("story@{upstream}", PROJECT)).toBe("feat/story-upstream}");
+  });
 });
 
 describe("issueUrl", () => {
@@ -750,13 +755,30 @@ describe("listIssues", () => {
     expect(issues.length).toBe(2);
   });
 
-  it("filters by labels", async () => {
+  it("filters by labels (epic)", async () => {
     setupFs();
     const tracker = create();
     const issues = await tracker.listIssues!({ state: "all", labels: ["epic-2"] }, PROJECT);
 
     expect(issues.length).toBe(1);
     expect(issues[0].id).toBe("2-1-payment-integration");
+  });
+
+  it("filters by labels (status)", async () => {
+    setupFs();
+    const tracker = create();
+    const issues = await tracker.listIssues!({ state: "all", labels: ["in-progress"] }, PROJECT);
+
+    expect(issues.length).toBe(1);
+    expect(issues[0].id).toBe("1-2-user-profile");
+  });
+
+  it("returns empty array when label filter matches nothing", async () => {
+    setupFs();
+    const tracker = create();
+    const issues = await tracker.listIssues!({ state: "all", labels: ["nonexistent"] }, PROJECT);
+
+    expect(issues).toHaveLength(0);
   });
 });
 

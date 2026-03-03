@@ -169,6 +169,26 @@ describe("stories command", () => {
     );
   });
 
+  it("filters by --state all", async () => {
+    mockListIssues.mockResolvedValue([]);
+
+    await program.parseAsync(["node", "test", "stories", "--state", "all"]);
+
+    expect(mockListIssues).toHaveBeenCalledWith(
+      expect.objectContaining({ state: "all" }),
+      expect.anything(),
+    );
+  });
+
+  it("rejects invalid --state values", async () => {
+    await expect(
+      program.parseAsync(["node", "test", "stories", "--state", "in_progress"]),
+    ).rejects.toThrow("process.exit(1)");
+
+    const errorOutput = consoleErrorSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(errorOutput).toMatch(/Invalid --state value/);
+  });
+
   it("filters by --epic label", async () => {
     const issues: Issue[] = [
       makeIssue({ id: "S-4", title: "Epic story", state: "open", labels: ["epic-auth"] }),

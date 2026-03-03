@@ -83,7 +83,15 @@ export function registerStories(program: Command): void {
         }
 
         // Build filters
-        const filterState = options.state as "open" | "closed" | "all" | undefined;
+        const validStates = ["open", "closed", "all"] as const;
+        const rawState = options.state ?? "open";
+        if (!validStates.includes(rawState as (typeof validStates)[number])) {
+          console.error(
+            chalk.red(`Invalid --state value: "${rawState}". Must be one of: open, closed, all`),
+          );
+          process.exit(1);
+        }
+        const filterState = rawState as "open" | "closed" | "all";
         const labels = options.epic ? [options.epic] : undefined;
 
         // Fetch issues and sessions in parallel

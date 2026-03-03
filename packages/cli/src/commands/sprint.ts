@@ -173,7 +173,7 @@ export function registerSprint(program: Command): void {
         }
 
         for (const issue of colIssues) {
-          const idStr = chalk.dim(`S-${issue.id}`.padEnd(8));
+          const idStr = chalk.dim(issue.id.padEnd(24));
           const session = issueSessionMap.get(issue.id.toLowerCase());
           let sessionStr = "";
           if (session) {

@@ -119,9 +119,9 @@ function printSingleEpic(epic: EpicSummary): void {
     }
 
     // Pad the story ID and title for alignment
-    const idStr = story.id.padEnd(6);
-    const titleStr = story.title.length > 30 ? story.title.slice(0, 27) + "..." : story.title;
-    console.log(`    ${chalk.cyan(idStr)} ${titleStr.padEnd(30)} ${stateStr}`);
+    const idStr = story.id.padEnd(24);
+    const titleStr = story.title.length > 36 ? story.title.slice(0, 33) + "..." : story.title;
+    console.log(`    ${chalk.cyan(idStr)} ${titleStr.padEnd(36)} ${stateStr}`);
   }
 
   console.log();

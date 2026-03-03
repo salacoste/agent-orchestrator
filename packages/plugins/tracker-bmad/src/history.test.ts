@@ -347,6 +347,52 @@ describe("readHistory", () => {
     expect(result[0]?.storyId).toBe("1-1-auth");
   });
 
+  it("accepts entries with extra fields beyond the required four", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      JSON.stringify({
+        timestamp: "2024-01-01T00:00:00.000Z",
+        storyId: "1-1-auth",
+        fromStatus: "ready-for-dev",
+        toStatus: "in-progress",
+        extraField: "should not break parsing",
+        version: 2,
+      }) + "\n",
+    );
+
+    const result = readHistory(PROJECT);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.storyId).toBe("1-1-auth");
+  });
+
+  it("skips entries where required fields are null", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      [
+        JSON.stringify({ timestamp: null, storyId: "x", fromStatus: "a", toStatus: "b" }),
+        JSON.stringify({
+          timestamp: "2024-01-01T00:00:00.000Z",
+          storyId: null,
+          fromStatus: "a",
+          toStatus: "b",
+        }),
+        JSON.stringify({
+          timestamp: "2024-01-01T00:00:00.000Z",
+          storyId: "valid",
+          fromStatus: "ready-for-dev",
+          toStatus: "done",
+        }),
+        "",
+      ].join("\n"),
+    );
+
+    const result = readHistory(PROJECT);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.storyId).toBe("valid");
+  });
+
   it("handles single entry without trailing newline", () => {
     const entry = {
       timestamp: "2024-01-01T00:00:00.000Z",

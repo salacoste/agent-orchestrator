@@ -83,7 +83,8 @@ export function BurndownChart({ projectId }: { projectId: string }) {
   const totalCompleted = doneCount ?? dailyCompletions.reduce((sum, d) => sum + d.count, 0);
   let cumDone = 0;
   const points = dailyCompletions.map((d, i) => {
-    cumDone += d.count;
+    // Cap at totalCompleted so bouncing stories (done→reopened→done) don't over-count
+    cumDone = Math.min(cumDone + d.count, totalCompleted);
     const remaining = Math.max(0, totalStories - cumDone);
     const x = padding.left + (i / Math.max(days - 1, 1)) * chartW;
     const y = padding.top + (1 - remaining / Math.max(totalStories, 1)) * chartH;

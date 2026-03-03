@@ -14,13 +14,23 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
     }
 
     if (!project.tracker || project.tracker.plugin !== "bmad") {
-      return NextResponse.json({ entries: [], dailyCompletions: [], totalStories: 0 });
+      return NextResponse.json({
+        entries: [],
+        dailyCompletions: [],
+        totalStories: 0,
+        doneCount: 0,
+      });
     }
 
     const entries = readHistory(project);
 
     if (entries.length === 0) {
-      return NextResponse.json({ entries: [], dailyCompletions: [], totalStories: 0 });
+      return NextResponse.json({
+        entries: [],
+        dailyCompletions: [],
+        totalStories: 0,
+        doneCount: 0,
+      });
     }
 
     // Compute daily completions (stories moving to "done"), deduplicated by storyId

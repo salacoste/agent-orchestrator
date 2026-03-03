@@ -361,6 +361,16 @@ describe("branchName", () => {
     const tracker = create();
     expect(tracker.branchName("story@{upstream}", PROJECT)).toBe("feat/story-upstream}");
   });
+
+  it("falls back to 'story' for empty string identifier", () => {
+    const tracker = create();
+    expect(tracker.branchName("", PROJECT)).toBe("feat/story");
+  });
+
+  it("sanitizes tilde and caret characters", () => {
+    const tracker = create();
+    expect(tracker.branchName("HEAD~3^2", PROJECT)).toBe("feat/HEAD-3-2");
+  });
 });
 
 describe("issueUrl", () => {

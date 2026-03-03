@@ -2,12 +2,21 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Issue } from "@composio/ao-core";
+import type { Issue, Session, SessionManager } from "@composio/ao-core";
 
-const { mockConfigRef, mockListIssues, mockGetTracker } = vi.hoisted(() => ({
+const { mockConfigRef, mockListIssues, mockGetTracker, mockSessionManager } = vi.hoisted(() => ({
   mockConfigRef: { current: null as Record<string, unknown> | null },
   mockListIssues: vi.fn(),
   mockGetTracker: vi.fn(),
+  mockSessionManager: {
+    list: vi.fn(),
+    kill: vi.fn(),
+    cleanup: vi.fn(),
+    get: vi.fn(),
+    spawn: vi.fn(),
+    spawnOrchestrator: vi.fn(),
+    send: vi.fn(),
+  },
 }));
 
 vi.mock("@composio/ao-core", async (importOriginal) => {
@@ -24,6 +33,10 @@ vi.mock("../../src/lib/plugins.js", () => ({
   getAgent: vi.fn(),
   getAgentByName: vi.fn(),
   getSCM: vi.fn(),
+}));
+
+vi.mock("../../src/lib/create-session-manager.js", () => ({
+  getSessionManager: async (): Promise<SessionManager> => mockSessionManager as SessionManager,
 }));
 
 let tmpDir: string;
@@ -45,6 +58,24 @@ function makeIssue(partial: Partial<Issue> & { id: string; title: string }): Iss
     labels: partial.labels ?? [],
     assignee: partial.assignee,
     priority: partial.priority,
+  };
+}
+
+function makeSession(partial: Partial<Session> & { id: string; projectId: string }): Session {
+  return {
+    id: partial.id,
+    projectId: partial.projectId,
+    status: partial.status ?? "working",
+    activity: partial.activity ?? null,
+    branch: partial.branch ?? null,
+    issueId: partial.issueId ?? null,
+    pr: partial.pr ?? null,
+    workspacePath: partial.workspacePath ?? null,
+    runtimeHandle: partial.runtimeHandle ?? { id: partial.id, runtimeName: "tmux", data: {} },
+    agentInfo: partial.agentInfo ?? null,
+    createdAt: partial.createdAt ?? new Date(),
+    lastActivityAt: partial.lastActivityAt ?? new Date(),
+    metadata: partial.metadata ?? {},
   };
 }
 
@@ -84,6 +115,7 @@ beforeEach(() => {
 
   mockGetTracker.mockReturnValue(makeTracker());
   mockListIssues.mockResolvedValue([]);
+  mockSessionManager.list.mockResolvedValue([]);
 
   program = new Command();
   program.exitOverride();
@@ -221,6 +253,80 @@ describe("stories command", () => {
     expect(output).toContain("S-10");
     expect(output).toContain("S-11");
     expect(output).toContain("S-12");
+  });
+
+  it("cross-references active sessions with stories", async () => {
+    const issues: Issue[] = [
+      makeIssue({
+        id: "1-1-auth",
+        title: "Auth story",
+        state: "in_progress",
+        labels: ["epic-1", "in-progress"],
+      }),
+    ];
+    mockListIssues.mockResolvedValue(issues);
+
+    const sessions: Session[] = [
+      makeSession({ id: "app-1", projectId: "my-app", issueId: "1-1-auth", status: "working" }),
+    ];
+    mockSessionManager.list.mockResolvedValue(sessions);
+
+    await program.parseAsync(["node", "test", "stories"]);
+
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(output).toContain("Auth story");
+    expect(output).toContain("app-1");
+  });
+
+  it("cross-references sessions using case-insensitive issueId matching", async () => {
+    const issues: Issue[] = [
+      makeIssue({ id: "S-42", title: "Mixed case story", state: "open", labels: ["epic-1"] }),
+    ];
+    mockListIssues.mockResolvedValue(issues);
+
+    // Session stores issueId in different case than tracker returns
+    const sessions: Session[] = [
+      makeSession({ id: "app-2", projectId: "my-app", issueId: "s-42", status: "working" }),
+    ];
+    mockSessionManager.list.mockResolvedValue(sessions);
+
+    await program.parseAsync(["node", "test", "stories", "--json"]);
+
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("");
+    const parsed = JSON.parse(output) as Array<{ id: string; session: string | null }>;
+    expect(parsed[0].session).toBe("app-2");
+  });
+
+  it("includes session info in JSON output", async () => {
+    const issues: Issue[] = [
+      makeIssue({ id: "S-1", title: "Story", state: "open", labels: ["epic-1"] }),
+    ];
+    mockListIssues.mockResolvedValue(issues);
+
+    const sessions: Session[] = [
+      makeSession({ id: "app-3", projectId: "my-app", issueId: "S-1", status: "working" }),
+    ];
+    mockSessionManager.list.mockResolvedValue(sessions);
+
+    await program.parseAsync(["node", "test", "stories", "--json"]);
+
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("");
+    const parsed = JSON.parse(output) as Array<{ id: string; session: string | null }>;
+    expect(parsed[0].session).toBe("app-3");
+  });
+
+  it("handles session manager failure gracefully and still shows stories", async () => {
+    const issues: Issue[] = [
+      makeIssue({ id: "S-1", title: "A story", state: "open", labels: ["backlog"] }),
+    ];
+    mockListIssues.mockResolvedValue(issues);
+    mockSessionManager.list.mockRejectedValue(new Error("session manager unavailable"));
+
+    // Should not throw — session lookup is non-critical
+    await program.parseAsync(["node", "test", "stories"]);
+
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(output).toContain("A story");
   });
 
   it("shows dash for epic when story has no epic label", async () => {

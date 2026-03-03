@@ -17,6 +17,7 @@ import type {
   Tracker,
   Notifier,
   ActivityState,
+  OrchestratorEvent,
   PRInfo,
 } from "../types.js";
 
@@ -1318,12 +1319,16 @@ describe("bmad.story_done", () => {
 
     // With auto=false and action=send-to-agent, the reaction should NOT execute
     // Instead, the human should be notified directly
-    const notifyCalls = mockNotifier.notify.mock.calls;
-    const reactionCall = notifyCalls.find((call) => call[0].type === "reaction.triggered");
+    const notifyCalls = vi.mocked(mockNotifier.notify).mock.calls;
+    const reactionCall = notifyCalls.find(
+      (call: [OrchestratorEvent]) => call[0].type === "reaction.triggered",
+    );
     expect(reactionCall).toBeUndefined();
 
     // Should have a direct notification instead
-    const storyDoneCall = notifyCalls.find((call) => call[0].type === "bmad.story_done");
+    const storyDoneCall = notifyCalls.find(
+      (call: [OrchestratorEvent]) => call[0].type === "bmad.story_done",
+    );
     expect(storyDoneCall).toBeDefined();
   });
 });

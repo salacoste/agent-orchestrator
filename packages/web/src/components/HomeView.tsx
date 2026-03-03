@@ -103,7 +103,7 @@ export function HomeView({
       {/* Conditionally render either Dashboard or SprintBoard */}
       {view === "sessions" || !selectedProject ? (
         <Dashboard
-          sessions={initialSessions}
+          initialSessions={initialSessions}
           stats={stats}
           orchestratorId={orchestratorId}
           projectName={projectName}

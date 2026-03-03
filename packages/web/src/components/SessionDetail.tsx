@@ -391,7 +391,7 @@ export function SessionDetail({
                 </span>
                 <span
                   className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${
-                    issueData.state === "closed"
+                    issueData.state === "closed" || issueData.state === "cancelled"
                       ? "bg-[rgba(63,185,80,0.12)] text-[var(--color-status-ready)]"
                       : issueData.state === "in_progress"
                         ? "bg-[rgba(88,166,255,0.12)] text-[var(--color-accent)]"

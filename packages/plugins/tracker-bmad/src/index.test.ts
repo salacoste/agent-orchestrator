@@ -14,7 +14,7 @@ vi.mock("./history.js", () => ({
 }));
 
 import { readFileSync, writeFileSync, existsSync, renameSync } from "node:fs";
-import plugin, { manifest, create, readEpicTitle } from "./index.js";
+import plugin, { manifest, create, readEpicTitle, getBmadStatus } from "./index.js";
 import { appendHistory } from "./history.js";
 
 // ---------------------------------------------------------------------------
@@ -905,6 +905,24 @@ describe("state mapping", () => {
     // epic-done → closed
     const epicDone = await tracker.getIssue("epic-2", PROJECT);
     expect(epicDone.state).toBe("closed");
+  });
+});
+
+describe("getBmadStatus", () => {
+  it("returns last label lowercased", () => {
+    expect(getBmadStatus(["epic-1", "in-progress"])).toBe("in-progress");
+  });
+
+  it("returns 'backlog' for empty labels", () => {
+    expect(getBmadStatus([])).toBe("backlog");
+  });
+
+  it("lowercases the status", () => {
+    expect(getBmadStatus(["epic-1", "Ready-For-Dev"])).toBe("ready-for-dev");
+  });
+
+  it("handles single-label array", () => {
+    expect(getBmadStatus(["done"])).toBe("done");
   });
 });
 

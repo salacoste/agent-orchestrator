@@ -18,7 +18,7 @@ port: 3000
 # Default plugins (these are the defaults — you can omit this section)
 defaults:
   runtime: tmux           # tmux | process | docker | kubernetes | ssh | e2b
-  agent: claude-code      # claude-code | codex | aider | goose | custom
+  agent: claude-code      # claude-code | glm | codex | aider | goose | custom
   workspace: worktree     # worktree | clone | copy
   notifiers: [desktop]    # desktop | slack | discord | webhook | email
 
@@ -35,6 +35,15 @@ projects:
     # tracker:
     #   plugin: linear
     #   teamId: "your-team-id"
+    #
+    # BMad file-based tracker (reads sprint-status.yaml + story-*.md)
+    # tracker:
+    #   plugin: bmad
+    #   outputDir: _bmad-output                    # default
+    #   storyDir: implementation-artifacts          # default
+    #   branchPrefix: feat                          # default
+    #   includeArchContext: true                     # include architecture.md in agent prompt
+    #   includePrdContext: false                      # include prd.md in agent prompt
 
     # Files to symlink into workspaces
     # symlinks: [.env, .claude]
@@ -47,6 +56,15 @@ projects:
     # agentConfig:
     #   permissions: skip    # --dangerously-skip-permissions
     #   model: opus
+    #
+    # Per-agent overrides
+    # agentConfigs:
+    #   claude-code:
+    #     command: yolo -oauth
+    #     processName: yolo
+    #   glm:
+    #     command: yolo -api
+    #     processName: yolo
 
     # Inline rules included in every agent prompt for this project
     # agentRules: |
@@ -101,3 +119,16 @@ projects:
 #     threshold: 10m
 #     action: notify
 #     priority: urgent
+#
+#   # BMad-specific reactions
+#   bmad-story-done:
+#     auto: true              # notify when a BMad story completes (PR merged)
+#     action: notify
+#     priority: info
+#     includeSummary: true    # include story summary in notification
+#
+#   bmad-sprint-complete:
+#     auto: true              # notify when all sprint stories are done
+#     action: notify
+#     priority: action
+#     includeSummary: true    # include sprint summary in notification

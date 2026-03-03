@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Dashboard } from "@/components/Dashboard";
+import { HomeView } from "@/components/HomeView";
 import type { DashboardSession } from "@/lib/types";
 import { getServices, getSCM } from "@/lib/services";
 import {
@@ -23,9 +23,15 @@ export async function generateMetadata(): Promise<Metadata> {
 export default async function Home() {
   let sessions: DashboardSession[] = [];
   let orchestratorId: string | null = null;
+  let trackerProjects: string[] = [];
   const projectName = getProjectName();
   try {
     const { config, registry, sessionManager } = await getServices();
+
+    // Identify projects with a tracker configured (eligible for sprint board)
+    trackerProjects = Object.entries(config.projects || {})
+      .filter(([, p]) => p.tracker?.plugin)
+      .map(([id]) => id);
     const allSessions = await sessionManager.list();
 
     // Find the orchestrator session (any session ending with -orchestrator)
@@ -41,7 +47,10 @@ export default async function Home() {
 
     // Enrich metadata (issue labels, agent summaries, issue titles) — cap at 3s
     const metaTimeout = new Promise<void>((resolve) => setTimeout(resolve, 3_000));
-    await Promise.race([enrichSessionsMetadata(coreSessions, sessions, config, registry), metaTimeout]);
+    await Promise.race([
+      enrichSessionsMetadata(coreSessions, sessions, config, registry),
+      metaTimeout,
+    ]);
 
     // Enrich sessions that have PRs with live SCM data
     // Skip enrichment for terminal sessions (merged, closed, done, terminated)
@@ -101,6 +110,12 @@ export default async function Home() {
   }
 
   return (
-    <Dashboard initialSessions={sessions} stats={computeStats(sessions)} orchestratorId={orchestratorId} projectName={projectName} />
+    <HomeView
+      initialSessions={sessions}
+      stats={computeStats(sessions)}
+      orchestratorId={orchestratorId}
+      projectName={projectName}
+      trackerProjects={trackerProjects}
+    />
   );
 }

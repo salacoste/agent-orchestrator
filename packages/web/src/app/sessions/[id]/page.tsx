@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
-import { SessionDetail } from "@/components/SessionDetail";
+import { SessionDetail, type IssueData } from "@/components/SessionDetail";
 import { type DashboardSession, getAttentionLevel, type AttentionLevel } from "@/lib/types";
 import { activityIcon } from "@/lib/activity-icons";
 
@@ -47,6 +47,7 @@ export default function SessionPage() {
 
   const [session, setSession] = useState<DashboardSession | null>(null);
   const [zoneCounts, setZoneCounts] = useState<ZoneCounts | null>(null);
+  const [issueData, setIssueData] = useState<IssueData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,7 +88,14 @@ export default function SessionPage() {
       if (!res.ok) return;
       const body = (await res.json()) as { sessions: DashboardSession[] };
       const sessions = body.sessions ?? [];
-      const counts: ZoneCounts = { merge: 0, respond: 0, review: 0, pending: 0, working: 0, done: 0 };
+      const counts: ZoneCounts = {
+        merge: 0,
+        respond: 0,
+        review: 0,
+        pending: 0,
+        working: 0,
+        done: 0,
+      };
       for (const s of sessions) {
         if (!s.id.endsWith("-orchestrator")) {
           counts[getAttentionLevel(s) as AttentionLevel]++;
@@ -99,15 +107,28 @@ export default function SessionPage() {
     }
   }, [isOrchestrator]);
 
-  // Initial fetch — session first, zone counts after (avoids blocking on slow /api/sessions)
+  // Fetch linked issue data (one-time, not polled — issue data rarely changes)
+  const fetchIssueData = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/sessions/${encodeURIComponent(id)}/issue`);
+      if (!res.ok) return; // 404 = no issue linked, not an error
+      const data = (await res.json()) as IssueData;
+      setIssueData(data);
+    } catch {
+      // non-critical — story card just won't show
+    }
+  }, [id]);
+
+  // Initial fetch — session first, issue + zone counts after
   useEffect(() => {
     fetchSession();
+    fetchIssueData();
     // Delay zone counts so the heavy /api/sessions call doesn't contend with session load
     const t = setTimeout(fetchZoneCounts, 2000);
     return () => clearTimeout(t);
-  }, [fetchSession, fetchZoneCounts]);
+  }, [fetchSession, fetchIssueData, fetchZoneCounts]);
 
-  // Poll every 5s
+  // Poll every 5s (session + zone counts only — issue data is stable)
   useEffect(() => {
     const interval = setInterval(() => {
       fetchSession();
@@ -127,7 +148,9 @@ export default function SessionPage() {
   if (error || !session) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[var(--color-bg-base)]">
-        <div className="text-[13px] text-[var(--color-status-error)]">{error ?? "Session not found"}</div>
+        <div className="text-[13px] text-[var(--color-status-error)]">
+          {error ?? "Session not found"}
+        </div>
         <a href="/" className="text-[12px] text-[var(--color-accent)] hover:underline">
           ← Back to dashboard
         </a>
@@ -140,6 +163,7 @@ export default function SessionPage() {
       session={session}
       isOrchestrator={isOrchestrator}
       orchestratorZones={zoneCounts ?? undefined}
+      issueData={issueData}
     />
   );
 }

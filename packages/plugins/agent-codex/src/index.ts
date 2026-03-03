@@ -1,5 +1,6 @@
 import {
   DEFAULT_READY_THRESHOLD_MS,
+  resolveAgentConfig,
   shellEscape,
   type Agent,
   type AgentSessionInfo,
@@ -760,8 +761,9 @@ function createCodexAgent(): Agent {
       const binary = resolvedBinary ?? "codex";
       const parts: string[] = [shellEscape(binary), "resume"];
 
-      appendApprovalFlags(parts, project.agentConfig?.permissions as string | undefined);
-      const effectiveModel = (project.agentConfig?.model ?? data.model) as string | undefined;
+      const agentConfig = resolveAgentConfig(project, "codex");
+      appendApprovalFlags(parts, agentConfig.permissions as string | undefined);
+      const effectiveModel = (agentConfig.model ?? data.model) as string | undefined;
       appendModelFlags(parts, effectiveModel ?? undefined);
 
       // Positional threadId goes last, after all flags

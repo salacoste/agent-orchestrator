@@ -4,14 +4,13 @@ import type { Session, RuntimeHandle, AgentLaunchConfig } from "@composio/ao-cor
 // ---------------------------------------------------------------------------
 // Hoisted mocks — available inside vi.mock factories
 // ---------------------------------------------------------------------------
-const { mockExecFileAsync, mockReaddir, mockReadFile, mockStat, mockHomedir } =
-  vi.hoisted(() => ({
-    mockExecFileAsync: vi.fn(),
-    mockReaddir: vi.fn(),
-    mockReadFile: vi.fn(),
-    mockStat: vi.fn(),
-    mockHomedir: vi.fn(() => "/mock/home"),
-  }));
+const { mockExecFileAsync, mockReaddir, mockReadFile, mockStat, mockHomedir } = vi.hoisted(() => ({
+  mockExecFileAsync: vi.fn(),
+  mockReaddir: vi.fn(),
+  mockReadFile: vi.fn(),
+  mockStat: vi.fn(),
+  mockHomedir: vi.fn(() => "/mock/home"),
+}));
 
 vi.mock("node:child_process", () => {
   const fn = Object.assign((..._args: unknown[]) => {}, {
@@ -30,7 +29,13 @@ vi.mock("node:os", () => ({
   homedir: mockHomedir,
 }));
 
-import { create, manifest, default as defaultExport, resetPsCache } from "./index.js";
+import {
+  create,
+  createClaudeCompatibleAgent,
+  manifest,
+  default as defaultExport,
+  resetPsCache,
+} from "./index.js";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -133,6 +138,18 @@ describe("plugin manifest & exports", () => {
     expect(defaultExport.manifest).toBe(manifest);
     expect(typeof defaultExport.create).toBe("function");
   });
+
+  it("can create a custom Claude-compatible agent", () => {
+    const agent = createClaudeCompatibleAgent({
+      name: "glm",
+      description: "GLM",
+      defaultCommand: "yolo -api",
+      defaultProcessName: "yolo",
+    });
+    expect(agent.name).toBe("glm");
+    expect(agent.processName).toBe("yolo");
+    expect(agent.getLaunchCommand(makeLaunchConfig())).toBe("yolo -api");
+  });
 });
 
 // =========================================================================
@@ -203,6 +220,23 @@ describe("getLaunchCommand", () => {
     expect(cmd).not.toMatch(/\s-p\s/);
     expect(cmd).not.toContain("Do the task");
   });
+
+  it("uses configured wrapper command from project agentConfig", () => {
+    const cmd = agent.getLaunchCommand(
+      makeLaunchConfig({
+        permissions: "skip",
+        projectConfig: {
+          name: "my-project",
+          repo: "owner/repo",
+          path: "/workspace/repo",
+          defaultBranch: "main",
+          sessionPrefix: "my",
+          agentConfig: { command: "yolo -oauth" },
+        },
+      }),
+    );
+    expect(cmd).toBe("yolo -oauth --dangerously-skip-permissions");
+  });
 });
 
 // =========================================================================
@@ -231,6 +265,27 @@ describe("getEnvironment", () => {
     const env = agent.getEnvironment(makeLaunchConfig());
     expect(env["AO_ISSUE_ID"]).toBeUndefined();
   });
+
+  it("sets YOLO_HEADLESS to suppress interactive prompts in wrapper scripts", () => {
+    const env = agent.getEnvironment(makeLaunchConfig());
+    expect(env["YOLO_HEADLESS"]).toBe("1");
+  });
+
+  it("sets AO_AGENT_PROCESS_NAME from configured wrapper command", () => {
+    const env = agent.getEnvironment(
+      makeLaunchConfig({
+        projectConfig: {
+          name: "my-project",
+          repo: "owner/repo",
+          path: "/workspace/repo",
+          defaultBranch: "main",
+          sessionPrefix: "my",
+          agentConfig: { command: "yolo -oauth" },
+        },
+      }),
+    );
+    expect(env["AO_AGENT_PROCESS_NAME"]).toBe("yolo");
+  });
 });
 
 // =========================================================================
@@ -242,6 +297,17 @@ describe("isProcessRunning", () => {
   it("returns true when claude is found on tmux pane TTY", async () => {
     mockTmuxWithProcess("claude");
     expect(await agent.isProcessRunning(makeTmuxHandle())).toBe(true);
+  });
+
+  it("uses runtime handle process override for liveness detection", async () => {
+    mockTmuxWithProcess("yolo");
+    expect(
+      await agent.isProcessRunning({
+        id: "test-session",
+        runtimeName: "tmux",
+        data: { agentProcessName: "yolo" },
+      }),
+    ).toBe(true);
   });
 
   it("returns false when no claude on tmux pane TTY", async () => {
@@ -658,4 +724,3 @@ describe("getSessionInfo", () => {
     });
   });
 });
-

@@ -96,6 +96,9 @@ export function create(): Runtime {
         data: {
           createdAt: Date.now(),
           workspacePath: config.workspacePath,
+          ...(config.environment?.["AO_AGENT_PROCESS_NAME"]
+            ? { agentProcessName: config.environment["AO_AGENT_PROCESS_NAME"] }
+            : {}),
         },
       };
     },

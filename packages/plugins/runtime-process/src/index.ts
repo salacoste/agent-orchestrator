@@ -141,6 +141,9 @@ export function create(): Runtime {
         data: {
           pid: child.pid,
           createdAt: entry.createdAt,
+          ...(config.environment?.["AO_AGENT_PROCESS_NAME"]
+            ? { agentProcessName: config.environment["AO_AGENT_PROCESS_NAME"] }
+            : {}),
         },
       };
     },

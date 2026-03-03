@@ -20,7 +20,7 @@ import {
   reviewDecisionIcon,
   padCol,
 } from "../lib/format.js";
-import { getAgentByName, getSCM } from "../lib/plugins.js";
+import { getAgentByName, getSCM, getTracker } from "../lib/plugins.js";
 import { getSessionManager } from "../lib/create-session-manager.js";
 
 interface SessionInfo {
@@ -32,6 +32,8 @@ interface SessionInfo {
   pr: string | null;
   prNumber: number | null;
   issue: string | null;
+  issueTitle: string | null;
+  issueStatus: string | null;
   lastActivity: string;
   project: string | null;
   ciStatus: CIStatus | null;
@@ -113,6 +115,27 @@ async function gatherSessionInfo(
     }
   }
 
+  // Fetch story info if tracker is available
+  let issueTitle: string | null = null;
+  let issueStatus: string | null = null;
+  if (issue) {
+    try {
+      const project = projectConfig.projects[session.projectId];
+      if (project?.tracker) {
+        const tracker = getTracker(projectConfig, session.projectId);
+        if (tracker) {
+          const issueData = await tracker.getIssue(issue, project);
+          issueTitle = issueData.title;
+          // Get the raw status from labels (last label is typically the status)
+          issueStatus =
+            issueData.labels.length > 1 ? issueData.labels[issueData.labels.length - 1] : null;
+        }
+      }
+    } catch {
+      // Tracker lookup failed — not critical
+    }
+  }
+
   return {
     name: session.id,
     branch,
@@ -122,6 +145,8 @@ async function gatherSessionInfo(
     pr: prUrl,
     prNumber,
     issue,
+    issueTitle,
+    issueStatus,
     lastActivity,
     project: session.projectId,
     ciStatus,
@@ -183,6 +208,14 @@ function printSessionRow(info: SessionInfo): void {
   const displaySummary = info.claudeSummary || info.summary;
   if (displaySummary) {
     console.log(`  ${" ".repeat(COL.session)}${chalk.dim(displaySummary.slice(0, 60))}`);
+  }
+
+  // Show story info if available
+  if (info.issueTitle) {
+    const statusTag = info.issueStatus ? chalk.dim(` [${info.issueStatus}]`) : "";
+    console.log(
+      `  ${" ".repeat(COL.session)}${chalk.magenta("story:")} ${info.issueTitle.slice(0, 50)}${statusTag}`,
+    );
   }
 }
 

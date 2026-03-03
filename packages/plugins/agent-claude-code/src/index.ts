@@ -2,6 +2,7 @@ import {
   shellEscape,
   readLastJsonlEntry,
   DEFAULT_READY_THRESHOLD_MS,
+  resolveAgentConfig,
   type Agent,
   type AgentSessionInfo,
   type AgentLaunchConfig,
@@ -177,6 +178,54 @@ export const manifest = {
   version: "0.1.0",
 };
 
+export interface ClaudeCompatibleAgentOptions {
+  name: string;
+  description: string;
+  defaultCommand: string;
+  defaultProcessName: string;
+}
+
+const DEFAULT_OPTIONS: ClaudeCompatibleAgentOptions = {
+  name: "claude-code",
+  description: "Agent plugin: Claude Code CLI",
+  defaultCommand: "claude",
+  defaultProcessName: "claude",
+};
+
+function normalizeConfiguredCommand(command: string | undefined, fallback: string): string {
+  const normalized = command?.trim();
+  return normalized && normalized.length > 0 ? normalized : fallback;
+}
+
+function parseCommandExecutable(command: string): string | null {
+  const match = command.trim().match(/^['"]?([^'"\s]+)["']?/);
+  return match?.[1] ?? null;
+}
+
+function resolveLaunchPrefix(
+  project: ProjectConfig | undefined,
+  options: ClaudeCompatibleAgentOptions,
+): string {
+  const agentConfig = resolveAgentConfig(project, options.name);
+  return normalizeConfiguredCommand(
+    agentConfig.command as string | undefined,
+    options.defaultCommand,
+  );
+}
+
+function resolveProcessName(
+  project: ProjectConfig | undefined,
+  options: ClaudeCompatibleAgentOptions,
+): string {
+  const configured = resolveAgentConfig(project, options.name).processName;
+  if (typeof configured === "string" && configured.trim()) {
+    return configured.trim();
+  }
+
+  const executable = parseCommandExecutable(resolveLaunchPrefix(project, options));
+  return executable ?? options.defaultProcessName;
+}
+
 // =============================================================================
 // JSONL Helpers
 // =============================================================================
@@ -288,8 +337,7 @@ async function parseJsonlFileTail(filePath: string, maxBytes = 131_072): Promise
   // Skip potentially truncated first line only when we started mid-file.
   // If offset === 0 we read from the start so the first line is complete.
   const firstNewline = content.indexOf("\n");
-  const safeContent =
-    offset > 0 && firstNewline >= 0 ? content.slice(firstNewline + 1) : content;
+  const safeContent = offset > 0 && firstNewline >= 0 ? content.slice(firstNewline + 1) : content;
   const lines: JsonlLine[] = [];
   for (const line of safeContent.split("\n")) {
     const trimmed = line.trim();
@@ -307,9 +355,7 @@ async function parseJsonlFileTail(filePath: string, maxBytes = 131_072): Promise
 }
 
 /** Extract auto-generated summary from JSONL (last "summary" type entry) */
-function extractSummary(
-  lines: JsonlLine[],
-): { summary: string; isFallback: boolean } | null {
+function extractSummary(lines: JsonlLine[]): { summary: string; isFallback: boolean } | null {
   for (let i = lines.length - 1; i >= 0; i--) {
     const line = lines[i];
     if (line?.type === "summary" && line.summary) {
@@ -439,8 +485,17 @@ async function getCachedProcessList(): Promise<string> {
  * Check if a process named "claude" is running in the given runtime handle's context.
  * Uses ps to find processes by TTY (for tmux) or by PID.
  */
-async function findClaudeProcess(handle: RuntimeHandle): Promise<number | null> {
+async function findClaudeProcess(
+  handle: RuntimeHandle,
+  defaultProcessName: string,
+): Promise<number | null> {
   try {
+    const processNameRaw = handle.data["agentProcessName"];
+    const processName =
+      typeof processNameRaw === "string" && processNameRaw.trim()
+        ? processNameRaw.trim()
+        : defaultProcessName;
+
     // For tmux runtime, get the pane TTY and find claude on it
     if (handle.runtimeName === "tmux" && handle.id) {
       const { stdout: ttyOut } = await execFileAsync(
@@ -462,7 +517,8 @@ async function findClaudeProcess(handle: RuntimeHandle): Promise<number | null> 
       const ttySet = new Set(ttys.map((t) => t.replace(/^\/dev\//, "")));
       // Match "claude" as a word boundary — prevents false positives on
       // names like "claude-code" or paths that merely contain the substring.
-      const processRe = /(?:^|\/)claude(?:\s|$)/;
+      const escapedProcessName = processName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const processRe = new RegExp(`(?:^|/)${escapedProcessName}(?:\\s|$)`);
       for (const line of psOut.split("\n")) {
         const cols = line.trimStart().split(/\s+/);
         if (cols.length < 3 || !ttySet.has(cols[1] ?? "")) continue;
@@ -624,16 +680,18 @@ async function setupHookInWorkspace(workspacePath: string, hookCommand: string):
 // Agent Implementation
 // =============================================================================
 
-function createClaudeCodeAgent(): Agent {
+export function createClaudeCompatibleAgent(
+  options: ClaudeCompatibleAgentOptions = DEFAULT_OPTIONS,
+): Agent {
   return {
-    name: "claude-code",
-    processName: "claude",
+    name: options.name,
+    processName: options.defaultProcessName,
     promptDelivery: "post-launch",
 
     getLaunchCommand(config: AgentLaunchConfig): string {
       // Note: CLAUDECODE is unset via getEnvironment() (set to ""), not here.
       // This command must be safe for both shell and execFile contexts.
-      const parts: string[] = ["claude"];
+      const parts: string[] = [resolveLaunchPrefix(config.projectConfig, options)];
 
       if (config.permissions === "skip") {
         parts.push("--dangerously-skip-permissions");
@@ -667,6 +725,10 @@ function createClaudeCodeAgent(): Agent {
 
       // Set session info for introspection
       env["AO_SESSION_ID"] = config.sessionId;
+      env["AO_AGENT_PROCESS_NAME"] = resolveProcessName(config.projectConfig, options);
+
+      // Skip interactive prompts in wrapper scripts (e.g. yolo --headless)
+      env["YOLO_HEADLESS"] = "1";
 
       // NOTE: AO_PROJECT_ID is NOT set here - it's the caller's responsibility
       // to set it based on their metadata path scheme:
@@ -686,7 +748,7 @@ function createClaudeCodeAgent(): Agent {
     },
 
     async isProcessRunning(handle: RuntimeHandle): Promise<boolean> {
-      const pid = await findClaudeProcess(handle);
+      const pid = await findClaudeProcess(handle, options.defaultProcessName);
       return pid !== null;
     },
 
@@ -792,14 +854,20 @@ function createClaudeCodeAgent(): Agent {
       if (!sessionUuid) return null;
 
       // Build resume command
-      const parts: string[] = ["claude", "--resume", shellEscape(sessionUuid)];
+      const parts: string[] = [
+        resolveLaunchPrefix(project, options),
+        "--resume",
+        shellEscape(sessionUuid),
+      ];
 
-      if (project.agentConfig?.permissions === "skip") {
+      const agentConfig = resolveAgentConfig(project, options.name);
+
+      if (agentConfig.permissions === "skip") {
         parts.push("--dangerously-skip-permissions");
       }
 
-      if (project.agentConfig?.model) {
-        parts.push("--model", shellEscape(project.agentConfig.model as string));
+      if (agentConfig.model) {
+        parts.push("--model", shellEscape(agentConfig.model as string));
       }
 
       return parts.join(" ");
@@ -826,7 +894,7 @@ function createClaudeCodeAgent(): Agent {
 // =============================================================================
 
 export function create(): Agent {
-  return createClaudeCodeAgent();
+  return createClaudeCompatibleAgent();
 }
 
 export default { manifest, create } satisfies PluginModule<Agent>;

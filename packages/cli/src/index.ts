@@ -9,6 +9,9 @@ import { registerSend } from "./commands/send.js";
 import { registerReviewCheck } from "./commands/review-check.js";
 import { registerDashboard } from "./commands/dashboard.js";
 import { registerOpen } from "./commands/open.js";
+import { registerStories } from "./commands/stories.js";
+import { registerSprint } from "./commands/sprint.js";
+import { registerEpic } from "./commands/epic.js";
 import { registerStart, registerStop } from "./commands/start.js";
 
 const program = new Command();
@@ -29,5 +32,8 @@ registerSend(program);
 registerReviewCheck(program);
 registerDashboard(program);
 registerOpen(program);
+registerStories(program);
+registerSprint(program);
+registerEpic(program);
 
 program.parse();

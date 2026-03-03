@@ -29,6 +29,7 @@ const BUILTIN_PLUGINS: Array<{ slot: PluginSlot; name: string; pkg: string }> = 
   { slot: "runtime", name: "process", pkg: "@composio/ao-plugin-runtime-process" },
   // Agents
   { slot: "agent", name: "claude-code", pkg: "@composio/ao-plugin-agent-claude-code" },
+  { slot: "agent", name: "glm", pkg: "@composio/ao-plugin-agent-glm" },
   { slot: "agent", name: "codex", pkg: "@composio/ao-plugin-agent-codex" },
   { slot: "agent", name: "aider", pkg: "@composio/ao-plugin-agent-aider" },
   // Workspaces
@@ -37,6 +38,7 @@ const BUILTIN_PLUGINS: Array<{ slot: PluginSlot; name: string; pkg: string }> = 
   // Trackers
   { slot: "tracker", name: "github", pkg: "@composio/ao-plugin-tracker-github" },
   { slot: "tracker", name: "linear", pkg: "@composio/ao-plugin-tracker-linear" },
+  { slot: "tracker", name: "bmad", pkg: "@composio/ao-plugin-tracker-bmad" },
   // SCM
   { slot: "scm", name: "github", pkg: "@composio/ao-plugin-scm-github" },
   // Notifiers

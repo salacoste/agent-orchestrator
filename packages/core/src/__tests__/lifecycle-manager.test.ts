@@ -14,6 +14,7 @@ import type {
   Runtime,
   Agent,
   SCM,
+  Tracker,
   Notifier,
   ActivityState,
   PRInfo,
@@ -251,7 +252,8 @@ describe("check (single session)", () => {
     expect(lm.getStates().get("app-1")).toBe("killed");
   });
 
-  it("detects killed via terminal fallback when getActivityState returns null", async () => {
+  it("detects killed state when agent process exits (idle terminal + dead process)", async () => {
+    // getActivityState returns null to trigger the terminal-output fallback path
     vi.mocked(mockAgent.getActivityState).mockResolvedValue(null);
     vi.mocked(mockAgent.detectActivity).mockReturnValue("idle");
     vi.mocked(mockAgent.isProcessRunning).mockResolvedValue(false);
@@ -277,7 +279,37 @@ describe("check (single session)", () => {
     expect(lm.getStates().get("app-1")).toBe("killed");
   });
 
-  it("stays working when agent is idle but process is still running (fallback path)", async () => {
+  it("detects killed state when agent process exits (active terminal + dead process)", async () => {
+    // Stub agents (codex, aider, opencode) return "active" for any non-empty
+    // terminal output, including the shell prompt after the agent exits.
+    // getActivityState returns null to trigger the terminal-output fallback path.
+    vi.mocked(mockAgent.getActivityState).mockResolvedValue(null);
+    vi.mocked(mockAgent.detectActivity).mockReturnValue("active");
+    vi.mocked(mockAgent.isProcessRunning).mockResolvedValue(false);
+
+    const session = makeSession({ status: "working" });
+    vi.mocked(mockSessionManager.get).mockResolvedValue(session);
+
+    writeMetadata(sessionsDir, "app-1", {
+      worktree: "/tmp",
+      branch: "main",
+      status: "working",
+      project: "my-app",
+    });
+
+    const lm = createLifecycleManager({
+      config,
+      registry: mockRegistry,
+      sessionManager: mockSessionManager,
+    });
+
+    await lm.check("app-1");
+
+    expect(lm.getStates().get("app-1")).toBe("killed");
+  });
+
+  it("stays working when agent is idle but process is still running", async () => {
+    // getActivityState returns null to trigger the terminal-output fallback path
     vi.mocked(mockAgent.getActivityState).mockResolvedValue(null);
     vi.mocked(mockAgent.detectActivity).mockReturnValue("idle");
     vi.mocked(mockAgent.isProcessRunning).mockResolvedValue(true);
@@ -304,7 +336,9 @@ describe("check (single session)", () => {
   });
 
   it("detects needs_input from agent", async () => {
-    vi.mocked(mockAgent.getActivityState).mockResolvedValue({ state: "waiting_input" });
+    // getActivityState returns null to trigger the terminal-output fallback path
+    vi.mocked(mockAgent.getActivityState).mockResolvedValue(null);
+    vi.mocked(mockAgent.detectActivity).mockReturnValue("waiting_input");
 
     const session = makeSession({ status: "working" });
     vi.mocked(mockSessionManager.get).mockResolvedValue(session);
@@ -327,8 +361,13 @@ describe("check (single session)", () => {
     expect(lm.getStates().get("app-1")).toBe("needs_input");
   });
 
-  it("preserves stuck state when getActivityState throws", async () => {
-    vi.mocked(mockAgent.getActivityState).mockRejectedValue(new Error("probe failed"));
+  it("preserves stuck state when detectActivity throws", async () => {
+    // Make getActivityState null so the fallback detectActivity path is reached,
+    // then make detectActivity throw to exercise the catch block.
+    vi.mocked(mockAgent.getActivityState).mockResolvedValue(null);
+    vi.mocked(mockAgent.detectActivity).mockImplementation(() => {
+      throw new Error("probe failed");
+    });
 
     const session = makeSession({ status: "stuck" });
     vi.mocked(mockSessionManager.get).mockResolvedValue(session);
@@ -352,8 +391,13 @@ describe("check (single session)", () => {
     expect(lm.getStates().get("app-1")).toBe("stuck");
   });
 
-  it("preserves needs_input state when getActivityState throws", async () => {
-    vi.mocked(mockAgent.getActivityState).mockRejectedValue(new Error("probe failed"));
+  it("preserves needs_input state when detectActivity throws", async () => {
+    // Make getActivityState null so the fallback detectActivity path is reached,
+    // then make detectActivity throw to exercise the catch block.
+    vi.mocked(mockAgent.getActivityState).mockResolvedValue(null);
+    vi.mocked(mockAgent.detectActivity).mockImplementation(() => {
+      throw new Error("probe failed");
+    });
 
     const session = makeSession({ status: "needs_input" });
     vi.mocked(mockSessionManager.get).mockResolvedValue(session);
@@ -377,7 +421,8 @@ describe("check (single session)", () => {
     expect(lm.getStates().get("app-1")).toBe("needs_input");
   });
 
-  it("preserves stuck state when getActivityState returns null and getOutput throws", async () => {
+  it("preserves stuck state when getOutput throws", async () => {
+    // getActivityState must return null to trigger the fallback path where getOutput is called
     vi.mocked(mockAgent.getActivityState).mockResolvedValue(null);
     vi.mocked(mockRuntime.getOutput).mockRejectedValue(new Error("tmux error"));
 
@@ -830,6 +875,780 @@ describe("reactions", () => {
     expect(mockNotifier.notify).toHaveBeenCalledWith(
       expect.objectContaining({ type: "merge.completed" }),
     );
+  });
+});
+
+describe("bmad.story_done", () => {
+  function makeBmadConfig(): OrchestratorConfig {
+    return {
+      ...config,
+      // Route info-priority events to desktop so bmad.story_done notifications are delivered
+      notificationRouting: {
+        ...config.notificationRouting,
+        info: ["desktop"],
+      },
+      projects: {
+        "my-app": {
+          ...config.projects["my-app"]!,
+          tracker: { plugin: "bmad" },
+        },
+      },
+    };
+  }
+
+  function makeBmadSCM(): SCM {
+    return {
+      name: "mock-scm",
+      detectPR: vi.fn(),
+      getPRState: vi.fn().mockResolvedValue("merged"),
+      mergePR: vi.fn(),
+      closePR: vi.fn(),
+      getCIChecks: vi.fn(),
+      getCISummary: vi.fn(),
+      getReviews: vi.fn(),
+      getReviewDecision: vi.fn(),
+      getPendingComments: vi.fn(),
+      getAutomatedComments: vi.fn(),
+      getMergeability: vi.fn(),
+    };
+  }
+
+  it("emits bmad.story_done event when BMad project session merges", async () => {
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const mockSCM = makeBmadSCM();
+    const bmadConfig = makeBmadConfig();
+
+    const mockTracker = {
+      name: "bmad",
+      getIssue: vi.fn().mockResolvedValue({
+        id: "STORY-1",
+        title: "Test Story",
+        description: "",
+        url: "https://example.com/story-1",
+        state: "open" as const,
+        labels: [],
+      }),
+      isCompleted: vi.fn(),
+      issueUrl: vi.fn(),
+      branchName: vi.fn(),
+      generatePrompt: vi.fn(),
+    };
+
+    const registryWithBmad: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "scm") return mockSCM;
+        if (slot === "tracker" && name === "bmad") return mockTracker;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    const session = makeSession({
+      status: "approved",
+      pr: makePR(),
+      issueId: "STORY-1",
+    });
+    vi.mocked(mockSessionManager.get).mockResolvedValue(session);
+
+    writeMetadata(sessionsDir, "app-1", {
+      worktree: "/tmp",
+      branch: "main",
+      status: "approved",
+      project: "my-app",
+    });
+
+    const lm = createLifecycleManager({
+      config: bmadConfig,
+      registry: registryWithBmad,
+      sessionManager: mockSessionManager,
+    });
+
+    await lm.check("app-1");
+
+    expect(lm.getStates().get("app-1")).toBe("merged");
+    expect(mockNotifier.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "bmad.story_done" }),
+    );
+  });
+
+  it("event data includes identifier and epicId when epic exists", async () => {
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const mockSCM = makeBmadSCM();
+    const bmadConfig = makeBmadConfig();
+
+    const mockTracker = {
+      name: "bmad",
+      getIssue: vi.fn().mockResolvedValue({
+        id: "STORY-2",
+        title: "Story with Epic",
+        description: "",
+        url: "https://example.com/story-2",
+        state: "open" as const,
+        labels: ["epic-42"],
+      }),
+      isCompleted: vi.fn(),
+      issueUrl: vi.fn(),
+      branchName: vi.fn(),
+      generatePrompt: vi.fn(),
+    };
+
+    const registryWithBmad: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "scm") return mockSCM;
+        if (slot === "tracker" && name === "bmad") return mockTracker;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    const session = makeSession({
+      status: "approved",
+      pr: makePR(),
+      issueId: "STORY-2",
+    });
+    vi.mocked(mockSessionManager.get).mockResolvedValue(session);
+
+    writeMetadata(sessionsDir, "app-1", {
+      worktree: "/tmp",
+      branch: "main",
+      status: "approved",
+      project: "my-app",
+    });
+
+    const lm = createLifecycleManager({
+      config: bmadConfig,
+      registry: registryWithBmad,
+      sessionManager: mockSessionManager,
+    });
+
+    await lm.check("app-1");
+
+    expect(mockNotifier.notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "bmad.story_done",
+        data: expect.objectContaining({
+          identifier: "STORY-2",
+          epicId: "epic-42",
+        }),
+      }),
+    );
+  });
+
+  it("does not emit bmad.story_done for non-BMad projects", async () => {
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const mockSCM = makeBmadSCM();
+
+    // Use base config — no bmad tracker
+    const nonBmadConfig: OrchestratorConfig = {
+      ...config,
+      projects: {
+        "my-app": {
+          ...config.projects["my-app"]!,
+          tracker: { plugin: "github" },
+        },
+      },
+    };
+
+    const registryWithSCM: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "scm") return mockSCM;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    const session = makeSession({
+      status: "approved",
+      pr: makePR(),
+      issueId: "GH-99",
+    });
+    vi.mocked(mockSessionManager.get).mockResolvedValue(session);
+
+    writeMetadata(sessionsDir, "app-1", {
+      worktree: "/tmp",
+      branch: "main",
+      status: "approved",
+      project: "my-app",
+    });
+
+    const lm = createLifecycleManager({
+      config: nonBmadConfig,
+      registry: registryWithSCM,
+      sessionManager: mockSessionManager,
+    });
+
+    await lm.check("app-1");
+
+    expect(lm.getStates().get("app-1")).toBe("merged");
+    const bmadCall = vi
+      .mocked(mockNotifier.notify)
+      .mock.calls.find((call) => call[0].type === "bmad.story_done");
+    expect(bmadCall).toBeUndefined();
+  });
+
+  it("emits bmad.story_done without epicId when tracker.getIssue throws", async () => {
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const mockSCM = makeBmadSCM();
+    const bmadConfig = makeBmadConfig();
+
+    const mockTracker = {
+      name: "bmad",
+      getIssue: vi.fn().mockRejectedValue(new Error("tracker unavailable")),
+      isCompleted: vi.fn(),
+      issueUrl: vi.fn(),
+      branchName: vi.fn(),
+      generatePrompt: vi.fn(),
+    };
+
+    const registryWithBmad: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "scm") return mockSCM;
+        if (slot === "tracker" && name === "bmad") return mockTracker;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    const session = makeSession({
+      status: "approved",
+      pr: makePR(),
+      issueId: "STORY-3",
+    });
+    vi.mocked(mockSessionManager.get).mockResolvedValue(session);
+
+    writeMetadata(sessionsDir, "app-1", {
+      worktree: "/tmp",
+      branch: "main",
+      status: "approved",
+      project: "my-app",
+    });
+
+    const lm = createLifecycleManager({
+      config: bmadConfig,
+      registry: registryWithBmad,
+      sessionManager: mockSessionManager,
+    });
+
+    await lm.check("app-1");
+
+    expect(lm.getStates().get("app-1")).toBe("merged");
+    expect(mockNotifier.notify).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "bmad.story_done",
+        data: expect.objectContaining({ identifier: "STORY-3" }),
+      }),
+    );
+    const notifyCall = vi
+      .mocked(mockNotifier.notify)
+      .mock.calls.find((call) => call[0].type === "bmad.story_done");
+    expect(notifyCall?.[0].data["epicId"]).toBeUndefined();
+  });
+
+  it("eventToReactionKey maps bmad.story_done to bmad-story-done via reaction config", async () => {
+    // Verify the reaction key mapping by configuring a bmad-story-done reaction
+    // and confirming it gets executed when the event fires.
+    const mockSCM = makeBmadSCM();
+    const bmadConfig: OrchestratorConfig = {
+      ...makeBmadConfig(),
+      reactions: {
+        "bmad-story-done": {
+          auto: true,
+          action: "notify",
+          priority: "action",
+        },
+      },
+    };
+
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const mockTracker = {
+      name: "bmad",
+      getIssue: vi.fn().mockResolvedValue({
+        id: "STORY-4",
+        title: "Reaction test story",
+        description: "",
+        url: "https://example.com/story-4",
+        state: "open" as const,
+        labels: [],
+      }),
+      isCompleted: vi.fn(),
+      issueUrl: vi.fn(),
+      branchName: vi.fn(),
+      generatePrompt: vi.fn(),
+    };
+
+    const registryWithBmad: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "scm") return mockSCM;
+        if (slot === "tracker" && name === "bmad") return mockTracker;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    const session = makeSession({
+      status: "approved",
+      pr: makePR(),
+      issueId: "STORY-4",
+    });
+    vi.mocked(mockSessionManager.get).mockResolvedValue(session);
+
+    writeMetadata(sessionsDir, "app-1", {
+      worktree: "/tmp",
+      branch: "main",
+      status: "approved",
+      project: "my-app",
+    });
+
+    const lm = createLifecycleManager({
+      config: bmadConfig,
+      registry: registryWithBmad,
+      sessionManager: mockSessionManager,
+    });
+
+    await lm.check("app-1");
+
+    // The bmad-story-done reaction (notify action) should have triggered notifyHuman
+    expect(mockNotifier.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "reaction.triggered" }),
+    );
+  });
+
+  it("does not execute bmad-story-done reaction when auto=false and action is send-to-agent", async () => {
+    const mockSCM = makeBmadSCM();
+    const bmadConfig: OrchestratorConfig = {
+      ...makeBmadConfig(),
+      reactions: {
+        "bmad-story-done": {
+          auto: false,
+          action: "send-to-agent",
+          priority: "action",
+        },
+      },
+    };
+
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const mockTracker = {
+      name: "bmad",
+      getIssue: vi.fn().mockResolvedValue({
+        id: "STORY-5",
+        title: "Auto-false test story",
+        description: "",
+        url: "https://example.com/story-5",
+        state: "open" as const,
+        labels: [],
+      }),
+      isCompleted: vi.fn(),
+      issueUrl: vi.fn(),
+      branchName: vi.fn(),
+      generatePrompt: vi.fn(),
+    };
+
+    const registryWithBmad: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "scm") return mockSCM;
+        if (slot === "tracker" && name === "bmad") return mockTracker;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    const session = makeSession({
+      status: "approved",
+      pr: makePR(),
+      issueId: "STORY-5",
+    });
+    vi.mocked(mockSessionManager.get).mockResolvedValue(session);
+
+    writeMetadata(sessionsDir, "app-1", {
+      worktree: "/tmp",
+      branch: "main",
+      status: "approved",
+      project: "my-app",
+    });
+
+    const lm = createLifecycleManager({
+      config: bmadConfig,
+      registry: registryWithBmad,
+      sessionManager: mockSessionManager,
+    });
+
+    await lm.check("app-1");
+
+    // With auto=false and action=send-to-agent, the reaction should NOT execute
+    // Instead, the human should be notified directly
+    const notifyCalls = mockNotifier.notify.mock.calls;
+    const reactionCall = notifyCalls.find((call) => call[0].type === "reaction.triggered");
+    expect(reactionCall).toBeUndefined();
+
+    // Should have a direct notification instead
+    const storyDoneCall = notifyCalls.find((call) => call[0].type === "bmad.story_done");
+    expect(storyDoneCall).toBeDefined();
+  });
+});
+
+describe("bmad.sprint_complete", () => {
+  function makeBmadConfig(): OrchestratorConfig {
+    return {
+      ...config,
+      notificationRouting: {
+        ...config.notificationRouting,
+        action: ["desktop"],
+      },
+      projects: {
+        "my-app": {
+          ...config.projects["my-app"]!,
+          tracker: { plugin: "bmad" },
+        },
+      },
+    };
+  }
+
+  function makeBmadSCM(): SCM {
+    return {
+      name: "mock-scm",
+      detectPR: vi.fn(),
+      getPRState: vi.fn().mockResolvedValue("open"),
+      mergePR: vi.fn(),
+      closePR: vi.fn(),
+      getCIChecks: vi.fn(),
+      getCISummary: vi.fn(),
+      getReviews: vi.fn(),
+      getReviewDecision: vi.fn(),
+      getPendingComments: vi.fn(),
+      getAutomatedComments: vi.fn(),
+      getMergeability: vi.fn(),
+    };
+  }
+
+  function makeSprintTracker(
+    issues: Array<{ id: string; state: "open" | "closed" | "cancelled" }>,
+  ): Tracker {
+    return {
+      name: "bmad",
+      getIssue: vi.fn(),
+      isCompleted: vi.fn(),
+      issueUrl: vi.fn().mockReturnValue(""),
+      branchName: vi.fn().mockReturnValue(""),
+      generatePrompt: vi.fn(),
+      listIssues: vi.fn().mockResolvedValue(
+        issues.map((i) => ({
+          id: i.id,
+          title: `Story ${i.id}`,
+          description: "",
+          url: `https://example.com/${i.id}`,
+          state: i.state,
+          labels: [],
+        })),
+      ),
+    };
+  }
+
+  it("emits bmad.sprint_complete when all stories are closed", async () => {
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const bmadConfig = makeBmadConfig();
+    const mockSCM = makeBmadSCM();
+    const tracker = makeSprintTracker([
+      { id: "S-1", state: "closed" },
+      { id: "S-2", state: "closed" },
+    ]);
+
+    const registryWithBmad: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "scm") return mockSCM;
+        if (slot === "tracker" && name === "bmad") return tracker;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    // No active sessions so pollAll doesn't attempt session checks
+    vi.mocked(mockSessionManager.list).mockResolvedValue([]);
+
+    const lm = createLifecycleManager({
+      config: bmadConfig,
+      registry: registryWithBmad,
+      sessionManager: mockSessionManager,
+    });
+
+    lm.start(60_000);
+
+    try {
+      await vi.waitFor(() => {
+        expect(mockNotifier.notify).toHaveBeenCalledWith(
+          expect.objectContaining({ type: "bmad.sprint_complete" }),
+        );
+      });
+    } finally {
+      lm.stop();
+    }
+  });
+
+  it("does not re-emit on second poll cycle (transition guard)", async () => {
+    vi.useFakeTimers();
+
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const bmadConfig = makeBmadConfig();
+    const mockSCM = makeBmadSCM();
+    const tracker = makeSprintTracker([{ id: "S-1", state: "closed" }]);
+
+    const registryWithBmad: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "scm") return mockSCM;
+        if (slot === "tracker" && name === "bmad") return tracker;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    vi.mocked(mockSessionManager.list).mockResolvedValue([]);
+
+    const lm = createLifecycleManager({
+      config: bmadConfig,
+      registry: registryWithBmad,
+      sessionManager: mockSessionManager,
+    });
+
+    lm.start(60_000);
+
+    // Let initial pollAll() run
+    await vi.advanceTimersByTimeAsync(0);
+    // Flush any microtasks
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Advance past a second poll interval
+    await vi.advanceTimersByTimeAsync(60_000);
+    await vi.advanceTimersByTimeAsync(1);
+
+    lm.stop();
+    vi.useRealTimers();
+
+    const sprintCalls = vi
+      .mocked(mockNotifier.notify)
+      .mock.calls.filter((call) => call[0].type === "bmad.sprint_complete");
+    expect(sprintCalls).toHaveLength(1);
+  });
+
+  it("does not emit when some stories are still open", async () => {
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const bmadConfig = makeBmadConfig();
+    const mockSCM = makeBmadSCM();
+    const tracker = makeSprintTracker([
+      { id: "S-1", state: "closed" },
+      { id: "S-2", state: "open" },
+    ]);
+
+    const registryWithBmad: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "scm") return mockSCM;
+        if (slot === "tracker" && name === "bmad") return tracker;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    vi.mocked(mockSessionManager.list).mockResolvedValue([]);
+
+    const lm = createLifecycleManager({
+      config: bmadConfig,
+      registry: registryWithBmad,
+      sessionManager: mockSessionManager,
+    });
+
+    lm.start(60_000);
+
+    try {
+      // Give pollAll time to run
+      await vi.waitFor(() => {
+        expect(tracker.listIssues).toHaveBeenCalled();
+      });
+
+      const sprintCalls = vi
+        .mocked(mockNotifier.notify)
+        .mock.calls.filter((call) => call[0].type === "bmad.sprint_complete");
+      expect(sprintCalls).toHaveLength(0);
+    } finally {
+      lm.stop();
+    }
+  });
+
+  it("does not emit for non-BMad projects", async () => {
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    // Use github tracker, not bmad
+    const nonBmadConfig: OrchestratorConfig = {
+      ...config,
+      notificationRouting: {
+        ...config.notificationRouting,
+        action: ["desktop"],
+      },
+      projects: {
+        "my-app": {
+          ...config.projects["my-app"]!,
+          tracker: { plugin: "github" },
+        },
+      },
+    };
+
+    const tracker = makeSprintTracker([{ id: "S-1", state: "closed" }]);
+
+    const registryWithTracker: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "tracker" && name === "github") return tracker;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    vi.mocked(mockSessionManager.list).mockResolvedValue([]);
+
+    const lm = createLifecycleManager({
+      config: nonBmadConfig,
+      registry: registryWithTracker,
+      sessionManager: mockSessionManager,
+    });
+
+    lm.start(60_000);
+
+    try {
+      // Give pollAll time to run — wait for sessionManager.list to have been called
+      await vi.waitFor(() => {
+        expect(mockSessionManager.list).toHaveBeenCalled();
+      });
+
+      // listIssues should never be called since project is not bmad
+      expect(tracker.listIssues).not.toHaveBeenCalled();
+
+      const sprintCalls = vi
+        .mocked(mockNotifier.notify)
+        .mock.calls.filter((call) => call[0].type === "bmad.sprint_complete");
+      expect(sprintCalls).toHaveLength(0);
+    } finally {
+      lm.stop();
+    }
+  });
+
+  it("gracefully handles listIssues throwing", async () => {
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const bmadConfig = makeBmadConfig();
+    const mockSCM = makeBmadSCM();
+    const tracker: Tracker = {
+      name: "bmad",
+      getIssue: vi.fn(),
+      isCompleted: vi.fn(),
+      issueUrl: vi.fn().mockReturnValue(""),
+      branchName: vi.fn().mockReturnValue(""),
+      generatePrompt: vi.fn(),
+      listIssues: vi.fn().mockRejectedValue(new Error("network error")),
+    };
+
+    const registryWithBmad: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "scm") return mockSCM;
+        if (slot === "tracker" && name === "bmad") return tracker;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    vi.mocked(mockSessionManager.list).mockResolvedValue([]);
+
+    const lm = createLifecycleManager({
+      config: bmadConfig,
+      registry: registryWithBmad,
+      sessionManager: mockSessionManager,
+    });
+
+    lm.start(60_000);
+
+    try {
+      await vi.waitFor(() => {
+        expect(tracker.listIssues).toHaveBeenCalled();
+      });
+
+      // No crash, no sprint_complete event
+      const sprintCalls = vi
+        .mocked(mockNotifier.notify)
+        .mock.calls.filter((call) => call[0].type === "bmad.sprint_complete");
+      expect(sprintCalls).toHaveLength(0);
+    } finally {
+      lm.stop();
+    }
   });
 });
 

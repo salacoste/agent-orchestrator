@@ -742,7 +742,10 @@ export type EventType =
   | "reaction.triggered"
   | "reaction.escalated"
   // Summary
-  | "summary.all_complete";
+  | "summary.all_complete"
+  // BMad
+  | "bmad.story_done"
+  | "bmad.sprint_complete";
 
 /** An event emitted by the orchestrator */
 export interface OrchestratorEvent {

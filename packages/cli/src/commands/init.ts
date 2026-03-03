@@ -260,7 +260,7 @@ export function registerInit(program: Command): void {
         // Default plugins
         console.log(chalk.bold("\n  Default Plugins\n"));
         const runtime = await prompt(rl, "Runtime (tmux, process)", "tmux");
-        const agent = await prompt(rl, "Agent (claude-code, codex, aider)", "claude-code");
+        const agent = await prompt(rl, "Agent (claude-code, glm, codex, aider)", "claude-code");
         const workspace = await prompt(rl, "Workspace (worktree, clone)", "worktree");
         const notifiersStr = await prompt(
           rl,

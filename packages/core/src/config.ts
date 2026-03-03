@@ -269,6 +269,17 @@ function applyDefaultReactions(config: OrchestratorConfig): OrchestratorConfig {
       priority: "info",
       includeSummary: true,
     },
+    "bmad-story-done": {
+      auto: true,
+      action: "notify",
+      priority: "info",
+      includeSummary: true,
+    },
+    "bmad-sprint-complete": {
+      auto: true,
+      action: "notify",
+      priority: "action",
+    },
   };
 
   // Merge defaults with user-specified reactions (user wins)

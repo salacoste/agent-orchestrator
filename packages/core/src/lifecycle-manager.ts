@@ -31,6 +31,7 @@ import {
   type Notifier,
   type Session,
   type EventPriority,
+  type Tracker,
   type ProjectConfig as _ProjectConfig,
 } from "./types.js";
 import { updateMetadata } from "./metadata.js";
@@ -151,6 +152,10 @@ function eventToReactionKey(eventType: EventType): string | null {
       return "agent-exited";
     case "summary.all_complete":
       return "all-complete";
+    case "bmad.story_done":
+      return "bmad-story-done";
+    case "bmad.sprint_complete":
+      return "bmad-sprint-complete";
     default:
       return null;
   }
@@ -174,6 +179,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
 
   const states = new Map<SessionId, SessionStatus>();
   const reactionTrackers = new Map<string, ReactionTracker>(); // "sessionId:reactionKey"
+  const sprintCompleteCache = new Map<string, boolean>(); // projectId -> last-known sprint-complete state
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let polling = false; // re-entrancy guard
   let allCompleteEmitted = false; // guard against repeated all_complete
@@ -196,7 +202,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
       }
     }
 
-    // 2. Check agent activity — prefer JSONL-based detection (runtime-agnostic)
+    // 2. Check agent activity -- prefer JSONL-based detection (runtime-agnostic)
     if (agent && session.runtimeHandle) {
       try {
         // Try JSONL-based activity detection first (reads agent's session files directly)
@@ -204,16 +210,14 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
         if (activityState) {
           if (activityState.state === "waiting_input") return "needs_input";
           if (activityState.state === "exited") return "killed";
-          // active/ready/idle/blocked — proceed to PR checks below
+          // active/ready/idle/blocked -- proceed to PR checks below
         } else {
-          // getActivityState returned null — fall back to terminal output parsing
+          // getActivityState returned null -- fall back to terminal output parsing
           const runtime = registry.get<Runtime>(
             "runtime",
             project.runtime ?? config.defaults.runtime,
           );
-          const terminalOutput = runtime
-            ? await runtime.getOutput(session.runtimeHandle, 10)
-            : "";
+          const terminalOutput = runtime ? await runtime.getOutput(session.runtimeHandle, 10) : "";
           if (terminalOutput) {
             const activity = agent.detectActivity(terminalOutput);
             if (activity === "waiting_input") return "needs_input";
@@ -243,13 +247,13 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
         if (detectedPR) {
           session.pr = detectedPR;
           // Persist PR URL so subsequent polls don't need to re-query.
-          // Don't write status here — step 4 below will determine the
+          // Don't write status here -- step 4 below will determine the
           // correct status (merged, ci_failed, etc.) on this same cycle.
           const sessionsDir = getSessionsDir(config.configPath, project.path);
           updateMetadata(sessionsDir, session.id, { pr: detectedPR.url });
         }
       } catch {
-        // SCM detection failed — will retry next poll
+        // SCM detection failed -- will retry next poll
       }
     }
 
@@ -277,7 +281,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
 
         return "pr_open";
       } catch {
-        // SCM check failed — keep current status
+        // SCM check failed -- keep current status
       }
     }
 
@@ -364,7 +368,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
               escalated: false,
             };
           } catch {
-            // Send failed — allow retry on next poll cycle (don't escalate immediately)
+            // Send failed -- allow retry on next poll cycle (don't escalate immediately)
             return {
               reactionType: reactionKey,
               success: false,
@@ -430,7 +434,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
         try {
           await notifier.notify(eventWithPriority);
         } catch {
-          // Notifier failed — not much we can do
+          // Notifier failed -- not much we can do
         }
       }
     }
@@ -450,7 +454,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
       // State transition detected
       states.set(session.id, newStatus);
 
-      // Update metadata — session.projectId is the config key (e.g., "my-app")
+      // Update metadata -- session.projectId is the config key (e.g., "my-app")
       const project = config.projects[session.projectId];
       if (project) {
         const sessionsDir = getSessionsDir(config.configPath, project.path);
@@ -468,6 +472,76 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
         const oldReactionKey = eventToReactionKey(oldEventType);
         if (oldReactionKey) {
           reactionTrackers.delete(`${session.id}:${oldReactionKey}`);
+        }
+      }
+
+      // Auto-update tracker when PR is merged
+      if (newStatus === "merged" && session.issueId) {
+        const project = config.projects[session.projectId];
+        if (project?.tracker) {
+          const tracker = registry.get<Tracker>("tracker", project.tracker.plugin);
+          if (tracker?.updateIssue) {
+            try {
+              await tracker.updateIssue(session.issueId, { state: "closed" }, project);
+            } catch {
+              // Non-fatal -- don't disrupt lifecycle management if tracker update fails
+            }
+          }
+        }
+      }
+
+      // Emit bmad.story_done event when a BMad story is completed
+      if (newStatus === "merged" && session.issueId) {
+        const project = config.projects[session.projectId];
+        if (project?.tracker?.plugin === "bmad") {
+          const bmadEvent = createEvent("bmad.story_done", {
+            sessionId: session.id,
+            projectId: session.projectId,
+            message: `BMad story ${session.issueId} completed (PR merged)`,
+            data: { identifier: session.issueId },
+          });
+
+          // Try to get epic info and story title for the event data
+          try {
+            const tracker = registry.get<Tracker>("tracker", "bmad");
+            if (tracker) {
+              const issue = await tracker.getIssue(session.issueId, project);
+              bmadEvent.message = `BMad story "${issue.title}" (${session.issueId}) completed`;
+              bmadEvent.data["storyTitle"] = issue.title;
+              const epicLabel = issue.labels.find((l) => l.startsWith("epic-"));
+              if (epicLabel) {
+                bmadEvent.data["epicId"] = epicLabel;
+              }
+            }
+          } catch {
+            // Non-fatal -- emit event without title or epic info
+          }
+
+          // Check for reaction config
+          const reactionKey = eventToReactionKey("bmad.story_done");
+          if (reactionKey) {
+            const globalReaction = config.reactions[reactionKey];
+            const projectReaction = project?.reactions?.[reactionKey];
+            const reactionConfig = projectReaction
+              ? { ...globalReaction, ...projectReaction }
+              : globalReaction;
+
+            let reactionHandled = false;
+            if (reactionConfig?.action) {
+              if (reactionConfig.auto !== false || reactionConfig.action === "notify") {
+                await executeReaction(
+                  session.id,
+                  session.projectId,
+                  reactionKey,
+                  reactionConfig as ReactionConfig,
+                );
+                reactionHandled = true;
+              }
+            }
+            if (!reactionHandled) {
+              await notifyHuman(bmadEvent, "info");
+            }
+          }
         }
       }
 
@@ -495,7 +569,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
                 reactionKey,
                 reactionConfig as ReactionConfig,
               );
-              // Reaction is handling this event — suppress immediate human notification.
+              // Reaction is handling this event -- suppress immediate human notification.
               // "send-to-agent" retries + escalates on its own; "notify"/"auto-merge"
               // already call notifyHuman internally. Notifying here would bypass the
               // delayed escalation behaviour configured via retries/escalateAfter.
@@ -511,7 +585,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
             const event = createEvent(eventType, {
               sessionId: session.id,
               projectId: session.projectId,
-              message: `${session.id}: ${oldStatus} → ${newStatus}`,
+              message: `${session.id}: ${oldStatus} -> ${newStatus}`,
               data: { oldStatus, newStatus },
             });
             await notifyHuman(event, priority);
@@ -534,7 +608,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
       const sessions = await sessionManager.list();
 
       // Include sessions that are active OR whose status changed from what we last saw
-      // (e.g., list() detected a dead runtime and marked it "killed" — we need to
+      // (e.g., list() detected a dead runtime and marked it "killed" -- we need to
       // process that transition even though the new status is terminal)
       const sessionsToCheck = sessions.filter((s) => {
         if (s.status !== "merged" && s.status !== "killed") return true;
@@ -576,8 +650,68 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
           }
         }
       }
+
+      // Check BMad sprint completion for each project that has a BMad tracker.
+      // Uses sprintCompleteCache to emit bmad.sprint_complete only on the
+      // transition from not-complete to complete (avoids repeated notifications).
+      for (const [projectId, project] of Object.entries(config.projects)) {
+        if (project.tracker?.plugin !== "bmad") continue;
+
+        const tracker = registry.get<Tracker>("tracker", "bmad");
+        if (!tracker?.listIssues) continue;
+
+        let allDone = false;
+        try {
+          const issues = await tracker.listIssues({ state: "all" }, project);
+          // Sprint is complete when there is at least one issue and none are open/in_progress
+          allDone =
+            issues.length > 0 &&
+            issues.every((issue) => issue.state === "closed" || issue.state === "cancelled");
+        } catch {
+          // Non-fatal -- skip sprint check for this project on this cycle
+          continue;
+        }
+
+        const wasComplete = sprintCompleteCache.get(projectId) ?? false;
+        sprintCompleteCache.set(projectId, allDone);
+
+        // Emit only on the transition from not-complete to complete
+        if (allDone && !wasComplete) {
+          const sprintEvent = createEvent("bmad.sprint_complete", {
+            sessionId: "system",
+            projectId,
+            message: `BMad sprint complete for project ${projectId}`,
+            priority: "action",
+            data: { projectId },
+          });
+
+          const sprintReactionKey = eventToReactionKey("bmad.sprint_complete");
+          if (sprintReactionKey) {
+            const globalReaction = config.reactions[sprintReactionKey];
+            const projectReaction = project.reactions?.[sprintReactionKey];
+            const reactionConfig = projectReaction
+              ? { ...globalReaction, ...projectReaction }
+              : globalReaction;
+
+            if (reactionConfig?.action) {
+              if (reactionConfig.auto !== false || reactionConfig.action === "notify") {
+                await executeReaction(
+                  "system",
+                  projectId,
+                  sprintReactionKey,
+                  reactionConfig as ReactionConfig,
+                );
+              }
+            } else {
+              await notifyHuman(sprintEvent, "action");
+            }
+          } else {
+            await notifyHuman(sprintEvent, "action");
+          }
+        }
+      }
     } catch {
-      // Poll cycle failed — will retry next interval
+      // Poll cycle failed -- will retry next interval
     } finally {
       polling = false;
     }

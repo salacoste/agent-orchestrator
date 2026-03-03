@@ -79,19 +79,19 @@ export function EpicProgress({ epics, onFilterEpic, activeEpic }: EpicProgressPr
                 aria-valuemin={0}
                 aria-valuemax={epic.total}
               >
-                {epic.done > 0 && (
+                {epic.done > 0 && epic.total > 0 && (
                   <div
                     className="h-full bg-[var(--color-accent-green)] transition-all duration-300"
                     style={{ width: `${(epic.done / epic.total) * 100}%` }}
                   />
                 )}
-                {epic.inProgress > 0 && (
+                {epic.inProgress > 0 && epic.total > 0 && (
                   <div
                     className="h-full bg-[var(--color-accent-blue)] transition-all duration-300"
                     style={{ width: `${(epic.inProgress / epic.total) * 100}%` }}
                   />
                 )}
-                {epic.open > 0 && (
+                {epic.open > 0 && epic.total > 0 && (
                   <div
                     className="h-full bg-[var(--color-text-tertiary)] transition-all duration-300"
                     style={{ width: `${(epic.open / epic.total) * 100}%` }}

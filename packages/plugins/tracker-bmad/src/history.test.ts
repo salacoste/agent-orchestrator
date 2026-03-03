@@ -25,7 +25,7 @@ const PROJECT: ProjectConfig = {
   sessionPrefix: "test",
   tracker: {
     plugin: "bmad",
-    outputDir: "_bmad-output",
+    outputDir: "custom-output",
   },
 };
 
@@ -40,7 +40,7 @@ const PROJECT_DEFAULTS: ProjectConfig = {
   },
 };
 
-const HISTORY_PATH = "/home/user/test-project/_bmad-output/sprint-history.jsonl";
+const HISTORY_PATH = "/home/user/test-project/custom-output/sprint-history.jsonl";
 const HISTORY_PATH_DEFAULTS = "/home/user/test-project/_bmad-output/sprint-history.jsonl";
 
 // ---------------------------------------------------------------------------
@@ -373,7 +373,7 @@ describe("appendHistory auto-creates directory", () => {
     appendHistory(PROJECT, "1-1-auth", "ready-for-dev", "in-progress");
 
     expect(mockMkdirSync).toHaveBeenCalledOnce();
-    expect(mockMkdirSync).toHaveBeenCalledWith("/home/user/test-project/_bmad-output", {
+    expect(mockMkdirSync).toHaveBeenCalledWith("/home/user/test-project/custom-output", {
       recursive: true,
     });
   });

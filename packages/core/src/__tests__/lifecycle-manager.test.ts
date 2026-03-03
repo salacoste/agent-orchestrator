@@ -1601,6 +1601,144 @@ describe("bmad.sprint_complete", () => {
     }
   });
 
+  it("emits bmad.sprint_complete when all stories are cancelled", async () => {
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const bmadConfig = makeBmadConfig();
+    const mockSCM = makeBmadSCM();
+    const tracker = makeSprintTracker([
+      { id: "S-1", state: "cancelled" },
+      { id: "S-2", state: "cancelled" },
+    ]);
+
+    const registryWithBmad: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "scm") return mockSCM;
+        if (slot === "tracker" && name === "bmad") return tracker;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    vi.mocked(mockSessionManager.list).mockResolvedValue([]);
+
+    const lm = createLifecycleManager({
+      config: bmadConfig,
+      registry: registryWithBmad,
+      sessionManager: mockSessionManager,
+    });
+
+    lm.start(60_000);
+
+    try {
+      await vi.waitFor(() => {
+        expect(mockNotifier.notify).toHaveBeenCalledWith(
+          expect.objectContaining({ type: "bmad.sprint_complete" }),
+        );
+      });
+    } finally {
+      lm.stop();
+    }
+  });
+
+  it("emits bmad.sprint_complete for mixed closed and cancelled", async () => {
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const bmadConfig = makeBmadConfig();
+    const mockSCM = makeBmadSCM();
+    const tracker = makeSprintTracker([
+      { id: "S-1", state: "closed" },
+      { id: "S-2", state: "cancelled" },
+    ]);
+
+    const registryWithBmad: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "scm") return mockSCM;
+        if (slot === "tracker" && name === "bmad") return tracker;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    vi.mocked(mockSessionManager.list).mockResolvedValue([]);
+
+    const lm = createLifecycleManager({
+      config: bmadConfig,
+      registry: registryWithBmad,
+      sessionManager: mockSessionManager,
+    });
+
+    lm.start(60_000);
+
+    try {
+      await vi.waitFor(() => {
+        expect(mockNotifier.notify).toHaveBeenCalledWith(
+          expect.objectContaining({ type: "bmad.sprint_complete" }),
+        );
+      });
+    } finally {
+      lm.stop();
+    }
+  });
+
+  it("does not emit for empty issue list", async () => {
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const bmadConfig = makeBmadConfig();
+    const mockSCM = makeBmadSCM();
+    const tracker = makeSprintTracker([]);
+
+    const registryWithBmad: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "scm") return mockSCM;
+        if (slot === "tracker" && name === "bmad") return tracker;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    vi.mocked(mockSessionManager.list).mockResolvedValue([]);
+
+    const lm = createLifecycleManager({
+      config: bmadConfig,
+      registry: registryWithBmad,
+      sessionManager: mockSessionManager,
+    });
+
+    lm.start(60_000);
+
+    try {
+      await vi.waitFor(() => {
+        expect(tracker.listIssues).toHaveBeenCalled();
+      });
+
+      const sprintCalls = vi
+        .mocked(mockNotifier.notify)
+        .mock.calls.filter((call) => call[0].type === "bmad.sprint_complete");
+      expect(sprintCalls).toHaveLength(0);
+    } finally {
+      lm.stop();
+    }
+  });
+
   it("gracefully handles listIssues throwing", async () => {
     const mockNotifier: Notifier = {
       name: "mock-notifier",

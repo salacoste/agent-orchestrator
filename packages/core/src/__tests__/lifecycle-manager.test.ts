@@ -1739,6 +1739,62 @@ describe("bmad.sprint_complete", () => {
     }
   });
 
+  it("still notifies when reaction is configured with auto:false", async () => {
+    const mockNotifier: Notifier = {
+      name: "mock-notifier",
+      notify: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const bmadConfig: OrchestratorConfig = {
+      ...makeBmadConfig(),
+      reactions: {
+        "bmad-sprint-complete": {
+          auto: false,
+          action: "send-to-agent" as const,
+          message: "Sprint complete",
+        },
+      },
+    };
+    const mockSCM = makeBmadSCM();
+    const tracker = makeSprintTracker([
+      { id: "S-1", state: "closed" },
+      { id: "S-2", state: "closed" },
+    ]);
+
+    const registryWithBmad: PluginRegistry = {
+      ...mockRegistry,
+      get: vi.fn().mockImplementation((slot: string, name: string) => {
+        if (slot === "runtime") return mockRuntime;
+        if (slot === "agent") return mockAgent;
+        if (slot === "scm") return mockSCM;
+        if (slot === "tracker" && name === "bmad") return tracker;
+        if (slot === "notifier" && name === "desktop") return mockNotifier;
+        return null;
+      }),
+    };
+
+    vi.mocked(mockSessionManager.list).mockResolvedValue([]);
+
+    const lm = createLifecycleManager({
+      config: bmadConfig,
+      registry: registryWithBmad,
+      sessionManager: mockSessionManager,
+    });
+
+    lm.start(60_000);
+
+    try {
+      // Even with auto:false reaction, notifyHuman should still be called as fallback
+      await vi.waitFor(() => {
+        expect(mockNotifier.notify).toHaveBeenCalledWith(
+          expect.objectContaining({ type: "bmad.sprint_complete" }),
+        );
+      });
+    } finally {
+      lm.stop();
+    }
+  });
+
   it("gracefully handles listIssues throwing", async () => {
     const mockNotifier: Notifier = {
       name: "mock-notifier",

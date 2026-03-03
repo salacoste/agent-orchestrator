@@ -62,7 +62,7 @@ export function HomeView({
                   setView("sessions");
                   updateUrl("sessions", selectedProject);
                 }}
-                className={`px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                className={`px-3 py-1.5 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
                   view === "sessions"
                     ? "bg-[var(--color-bg-surface)] text-[var(--color-text-primary)]"
                     : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
@@ -75,7 +75,7 @@ export function HomeView({
                   setView("sprint");
                   updateUrl("sprint", selectedProject);
                 }}
-                className={`px-3 py-1.5 text-[11px] font-semibold transition-colors ${
+                className={`px-3 py-1.5 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] ${
                   view === "sprint"
                     ? "bg-[var(--color-bg-surface)] text-[var(--color-text-primary)]"
                     : "text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
@@ -91,7 +91,7 @@ export function HomeView({
                   setSelectedProject(e.target.value);
                   updateUrl("sprint", e.target.value);
                 }}
-                className="rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-base)] text-[11px] text-[var(--color-text-secondary)] px-2 py-1.5"
+                className="rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-base)] text-[11px] text-[var(--color-text-secondary)] px-2 py-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
               >
                 {trackerProjects.map((id) => (
                   <option key={id} value={id}>

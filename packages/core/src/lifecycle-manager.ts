@@ -693,6 +693,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
               ? { ...globalReaction, ...projectReaction }
               : globalReaction;
 
+            let sprintReactionHandled = false;
             if (reactionConfig?.action) {
               if (reactionConfig.auto !== false || reactionConfig.action === "notify") {
                 await executeReaction(
@@ -701,8 +702,10 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
                   sprintReactionKey,
                   reactionConfig as ReactionConfig,
                 );
+                sprintReactionHandled = true;
               }
-            } else {
+            }
+            if (!sprintReactionHandled) {
               await notifyHuman(sprintEvent, "action");
             }
           } else {

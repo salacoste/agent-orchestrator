@@ -26,7 +26,11 @@ export function HomeView({
   const router = useRouter();
 
   const initialView = searchParams.get("view") === "sprint" ? "sprint" : "sessions";
-  const initialProject = searchParams.get("project") || trackerProjects[0] || "";
+  const projectParam = searchParams.get("project");
+  const initialProject =
+    projectParam && trackerProjects.includes(projectParam)
+      ? projectParam
+      : trackerProjects[0] || "";
 
   const [view, setView] = useState<"sessions" | "sprint">(initialView);
   const [selectedProject, setSelectedProject] = useState<string>(initialProject);

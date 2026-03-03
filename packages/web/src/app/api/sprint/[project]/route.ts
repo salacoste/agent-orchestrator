@@ -32,13 +32,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
     // Get all stories
     const issues = await tracker.listIssues({ state: "all", limit: 200 }, project);
 
-    // Get active sessions to cross-reference
-    const sessions = await sessionManager.list(projectId);
+    // Get active sessions to cross-reference (non-fatal if unavailable)
     const sessionsByIssue = new Map<string, { id: string; activity: string | null }>();
-    for (const s of sessions) {
-      if (s.issueId) {
-        sessionsByIssue.set(s.issueId.toLowerCase(), { id: s.id, activity: s.activity });
+    try {
+      const sessions = await sessionManager.list(projectId);
+      for (const s of sessions) {
+        if (s.issueId) {
+          sessionsByIssue.set(s.issueId.toLowerCase(), { id: s.id, activity: s.activity });
+        }
       }
+    } catch {
+      // Session lookup not critical — continue without session info
     }
 
     // Define sprint columns in order
@@ -76,15 +80,15 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       const bmadStatus = getBmadStatus(issue.labels);
       const epic = issue.labels.find((l) => l.startsWith("epic-")) ?? null;
 
-      if (issue.state === "closed" || issue.state === "cancelled") done++;
-      else if (issue.state === "in_progress") inProgress++;
+      if (bmadStatus === "done") done++;
+      else if (bmadStatus === "in-progress" || bmadStatus === "review") inProgress++;
 
       // Aggregate per-epic stats
       if (epic) {
         const epicStats = epicMap.get(epic) ?? { total: 0, done: 0, inProgress: 0, open: 0 };
         epicStats.total++;
-        if (issue.state === "closed" || issue.state === "cancelled") epicStats.done++;
-        else if (issue.state === "in_progress") epicStats.inProgress++;
+        if (bmadStatus === "done") epicStats.done++;
+        else if (bmadStatus === "in-progress" || bmadStatus === "review") epicStats.inProgress++;
         else epicStats.open++;
         epicMap.set(epic, epicStats);
       }

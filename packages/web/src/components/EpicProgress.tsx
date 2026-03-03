@@ -30,7 +30,7 @@ export function EpicProgress({ epics, onFilterEpic, activeEpic }: EpicProgressPr
         {activeEpic && onFilterEpic && (
           <button
             onClick={() => onFilterEpic(null)}
-            className="rounded px-2 py-0.5 text-[10px] font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent-subtle)] transition-colors"
+            className="rounded px-2 py-0.5 text-[10px] font-medium text-[var(--color-accent)] hover:bg-[var(--color-accent-subtle)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
           >
             Show All
           </button>
@@ -47,7 +47,7 @@ export function EpicProgress({ epics, onFilterEpic, activeEpic }: EpicProgressPr
               onClick={() => onFilterEpic?.(isActive ? null : epic.epicId)}
               aria-label={`Filter by epic ${epic.title !== epic.epicId ? epic.title : epic.epicId}`}
               aria-pressed={isActive}
-              className={`w-full rounded-[6px] border px-3 py-2 text-left transition-all ${
+              className={`w-full rounded-[6px] border px-3 py-2 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg-base)] ${
                 isActive
                   ? "border-[var(--color-accent)] bg-[var(--color-accent-subtle)]"
                   : isFiltered

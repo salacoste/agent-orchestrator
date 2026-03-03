@@ -162,6 +162,7 @@ function readFileOrNull(filePath: string): string | null {
 type BmadStatus = string;
 
 function mapBmadState(status: BmadStatus): Issue["state"] {
+  if (typeof status !== "string" || !status) return "open";
   const normalized = status.toLowerCase().replace(/[_\s]+/g, "-");
   switch (normalized) {
     case "done":
@@ -258,16 +259,17 @@ function createBmadTracker(): Tracker {
       const title = storyContent ? extractTitle(storyContent, identifier) : identifier;
       const description = storyContent ?? "";
 
+      const status = typeof entry.status === "string" ? entry.status : "backlog";
       const labels: string[] = [];
       if (entry.epic) labels.push(entry.epic);
-      labels.push(entry.status);
+      labels.push(status);
 
       return {
         id: identifier,
         title,
         description,
         url: this.issueUrl(identifier, project),
-        state: mapBmadState(entry.status),
+        state: mapBmadState(status),
         labels,
       };
     },
@@ -412,10 +414,12 @@ function createBmadTracker(): Tracker {
       for (const [identifier, entry] of Object.entries(sprint.development_status)) {
         if (results.length >= limit) break;
 
-        // Skip epic-level entries — they inflate story counts
-        if (identifier.startsWith("epic-") || entry.status.startsWith("epic-")) continue;
+        const status = typeof entry.status === "string" ? entry.status : "backlog";
 
-        const mappedState = mapBmadState(entry.status);
+        // Skip epic-level entries — they inflate story counts
+        if (identifier.startsWith("epic-") || status.startsWith("epic-")) continue;
+
+        const mappedState = mapBmadState(status);
 
         // Filter by state
         if (filters.state && filters.state !== "all") {
@@ -429,7 +433,7 @@ function createBmadTracker(): Tracker {
 
         // Filter by labels
         if (filters.labels && filters.labels.length > 0) {
-          const entryLabels = [entry.epic, entry.status].filter(Boolean) as string[];
+          const entryLabels = [entry.epic, status].filter(Boolean) as string[];
           const hasMatch = filters.labels.some((l) => entryLabels.includes(l));
           if (!hasMatch) continue;
         }
@@ -439,7 +443,7 @@ function createBmadTracker(): Tracker {
 
         const labels: string[] = [];
         if (entry.epic) labels.push(entry.epic);
-        labels.push(entry.status);
+        labels.push(status);
 
         results.push({
           id: identifier,

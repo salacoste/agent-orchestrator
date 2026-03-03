@@ -951,3 +951,124 @@ describe("readEpicTitle", () => {
     expect(title).toBe("Epic 1: User Management");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Malformed YAML resilience
+// ---------------------------------------------------------------------------
+
+describe("malformed YAML entries", () => {
+  it("treats entry with missing status as open", async () => {
+    setupFs({
+      sprintStatus: `
+development_status:
+  1-1-no-status:
+    epic: epic-1
+`,
+    });
+    const tracker = create();
+    const issue = await tracker.getIssue("1-1-no-status", PROJECT);
+    expect(issue.state).toBe("open");
+  });
+
+  it("treats entry with numeric status as open", async () => {
+    setupFs({
+      sprintStatus: `
+development_status:
+  1-1-numeric:
+    status: 42
+    epic: epic-1
+`,
+    });
+    const tracker = create();
+    const issue = await tracker.getIssue("1-1-numeric", PROJECT);
+    expect(issue.state).toBe("open");
+  });
+
+  it("lists issues with missing status without crashing", async () => {
+    setupFs({
+      sprintStatus: `
+development_status:
+  1-1-no-status:
+    epic: epic-1
+  1-2-has-status:
+    status: done
+    epic: epic-1
+`,
+    });
+    const tracker = create();
+    const issues = await tracker.listIssues!({ state: "all" }, PROJECT);
+    expect(issues).toHaveLength(2);
+    expect(issues[0]?.state).toBe("open");
+    expect(issues[1]?.state).toBe("closed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractAcceptanceCriteria edge cases (via generatePrompt)
+// ---------------------------------------------------------------------------
+
+describe("extractAcceptanceCriteria edge cases", () => {
+  it("extracts * bullet items as well as - bullets", async () => {
+    setupFs({
+      story: `# Test Story
+
+## Acceptance Criteria
+* First criterion using asterisk
+- Second criterion using dash
+* Third criterion using asterisk
+`,
+    });
+    const tracker = create();
+    const prompt = await tracker.generatePrompt("1-1-user-authentication", PROJECT);
+    expect(prompt).toContain("- [ ] First criterion using asterisk");
+    expect(prompt).toContain("- [ ] Second criterion using dash");
+    expect(prompt).toContain("- [ ] Third criterion using asterisk");
+  });
+
+  it("ignores numbered lists in AC section", async () => {
+    setupFs({
+      story: `# Test Story
+
+## Acceptance Criteria
+1. First numbered item
+2. Second numbered item
+- Real bullet item
+`,
+    });
+    const tracker = create();
+    const prompt = await tracker.generatePrompt("1-1-user-authentication", PROJECT);
+    // Numbered items appear in Story section but NOT as checklist items
+    const acSection = prompt.split("## Acceptance Criteria Checklist")[1]?.split("##")[0] ?? "";
+    expect(acSection).not.toContain("First numbered item");
+    expect(acSection).not.toContain("Second numbered item");
+    expect(acSection).toContain("- [ ] Real bullet item");
+  });
+
+  it("returns no AC checklist when section exists but has no bullets", async () => {
+    setupFs({
+      story: `# Test Story
+
+## Acceptance Criteria
+
+Just a paragraph with no bullets.
+
+## Next Section
+`,
+    });
+    const tracker = create();
+    const prompt = await tracker.generatePrompt("1-1-user-authentication", PROJECT);
+    expect(prompt).not.toContain("Acceptance Criteria Checklist");
+  });
+
+  it("handles AC section at end of file without trailing newline", async () => {
+    setupFs({
+      story: `# Test Story
+
+## Acceptance Criteria
+- Only criterion`,
+    });
+    const tracker = create();
+    const prompt = await tracker.generatePrompt("1-1-user-authentication", PROJECT);
+    expect(prompt).toContain("- [ ] Only criterion");
+  });
+});

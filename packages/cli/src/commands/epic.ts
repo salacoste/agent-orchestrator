@@ -23,7 +23,7 @@ function progressBar(done: number, total: number, width = 16): string {
 }
 
 function stateCategory(issue: Issue): "open" | "in-progress" | "done" {
-  if (issue.state === "closed") return "done";
+  if (issue.state === "closed" || issue.state === "cancelled") return "done";
   if (issue.state === "in_progress") return "in-progress";
   return "open";
 }

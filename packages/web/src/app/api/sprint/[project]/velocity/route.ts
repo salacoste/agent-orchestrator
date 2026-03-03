@@ -39,18 +39,21 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       .map(([date, ids]) => ({ date, count: ids.size }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Get total stories for burndown calculation
+    // Get total stories and current done count from tracker (ground truth)
     const tracker = registry.get<Tracker>("tracker", project.tracker.plugin);
     let totalStories = 0;
+    let doneCount = 0;
     if (tracker?.listIssues) {
       const issues = await tracker.listIssues({ state: "all", limit: 200 }, project);
       totalStories = issues.length;
+      doneCount = issues.filter((i) => i.state === "closed" || i.state === "cancelled").length;
     }
 
     return NextResponse.json({
       entries: entries.slice(-100), // Last 100 entries
       dailyCompletions,
       totalStories,
+      doneCount,
     });
   } catch (err) {
     return NextResponse.json(

@@ -127,7 +127,7 @@ export function registerStories(program: Command): void {
           const sessions = await sm.list(projectId);
           for (const session of sessions) {
             if (session.issueId && !isTerminalSession(session)) {
-              issueSessionMap.set(session.issueId, session.id);
+              issueSessionMap.set(session.issueId.toLowerCase(), session.id);
             }
           }
         } catch {
@@ -138,7 +138,7 @@ export function registerStories(program: Command): void {
         if (options.json) {
           const output = issues.map((issue) => ({
             ...issue,
-            session: issueSessionMap.get(issue.id) ?? null,
+            session: issueSessionMap.get(issue.id.toLowerCase()) ?? null,
           }));
           console.log(JSON.stringify(output, null, 2));
           return;
@@ -168,7 +168,7 @@ export function registerStories(program: Command): void {
 
         for (const [_epic, epicIssues] of byEpic) {
           for (const issue of epicIssues) {
-            printStoryRow(issue, issueSessionMap.get(issue.id) ?? null);
+            printStoryRow(issue, issueSessionMap.get(issue.id.toLowerCase()) ?? null);
           }
         }
 

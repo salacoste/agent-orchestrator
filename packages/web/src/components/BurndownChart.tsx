@@ -10,6 +10,7 @@ interface DailyCompletion {
 interface VelocityData {
   dailyCompletions: DailyCompletion[];
   totalStories: number;
+  doneCount?: number;
 }
 
 export function BurndownChart({ projectId }: { projectId: string }) {
@@ -67,7 +68,7 @@ export function BurndownChart({ projectId }: { projectId: string }) {
     );
   }
 
-  const { dailyCompletions, totalStories } = data;
+  const { dailyCompletions, totalStories, doneCount } = data;
   const days = dailyCompletions.length;
 
   // SVG dimensions
@@ -77,8 +78,9 @@ export function BurndownChart({ projectId }: { projectId: string }) {
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
 
-  // Compute cumulative remaining
-  const totalCompleted = dailyCompletions.reduce((sum, d) => sum + d.count, 0);
+  // Use ground-truth done count from tracker (accurate even if stories bounce)
+  // Fall back to summing daily completions for backwards compatibility
+  const totalCompleted = doneCount ?? dailyCompletions.reduce((sum, d) => sum + d.count, 0);
   let cumDone = 0;
   const points = dailyCompletions.map((d, i) => {
     cumDone += d.count;

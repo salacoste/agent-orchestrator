@@ -1,6 +1,7 @@
 import chalk from "chalk";
 import type { Command } from "commander";
 import { loadConfig, type Issue, type Session } from "@composio/ao-core";
+import { getBmadStatus } from "@composio/ao-plugin-tracker-bmad";
 import { getTracker } from "../lib/plugins.js";
 import { getSessionManager } from "../lib/create-session-manager.js";
 import { header } from "../lib/format.js";
@@ -8,14 +9,6 @@ import { resolveProject } from "../lib/resolve-project.js";
 
 /** Ordered sprint columns */
 const COLUMNS = ["backlog", "ready-for-dev", "in-progress", "review", "done"] as const;
-
-/** Extract BMad status from an issue's labels (last label is the status). */
-function getBmadStatus(issue: Issue): string {
-  if (issue.labels.length === 0) return "backlog";
-  const lastLabel = issue.labels[issue.labels.length - 1];
-  if (!lastLabel) return "backlog";
-  return lastLabel.toLowerCase();
-}
 
 /** Render a progress bar: [████░░░░] n/total */
 function progressBar(done: number, total: number, width: number = 20): string {
@@ -48,6 +41,8 @@ interface SprintData {
   projectId: string;
   totalStories: number;
   doneCount: number;
+  inProgressCount: number;
+  openCount: number;
   columns: Record<string, Array<{ id: string; title: string; sessionInfo: string | null }>>;
 }
 
@@ -118,7 +113,7 @@ export function registerSprint(program: Command): void {
       }
 
       for (const issue of issues) {
-        const status = getBmadStatus(issue);
+        const status = getBmadStatus(issue.labels);
         const existing = grouped.get(status);
         if (existing) {
           existing.push(issue);
@@ -130,6 +125,9 @@ export function registerSprint(program: Command): void {
 
       const totalStories = issues.length;
       const doneCount = grouped.get("done")?.length ?? 0;
+      const inProgressCount =
+        (grouped.get("in-progress")?.length ?? 0) + (grouped.get("review")?.length ?? 0);
+      const openCount = totalStories - doneCount - inProgressCount;
 
       // JSON output
       if (opts.json) {
@@ -137,6 +135,8 @@ export function registerSprint(program: Command): void {
           projectId,
           totalStories,
           doneCount,
+          inProgressCount,
+          openCount,
           columns: {},
         };
 

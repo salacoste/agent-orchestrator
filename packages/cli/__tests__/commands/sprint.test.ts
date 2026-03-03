@@ -39,6 +39,14 @@ vi.mock("../../src/lib/create-session-manager.js", () => ({
   getSessionManager: async (): Promise<SessionManager> => mockSessionManager as SessionManager,
 }));
 
+vi.mock("@composio/ao-plugin-tracker-bmad", () => ({
+  getBmadStatus: (labels: string[]): string => {
+    if (labels.length === 0) return "backlog";
+    const last = labels[labels.length - 1];
+    return last ? last.toLowerCase() : "backlog";
+  },
+}));
+
 let tmpDir: string;
 
 import { Command } from "commander";
@@ -193,11 +201,15 @@ describe("sprint command", () => {
       projectId: string;
       totalStories: number;
       doneCount: number;
+      inProgressCount: number;
+      openCount: number;
       columns: Record<string, unknown[]>;
     };
     expect(parsed.projectId).toBe("my-app");
     expect(parsed.totalStories).toBe(1);
     expect(parsed.doneCount).toBe(0);
+    expect(parsed.inProgressCount).toBe(0);
+    expect(parsed.openCount).toBe(1);
     expect(parsed.columns).toHaveProperty("backlog");
     expect(parsed.columns["backlog"]).toHaveLength(1);
   });

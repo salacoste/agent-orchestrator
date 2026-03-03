@@ -26,6 +26,17 @@ export type { HistoryEntry } from "./history.js";
 // ---------------------------------------------------------------------------
 
 /**
+ * Extract BMad status from an issue's labels (last label is the status).
+ * Returns lowercase status string, falls back to "backlog".
+ */
+export function getBmadStatus(labels: string[]): string {
+  if (labels.length === 0) return "backlog";
+  const lastLabel = labels[labels.length - 1];
+  if (!lastLabel) return "backlog";
+  return lastLabel.toLowerCase();
+}
+
+/**
  * Read the H1 title from an epic markdown file.
  * Falls back to the epic slug if the file is missing or unreadable.
  */

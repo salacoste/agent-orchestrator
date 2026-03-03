@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServices } from "@/lib/services";
 import type { Tracker } from "@composio/ao-core";
-import { readEpicTitle } from "@composio/ao-plugin-tracker-bmad";
+import { getBmadStatus, readEpicTitle } from "@composio/ao-plugin-tracker-bmad";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ project: string }> }) {
   try {
@@ -73,20 +73,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
 
     for (const issue of issues) {
       total++;
-      // Get BMad status from labels (last label is status)
-      const bmadStatus = (
-        issue.labels.length > 0 ? issue.labels[issue.labels.length - 1] : "backlog"
-      ).toLowerCase();
+      const bmadStatus = getBmadStatus(issue.labels);
       const epic = issue.labels.find((l) => l.startsWith("epic-")) ?? null;
 
-      if (issue.state === "closed") done++;
-      if (issue.state === "in_progress") inProgress++;
+      if (issue.state === "closed" || issue.state === "cancelled") done++;
+      else if (issue.state === "in_progress") inProgress++;
 
       // Aggregate per-epic stats
       if (epic) {
         const epicStats = epicMap.get(epic) ?? { total: 0, done: 0, inProgress: 0, open: 0 };
         epicStats.total++;
-        if (issue.state === "closed") epicStats.done++;
+        if (issue.state === "closed" || issue.state === "cancelled") epicStats.done++;
         else if (issue.state === "in_progress") epicStats.inProgress++;
         else epicStats.open++;
         epicMap.set(epic, epicStats);

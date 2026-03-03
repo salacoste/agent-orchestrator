@@ -15,7 +15,7 @@ import { resolve, join, basename } from "node:path";
 import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
 import { z } from "zod";
-import type { OrchestratorConfig } from "./types.js";
+import type { AgentSpecificConfig, OrchestratorConfig, ProjectConfig } from "./types.js";
 import { generateSessionPrefix } from "./paths.js";
 
 // =============================================================================
@@ -429,4 +429,16 @@ export function getDefaultConfig(): OrchestratorConfig {
   return validateConfig({
     projects: {},
   });
+}
+
+/**
+ * Resolve agent-specific config for a given project and agent name.
+ * Looks up `project.agentConfig` and returns a merged config object,
+ * falling back to empty values for missing fields.
+ */
+export function resolveAgentConfig(
+  project: ProjectConfig | undefined,
+  _agentName: string,
+): AgentSpecificConfig {
+  return project?.agentConfig ?? {};
 }

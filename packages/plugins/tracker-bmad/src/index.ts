@@ -171,6 +171,7 @@ function mapBmadState(status: BmadStatus): Issue["state"] {
 function reverseMapState(state: Issue["state"]): BmadStatus {
   switch (state) {
     case "closed":
+    case "cancelled":
       return "done";
     case "in_progress":
       return "in-progress";
@@ -353,11 +354,10 @@ function createBmadTracker(): Tracker {
         lines.push("## Technical Specification", "", truncated, "");
       }
 
-      // Epic context
-      const sprint = readSprintStatus(project);
-      const entry = sprint.development_status[identifier];
-      if (entry?.epic) {
-        const epicContent = readFileOrNull(epicFilePath(entry.epic, project));
+      // Epic context — derive epic from issue labels (already read by getIssue)
+      const epicLabel = issue.labels.find((l) => l.startsWith("epic-"));
+      if (epicLabel) {
+        const epicContent = readFileOrNull(epicFilePath(epicLabel, project));
         if (epicContent) {
           const truncated =
             epicContent.length > 2000
@@ -365,14 +365,13 @@ function createBmadTracker(): Tracker {
               : epicContent;
           lines.push("## Epic Overview", "", truncated, "");
         }
-      }
 
-      // Related stories in same epic
-      if (entry?.epic) {
+        // Related stories in same epic (requires sprint status for sibling lookup)
+        const sprint = readSprintStatus(project);
         const siblings: string[] = [];
         for (const [sibId, sibEntry] of Object.entries(sprint.development_status)) {
           if (sibId === identifier) continue;
-          if (sibEntry.epic !== entry.epic) continue;
+          if (sibEntry.epic !== epicLabel) continue;
           if (siblings.length >= 10) break;
 
           const sibStoryContent = readFileOrNull(storyFilePath(sibId, project));

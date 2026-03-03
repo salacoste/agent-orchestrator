@@ -264,6 +264,21 @@ describe("epic command", () => {
     expect(errorOutput).toContain("sprint-status.yaml not found");
   });
 
+  it("exits with error when epic-id is not found in --json mode", async () => {
+    const issues: Issue[] = [
+      makeIssue({ id: "S-1", title: "Story", state: "open", labels: ["epic-real"] }),
+    ];
+    mockListIssues.mockResolvedValue(issues);
+
+    await expect(
+      program.parseAsync(["node", "test", "epic", "my-app", "epic-missing", "--json"]),
+    ).rejects.toThrow("process.exit(1)");
+
+    const errorOutput = consoleErrorSpy.mock.calls.map((c) => String(c[0])).join("");
+    const parsed = JSON.parse(errorOutput) as { error: string };
+    expect(parsed.error).toMatch(/Epic not found: epic-missing/);
+  });
+
   it("exits with error when epic-id is not found", async () => {
     const issues: Issue[] = [
       makeIssue({ id: "S-1", title: "Story", state: "open", labels: ["epic-real"] }),

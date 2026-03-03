@@ -180,22 +180,29 @@ export function registerEpic(program: Command): void {
         const epics = groupByEpic(stories, project, isBmad);
 
         if (opts.json) {
-          const jsonData = epicId
-            ? (epics.find((e) => e.id === epicId) ?? null)
-            : epics.map((e) => ({
-                id: e.id,
-                title: e.title,
-                open: e.open,
-                inProgress: e.inProgress,
-                done: e.done,
-                total: e.open + e.inProgress + e.done,
-                stories: e.stories.map((s) => ({
-                  id: s.id,
-                  title: s.title,
-                  state: s.state,
-                })),
-              }));
-          console.log(JSON.stringify(jsonData, null, 2));
+          if (epicId) {
+            const epic = epics.find((e) => e.id === epicId);
+            if (!epic) {
+              console.error(JSON.stringify({ error: `Epic not found: ${epicId}` }));
+              process.exit(1);
+            }
+            console.log(JSON.stringify(epic, null, 2));
+          } else {
+            const jsonData = epics.map((e) => ({
+              id: e.id,
+              title: e.title,
+              open: e.open,
+              inProgress: e.inProgress,
+              done: e.done,
+              total: e.open + e.inProgress + e.done,
+              stories: e.stories.map((s) => ({
+                id: s.id,
+                title: s.title,
+                state: s.state,
+              })),
+            }));
+            console.log(JSON.stringify(jsonData, null, 2));
+          }
           return;
         }
 

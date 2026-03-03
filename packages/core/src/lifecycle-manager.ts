@@ -662,7 +662,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
 
         let allDone = false;
         try {
-          const issues = await tracker.listIssues({ state: "all" }, project);
+          const issues = await tracker.listIssues({ state: "all", limit: 1000 }, project);
           // Sprint is complete when there is at least one issue and none are open/in_progress
           allDone =
             issues.length > 0 &&

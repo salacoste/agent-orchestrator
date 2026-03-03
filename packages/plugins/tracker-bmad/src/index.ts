@@ -348,7 +348,9 @@ function createBmadTracker(): Tracker {
       // Tech spec
       const techSpec = readFileOrNull(techSpecPath(identifier, project));
       if (techSpec) {
-        lines.push("## Technical Specification", "", techSpec, "");
+        const truncated =
+          techSpec.length > 4000 ? techSpec.slice(0, 4000) + "\n\n[truncated]" : techSpec;
+        lines.push("## Technical Specification", "", truncated, "");
       }
 
       // Epic context

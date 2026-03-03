@@ -23,17 +23,20 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       return NextResponse.json({ entries: [], dailyCompletions: [], totalStories: 0 });
     }
 
-    // Compute daily completions (stories moving to "done")
-    const dailyMap = new Map<string, number>();
+    // Compute daily completions (stories moving to "done"), deduplicated by storyId
+    // A story moving done→in-progress→done should only count once per day
+    const dailyMap = new Map<string, Set<string>>();
     for (const entry of entries) {
       if (entry.toStatus === "done") {
         const day = entry.timestamp.slice(0, 10); // YYYY-MM-DD
-        dailyMap.set(day, (dailyMap.get(day) ?? 0) + 1);
+        const ids = dailyMap.get(day) ?? new Set<string>();
+        ids.add(entry.storyId);
+        dailyMap.set(day, ids);
       }
     }
 
     const dailyCompletions = Array.from(dailyMap.entries())
-      .map(([date, count]) => ({ date, count }))
+      .map(([date, ids]) => ({ date, count: ids.size }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     // Get total stories for burndown calculation

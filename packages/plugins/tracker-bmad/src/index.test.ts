@@ -226,6 +226,15 @@ describe("getIssue", () => {
     expect(issue.description).toBe("");
   });
 
+  it("gracefully handles empty story file (uses slug as title)", async () => {
+    setupFs({ story: "" });
+    const tracker = create();
+    const issue = await tracker.getIssue("1-1-user-authentication", PROJECT);
+
+    expect(issue.title).toBe("1-1-user-authentication");
+    expect(issue.description).toBe("");
+  });
+
   it("throws descriptive error for malformed YAML syntax", async () => {
     const malformedYaml = "development_status:\n  story-a:\n    status: [invalid yaml::";
     setupFs({ sprintStatus: malformedYaml });
@@ -453,6 +462,17 @@ describe("generatePrompt", () => {
 
     expect(prompt).toContain("## Product Requirements");
     expect(prompt).toContain("[truncated]");
+  });
+
+  it("truncates tech spec content over 4000 chars", async () => {
+    setupFs({ techSpec: "T".repeat(5000) });
+    const tracker = create();
+    const prompt = await tracker.generatePrompt("1-1-user-authentication", PROJECT);
+
+    expect(prompt).toContain("## Technical Specification");
+    expect(prompt).toContain("[truncated]");
+    // Should contain at most 4000 chars of the spec, not the full 5000
+    expect(prompt).not.toContain("T".repeat(5000));
   });
 
   it("includes acceptance criteria checklist when story has AC section", async () => {

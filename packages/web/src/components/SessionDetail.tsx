@@ -357,16 +357,21 @@ export function SessionDetail({
                   </>
                 )}
 
-                {session.issueUrl && (
-                  <a
-                    href={session.issueUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="rounded-[4px] border border-[var(--color-border-subtle)] bg-[rgba(255,255,255,0.04)] px-2 py-0.5 text-[11px] text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text-primary)] hover:no-underline"
-                  >
-                    {session.issueLabel || session.issueUrl}
-                  </a>
-                )}
+                {session.issueUrl &&
+                  (session.issueUrl.startsWith("file://") ? (
+                    <span className="rounded-[4px] border border-[var(--color-border-subtle)] bg-[rgba(255,255,255,0.04)] px-2 py-0.5 text-[11px] text-[var(--color-text-secondary)]">
+                      {session.issueLabel || session.issueUrl.replace("file://", "")}
+                    </span>
+                  ) : (
+                    <a
+                      href={session.issueUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-[4px] border border-[var(--color-border-subtle)] bg-[rgba(255,255,255,0.04)] px-2 py-0.5 text-[11px] text-[var(--color-text-secondary)] transition-colors hover:border-[var(--color-border-strong)] hover:text-[var(--color-text-primary)] hover:no-underline"
+                    >
+                      {session.issueLabel || session.issueUrl}
+                    </a>
+                  ))}
               </div>
 
               <ClientTimestamps

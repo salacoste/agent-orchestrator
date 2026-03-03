@@ -205,7 +205,7 @@ export function SprintBoard({ projectId }: { projectId: string }) {
         <button
           onClick={() => setShowBurndown((prev) => !prev)}
           aria-expanded={showBurndown}
-          className="w-full flex items-center justify-between px-4 py-3 text-[12px] font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+          className="w-full flex items-center justify-between px-4 py-3 text-[12px] font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
         >
           <span>Burndown</span>
           <span className="text-[10px] text-[var(--color-text-muted)]">

@@ -381,6 +381,20 @@ describe("issueUrl", () => {
       "file:///home/user/test-app/_bmad-output/implementation-artifacts/story-1-1-user-authentication.md",
     );
   });
+
+  it("uses default paths when outputDir and storyDir not configured", () => {
+    const tracker = create();
+    const url = tracker.issueUrl("1-1-user-authentication", PROJECT_DEFAULTS);
+    expect(url).toBe(
+      "file:///home/user/test-app/_bmad-output/implementation-artifacts/story-1-1-user-authentication.md",
+    );
+  });
+
+  it("always produces a file:// URL (not http)", () => {
+    const tracker = create();
+    const url = tracker.issueUrl("any-story", PROJECT);
+    expect(url).toMatch(/^file:\/\//);
+  });
 });
 
 describe("issueLabel", () => {

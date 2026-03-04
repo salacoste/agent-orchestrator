@@ -1,39 +1,49 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync, readFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  existsSync,
+  readdirSync,
+  readFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { type Session, type SessionManager, getSessionsDir } from "@composio/ao-core";
+import {
+  type Session,
+  type SessionManager,
+  type PRInfo,
+  type ReviewComment,
+  getSessionsDir,
+} from "@composio/ao-core";
 
-const { mockTmux, mockExec, mockGh, mockConfigRef, mockSessionManager, sessionsDirRef } =
-  vi.hoisted(() => ({
-    mockTmux: vi.fn(),
-    mockExec: vi.fn(),
-    mockGh: vi.fn(),
-    mockConfigRef: { current: null as Record<string, unknown> | null },
-    mockSessionManager: {
-      list: vi.fn(),
-      kill: vi.fn(),
-      cleanup: vi.fn(),
-      get: vi.fn(),
-      spawn: vi.fn(),
-      spawnOrchestrator: vi.fn(),
-      send: vi.fn(),
-    },
-    sessionsDirRef: { current: "" },
-  }));
-
-vi.mock("../../src/lib/shell.js", () => ({
-  tmux: mockTmux,
-  exec: mockExec,
-  execSilent: vi.fn(),
-  git: vi.fn(),
-  gh: mockGh,
-  getTmuxSessions: async () => {
-    const output = await mockTmux("list-sessions", "-F", "#{session_name}");
-    if (!output) return [];
-    return output.split("\n").filter(Boolean);
+const { mockSCM, mockConfigRef, mockSessionManager, sessionsDirRef } = vi.hoisted(() => ({
+  mockSCM: {
+    name: "github",
+    detectPR: vi.fn(),
+    getPRState: vi.fn(),
+    mergePR: vi.fn(),
+    closePR: vi.fn(),
+    getCIChecks: vi.fn(),
+    getCISummary: vi.fn(),
+    getReviews: vi.fn(),
+    getReviewDecision: vi.fn(),
+    getPendingComments: vi.fn(),
+    getAutomatedComments: vi.fn(),
+    getMergeability: vi.fn(),
   },
-  getTmuxActivity: vi.fn().mockResolvedValue(null),
+  mockConfigRef: { current: null as Record<string, unknown> | null },
+  mockSessionManager: {
+    list: vi.fn(),
+    kill: vi.fn(),
+    cleanup: vi.fn(),
+    get: vi.fn(),
+    spawn: vi.fn(),
+    spawnOrchestrator: vi.fn(),
+    send: vi.fn(),
+  },
+  sessionsDirRef: { current: "" },
 }));
 
 vi.mock("ora", () => ({
@@ -54,6 +64,14 @@ vi.mock("@composio/ao-core", async (importOriginal) => {
     loadConfig: () => mockConfigRef.current,
   };
 });
+
+vi.mock("../../src/lib/plugins.js", () => ({
+  getSCM: () => mockSCM,
+}));
+
+vi.mock("../../src/lib/create-session-manager.js", () => ({
+  getSessionManager: async (): Promise<SessionManager> => mockSessionManager as SessionManager,
+}));
 
 /** Parse a key=value metadata file into a Record<string, string>. */
 function parseMetadata(content: string): Record<string, string> {
@@ -92,9 +110,16 @@ function buildSessionsFromDir(dir: string, projectId: string): Session[] {
   });
 }
 
-vi.mock("../../src/lib/create-session-manager.js", () => ({
-  getSessionManager: async (): Promise<SessionManager> => mockSessionManager as SessionManager,
-}));
+const MOCK_PR: PRInfo = {
+  number: 10,
+  url: "https://github.com/org/my-app/pull/10",
+  title: "Fix something",
+  owner: "org",
+  repo: "my-app",
+  branch: "feat/fix",
+  baseBranch: "main",
+  isDraft: false,
+};
 
 let tmpDir: string;
 let sessionsDir: string;
@@ -127,6 +152,7 @@ beforeEach(() => {
         path: join(tmpDir, "main-repo"),
         defaultBranch: "main",
         sessionPrefix: "app",
+        scm: { plugin: "github" },
       },
     },
     notifiers: {},
@@ -134,7 +160,6 @@ beforeEach(() => {
     reactions: {},
   } as Record<string, unknown>;
 
-  // Calculate and create sessions directory for hash-based architecture
   sessionsDir = getSessionsDir(configPath, join(tmpDir, "main-repo"));
   mkdirSync(sessionsDir, { recursive: true });
   sessionsDirRef.current = sessionsDir;
@@ -148,21 +173,16 @@ beforeEach(() => {
     throw new Error(`process.exit(${code})`);
   });
 
-  mockTmux.mockReset();
-  mockExec.mockReset();
-  mockGh.mockReset();
-  mockExec.mockResolvedValue({ stdout: "", stderr: "" });
+  mockSCM.detectPR.mockReset();
+  mockSCM.getPendingComments.mockReset();
+  mockSCM.getReviewDecision.mockReset();
   mockSessionManager.list.mockReset();
-  mockSessionManager.kill.mockReset();
-  mockSessionManager.cleanup.mockReset();
-  mockSessionManager.get.mockReset();
-  mockSessionManager.spawn.mockReset();
   mockSessionManager.send.mockReset();
 
-  // Default: list reads from sessionsDir
   mockSessionManager.list.mockImplementation(async () => {
     return buildSessionsFromDir(sessionsDirRef.current, "my-app");
   });
+  mockSessionManager.send.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -177,13 +197,9 @@ describe("review-check command", () => {
       "branch=feat/fix\npr=https://github.com/org/my-app/pull/10\n",
     );
 
-    // All threads resolved, no changes requested
-    mockGh.mockResolvedValue(
-      JSON.stringify({
-        reviewDecision: "APPROVED",
-        reviewThreads: { nodes: [{ isResolved: true }] },
-      }),
-    );
+    mockSCM.detectPR.mockResolvedValue(MOCK_PR);
+    mockSCM.getPendingComments.mockResolvedValue([]);
+    mockSCM.getReviewDecision.mockResolvedValue("approved");
 
     await program.parseAsync(["node", "test", "review-check"]);
 
@@ -197,90 +213,63 @@ describe("review-check command", () => {
       "branch=feat/fix\npr=https://github.com/org/my-app/pull/10\n",
     );
 
-    mockGh.mockResolvedValue(
-      JSON.stringify({
-        reviewDecision: "CHANGES_REQUESTED",
-        reviewThreads: { nodes: [{ isResolved: false }, { isResolved: true }] },
-      }),
-    );
+    mockSCM.detectPR.mockResolvedValue(MOCK_PR);
+    mockSCM.getPendingComments.mockResolvedValue([
+      { id: "1", body: "Fix this", author: "reviewer" } as ReviewComment,
+    ]);
+    mockSCM.getReviewDecision.mockResolvedValue("changes_requested");
 
     await program.parseAsync(["node", "test", "review-check", "--dry-run"]);
 
     const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(output).toContain("app-1");
     expect(output).toContain("PR #10");
-    expect(output).toContain("CHANGES_REQUESTED");
+    expect(output).toContain("changes_requested");
     expect(output).toContain("dry run");
   });
 
-  it("skips sessions without PR metadata", async () => {
+  it("skips sessions without PR", async () => {
     writeFileSync(join(sessionsDir, "app-1"), "branch=feat/fix\nstatus=working\n");
 
-    await program.parseAsync(["node", "test", "review-check"]);
-
-    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(output).toContain("No pending review comments");
-    // gh should never be called since there's no PR
-    expect(mockGh).not.toHaveBeenCalled();
-  });
-
-  it("skips sessions with non-matching prefix", async () => {
-    writeFileSync(
-      join(sessionsDir, "other-1"),
-      "branch=feat/fix\npr=https://github.com/org/my-app/pull/10\n",
-    );
+    mockSCM.detectPR.mockResolvedValue(null);
 
     await program.parseAsync(["node", "test", "review-check"]);
 
     const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
-    // The session manager returns all sessions in the project dir, including other-1
-    // But review-check iterates over them — other-1 has a PR, so it will be checked.
-    // However, with the session manager, project matching is done differently.
-    // other-1 is in the my-app sessions dir so it will be found and its PR checked.
-    // The test outcome depends on the gh mock — default mockGh is reset (returns undefined).
-    // With no valid gh response, the PR check will return {pendingComments: 0, reviewDecision: null}
-    // So no pending reviews found.
     expect(output).toContain("No pending review comments");
   });
 
-  it("sends fix prompt when not in dry-run mode", async () => {
+  it("sends fix prompt via session manager when not in dry-run mode", async () => {
     writeFileSync(
       join(sessionsDir, "app-1"),
       "branch=feat/fix\npr=https://github.com/org/my-app/pull/10\n",
     );
 
-    mockGh.mockResolvedValue(
-      JSON.stringify({
-        reviewDecision: null,
-        reviewThreads: { nodes: [{ isResolved: false }] },
-      }),
-    );
+    mockSCM.detectPR.mockResolvedValue(MOCK_PR);
+    mockSCM.getPendingComments.mockResolvedValue([
+      { id: "1", body: "Fix this", author: "reviewer" } as ReviewComment,
+    ]);
+    mockSCM.getReviewDecision.mockResolvedValue(null);
 
     await program.parseAsync(["node", "test", "review-check"]);
 
     const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
     expect(output).toContain("Fix prompt sent");
 
-    // Should have sent C-c, C-u, message, Enter
-    expect(mockExec).toHaveBeenCalledWith("tmux", ["send-keys", "-t", "app-1", "C-c"]);
-    expect(mockExec).toHaveBeenCalledWith("tmux", ["send-keys", "-t", "app-1", "C-u"]);
-    expect(mockExec).toHaveBeenCalledWith("tmux", [
-      "send-keys",
-      "-t",
+    // Should use session manager send instead of raw tmux
+    expect(mockSessionManager.send).toHaveBeenCalledWith(
       "app-1",
-      "-l",
       expect.stringContaining("review comments"),
-    ]);
-    expect(mockExec).toHaveBeenCalledWith("tmux", ["send-keys", "-t", "app-1", "Enter"]);
+    );
   });
 
-  it("handles gh returning null (API failure)", async () => {
+  it("handles SCM detectPR failure gracefully", async () => {
     writeFileSync(
       join(sessionsDir, "app-1"),
       "branch=feat/fix\npr=https://github.com/org/my-app/pull/10\n",
     );
 
-    mockGh.mockResolvedValue(null);
+    mockSCM.detectPR.mockRejectedValue(new Error("API error"));
 
     await program.parseAsync(["node", "test", "review-check"]);
 
@@ -288,13 +277,14 @@ describe("review-check command", () => {
     expect(output).toContain("No pending review comments");
   });
 
-  it("handles malformed GraphQL response gracefully", async () => {
+  it("handles SCM getPendingComments failure gracefully", async () => {
     writeFileSync(
       join(sessionsDir, "app-1"),
       "branch=feat/fix\npr=https://github.com/org/my-app/pull/10\n",
     );
 
-    mockGh.mockResolvedValue("not valid json {{{");
+    mockSCM.detectPR.mockResolvedValue(MOCK_PR);
+    mockSCM.getPendingComments.mockRejectedValue(new Error("API error"));
 
     await program.parseAsync(["node", "test", "review-check"]);
 

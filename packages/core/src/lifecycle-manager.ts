@@ -503,7 +503,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
 
           // Try to get epic info and story title for the event data
           try {
-            const tracker = registry.get<Tracker>("tracker", "bmad");
+            const tracker = registry.get<Tracker>("tracker", project.tracker.plugin);
             if (tracker) {
               const issue = await tracker.getIssue(session.issueId, project);
               bmadEvent.message = `BMad story "${issue.title}" (${session.issueId}) completed`;
@@ -657,7 +657,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
       for (const [projectId, project] of Object.entries(config.projects)) {
         if (project.tracker?.plugin !== "bmad") continue;
 
-        const tracker = registry.get<Tracker>("tracker", "bmad");
+        const tracker = registry.get<Tracker>("tracker", project.tracker.plugin);
         if (!tracker?.listIssues) continue;
 
         let allDone = false;

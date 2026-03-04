@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServices } from "@/lib/services";
 import type { Tracker } from "@composio/ao-core";
-import { getBmadStatus, readEpicTitle } from "@composio/ao-plugin-tracker-bmad";
+import { getBmadStatus, readEpicTitle, BMAD_COLUMNS } from "@composio/ao-plugin-tracker-bmad";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ project: string }> }) {
   try {
@@ -45,8 +45,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       // Session lookup not critical — continue without session info
     }
 
-    // Define sprint columns in order
-    const columnOrder = ["backlog", "ready-for-dev", "in-progress", "review", "done"];
+    // Sprint columns — sourced from tracker-bmad for consistency
+    const columnOrder: string[] = [...BMAD_COLUMNS];
 
     // Group stories by BMad status (last label)
     const columns: Record<

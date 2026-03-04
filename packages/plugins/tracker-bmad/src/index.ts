@@ -25,6 +25,9 @@ export type { HistoryEntry } from "./history.js";
 // Public helpers (shared between CLI and web API)
 // ---------------------------------------------------------------------------
 
+/** Ordered BMad sprint columns — shared between CLI and web dashboard. */
+export const BMAD_COLUMNS = ["backlog", "ready-for-dev", "in-progress", "review", "done"] as const;
+
 /**
  * Extract BMad status from an issue's labels (last label is the status).
  * Returns lowercase status string, falls back to "backlog".
@@ -134,9 +137,12 @@ function readSprintStatus(project: ProjectConfig): SprintStatus {
     if (!parsed || typeof parsed !== "object" || !("development_status" in parsed)) {
       throw new Error("sprint-status.yaml missing 'development_status' key");
     }
+    const devStatus = (parsed as SprintStatus).development_status;
+    if (!devStatus || typeof devStatus !== "object" || Array.isArray(devStatus)) {
+      throw new Error("sprint-status.yaml 'development_status' must be a mapping");
+    }
     // Coerce non-string field values (YAML numbers, booleans) to strings
     // so downstream code can safely call .startsWith() etc.
-    const devStatus = (parsed as SprintStatus).development_status;
     for (const entry of Object.values(devStatus)) {
       if (entry.status !== undefined && typeof entry.status !== "string") {
         entry.status = String(entry.status);

@@ -14,7 +14,7 @@ vi.mock("./history.js", () => ({
 }));
 
 import { readFileSync, writeFileSync, existsSync, renameSync } from "node:fs";
-import plugin, { manifest, create, readEpicTitle, getBmadStatus } from "./index.js";
+import plugin, { manifest, create, readEpicTitle, getBmadStatus, BMAD_COLUMNS } from "./index.js";
 import { appendHistory } from "./history.js";
 
 // ---------------------------------------------------------------------------
@@ -187,6 +187,16 @@ describe("manifest", () => {
   });
 });
 
+describe("BMAD_COLUMNS", () => {
+  it("exports the five standard sprint columns in order", () => {
+    expect(BMAD_COLUMNS).toEqual(["backlog", "ready-for-dev", "in-progress", "review", "done"]);
+  });
+
+  it("has exactly five columns", () => {
+    expect(BMAD_COLUMNS).toHaveLength(5);
+  });
+});
+
 describe("create", () => {
   it("returns a tracker with name 'bmad'", () => {
     const tracker = create();
@@ -253,6 +263,35 @@ describe("getIssue", () => {
     await expect(tracker.getIssue("anything", PROJECT)).rejects.toThrow(
       "missing 'development_status' key",
     );
+  });
+
+  it("throws when development_status is a string instead of mapping", async () => {
+    const yamlBadType = "development_status: not-a-mapping";
+    setupFs({ sprintStatus: yamlBadType });
+    const tracker = create();
+
+    await expect(tracker.getIssue("anything", PROJECT)).rejects.toThrow(
+      "'development_status' must be a mapping",
+    );
+  });
+
+  it("throws when development_status is an array instead of mapping", async () => {
+    const yamlArray = "development_status:\n  - item1\n  - item2";
+    setupFs({ sprintStatus: yamlArray });
+    const tracker = create();
+
+    await expect(tracker.getIssue("anything", PROJECT)).rejects.toThrow(
+      "'development_status' must be a mapping",
+    );
+  });
+
+  it("returns empty list when development_status is an empty mapping", async () => {
+    const yamlEmpty = "development_status: {}";
+    setupFs({ sprintStatus: yamlEmpty });
+    const tracker = create();
+
+    const issues = await tracker.listIssues!({}, PROJECT);
+    expect(issues).toEqual([]);
   });
 
   it("uses default config values when not specified", async () => {

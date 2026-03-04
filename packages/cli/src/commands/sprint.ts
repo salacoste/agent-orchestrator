@@ -1,14 +1,14 @@
 import chalk from "chalk";
 import type { Command } from "commander";
 import { loadConfig, type Issue, type Session } from "@composio/ao-core";
-import { getBmadStatus } from "@composio/ao-plugin-tracker-bmad";
+import { getBmadStatus, BMAD_COLUMNS } from "@composio/ao-plugin-tracker-bmad";
 import { getTracker } from "../lib/plugins.js";
 import { getSessionManager } from "../lib/create-session-manager.js";
 import { header } from "../lib/format.js";
 import { resolveProject } from "../lib/resolve-project.js";
 
-/** Ordered sprint columns */
-const COLUMNS = ["backlog", "ready-for-dev", "in-progress", "review", "done"] as const;
+/** Ordered sprint columns — sourced from tracker-bmad for consistency. */
+const COLUMNS = BMAD_COLUMNS;
 
 /** Render a progress bar: [████░░░░] n/total */
 function progressBar(done: number, total: number, width: number = 20): string {

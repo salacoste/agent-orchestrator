@@ -12,6 +12,8 @@ import { registerOpen } from "./commands/open.js";
 import { registerStories } from "./commands/stories.js";
 import { registerSprint } from "./commands/sprint.js";
 import { registerEpic } from "./commands/epic.js";
+import { registerMetrics } from "./commands/metrics.js";
+import { registerHealth } from "./commands/health.js";
 import { registerStart, registerStop } from "./commands/start.js";
 
 const program = new Command();
@@ -35,5 +37,7 @@ registerOpen(program);
 registerStories(program);
 registerSprint(program);
 registerEpic(program);
+registerMetrics(program);
+registerHealth(program);
 
 program.parse();

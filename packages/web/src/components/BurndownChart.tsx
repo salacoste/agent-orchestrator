@@ -13,8 +13,47 @@ interface VelocityData {
   doneCount?: number;
 }
 
+interface ForecastData {
+  projectedCompletionDate: string | null;
+  daysRemaining: number | null;
+  pace: "ahead" | "on-pace" | "behind" | "no-data";
+  confidence: number;
+  currentVelocity: number;
+  remainingStories: number;
+  totalStories: number;
+  completedStories: number;
+}
+
+function PaceBadge({ pace }: { pace: ForecastData["pace"] }) {
+  switch (pace) {
+    case "ahead":
+      return (
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-900/30 text-green-400">
+          Ahead
+        </span>
+      );
+    case "on-pace":
+      return (
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-900/30 text-yellow-400">
+          On Pace
+        </span>
+      );
+    case "behind":
+      return (
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-900/30 text-red-400">Behind</span>
+      );
+    default:
+      return (
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-800 text-[var(--color-text-muted)]">
+          No Data
+        </span>
+      );
+  }
+}
+
 export function BurndownChart({ projectId }: { projectId: string }) {
   const [data, setData] = useState<VelocityData | null>(null);
+  const [forecast, setForecast] = useState<ForecastData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -23,7 +62,7 @@ export function BurndownChart({ projectId }: { projectId: string }) {
     let initialLoad = true;
 
     const fetchData = () => {
-      fetch(`/api/sprint/${encodeURIComponent(projectId)}/velocity`)
+      const velocityFetch = fetch(`/api/sprint/${encodeURIComponent(projectId)}/velocity`)
         .then((res) => {
           if (!res.ok) throw new Error("Failed to load burndown data");
           return res.json();
@@ -43,6 +82,20 @@ export function BurndownChart({ projectId }: { projectId: string }) {
             initialLoad = false;
           }
         });
+
+      const forecastFetch = fetch(`/api/sprint/${encodeURIComponent(projectId)}/forecast`)
+        .then((res) => {
+          if (!res.ok) return null;
+          return res.json();
+        })
+        .then((d) => {
+          if (!cancelled && d) setForecast(d as ForecastData);
+        })
+        .catch(() => {
+          // Non-fatal — forecast is supplementary
+        });
+
+      return Promise.all([velocityFetch, forecastFetch]);
     };
 
     fetchData();
@@ -97,6 +150,26 @@ export function BurndownChart({ projectId }: { projectId: string }) {
 
   const actualPath = points.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
 
+  // Forecast line — dashed orange from last actual point to projected zero
+  let forecastPath = "";
+  if (
+    forecast &&
+    forecast.currentVelocity > 0 &&
+    points.length > 0 &&
+    forecast.remainingStories > 0
+  ) {
+    const lastPoint = points[points.length - 1];
+    if (lastPoint) {
+      const daysToComplete = forecast.remainingStories / forecast.currentVelocity;
+      const projectedX = Math.min(
+        lastPoint.x + (daysToComplete / Math.max(days - 1, 1)) * chartW,
+        padding.left + chartW,
+      );
+      const projectedY = padding.top + chartH; // y=0 remaining
+      forecastPath = `M ${lastPoint.x} ${lastPoint.y} L ${projectedX} ${projectedY}`;
+    }
+  }
+
   return (
     <div className="rounded-lg border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-4">
       <h3 className="text-sm font-medium text-[var(--color-text-secondary)] mb-3">Burndown</h3>
@@ -135,6 +208,18 @@ export function BurndownChart({ projectId }: { projectId: string }) {
           strokeWidth={1}
           strokeDasharray="4 4"
         />
+
+        {/* Forecast line (dashed orange) */}
+        {forecastPath && (
+          <path
+            d={forecastPath}
+            fill="none"
+            stroke="#f97316"
+            strokeWidth={1.5}
+            strokeDasharray="6 3"
+            opacity={0.7}
+          />
+        )}
 
         {/* Actual line */}
         <path
@@ -193,9 +278,24 @@ export function BurndownChart({ projectId }: { projectId: string }) {
           </>
         )}
       </svg>
-      <div className="flex justify-between text-xs text-[var(--color-text-muted)] mt-1">
+
+      {/* Footer: remaining + completed + forecast info */}
+      <div className="flex justify-between items-center text-xs text-[var(--color-text-muted)] mt-1">
         <span>{Math.max(0, totalStories - totalCompleted)} remaining</span>
-        <span>{totalCompleted} completed</span>
+        <div className="flex items-center gap-2">
+          {forecast && forecast.pace !== "no-data" && <PaceBadge pace={forecast.pace} />}
+          {forecast && forecast.projectedCompletionDate && (
+            <span className="text-[10px]">
+              Est. {forecast.projectedCompletionDate}
+              {forecast.confidence < 0.3 && (
+                <span className="text-yellow-500 ml-1" title="Low confidence forecast">
+                  *
+                </span>
+              )}
+            </span>
+          )}
+          <span>{totalCompleted} completed</span>
+        </div>
       </div>
     </div>
   );

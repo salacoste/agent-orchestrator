@@ -14,12 +14,25 @@ import type {
   Issue,
   IssueFilters,
   IssueUpdate,
+  IssueValidationResult,
   ProjectConfig,
 } from "@composio/ao-core";
 import { appendHistory } from "./history.js";
+import {
+  readSprintStatus,
+  sprintStatusPath,
+  getOutputDir,
+  type SprintStatus,
+} from "./sprint-status-reader.js";
 
 export { readHistory } from "./history.js";
 export type { HistoryEntry } from "./history.js";
+export { computeCycleTime } from "./cycle-time.js";
+export type { CycleTimeStats, StoryCycleTime, ColumnDwell } from "./cycle-time.js";
+export { computeSprintHealth } from "./sprint-health.js";
+export type { SprintHealthResult, HealthIndicator, HealthSeverity } from "./sprint-health.js";
+export { computeForecast } from "./forecast.js";
+export type { SprintForecast } from "./forecast.js";
 
 // ---------------------------------------------------------------------------
 // Public helpers (shared between CLI and web API)
@@ -66,11 +79,6 @@ export function readEpicTitle(epicSlug: string, project: ProjectConfig): string 
 // Config helpers
 // ---------------------------------------------------------------------------
 
-function getOutputDir(project: ProjectConfig): string {
-  const v = project.tracker?.["outputDir"];
-  return typeof v === "string" ? v : "_bmad-output";
-}
-
 function getStoryDir(project: ProjectConfig): string {
   const v = project.tracker?.["storyDir"];
   return typeof v === "string" ? v : "implementation-artifacts";
@@ -95,10 +103,6 @@ function getIncludePrdContext(project: ProjectConfig): boolean {
 // Path helpers
 // ---------------------------------------------------------------------------
 
-function sprintStatusPath(project: ProjectConfig): string {
-  return join(project.path, getOutputDir(project), "sprint-status.yaml");
-}
-
 function storyFilePath(identifier: string, project: ProjectConfig): string {
   return join(project.path, getOutputDir(project), getStoryDir(project), `story-${identifier}.md`);
 }
@@ -122,59 +126,6 @@ function prdPath(project: ProjectConfig): string {
 
 function epicFilePath(epicSlug: string, project: ProjectConfig): string {
   return join(project.path, getOutputDir(project), getStoryDir(project), `epic-${epicSlug}.md`);
-}
-
-// ---------------------------------------------------------------------------
-// Sprint status YAML helpers
-// ---------------------------------------------------------------------------
-
-interface SprintStatusEntry {
-  status: string;
-  epic?: string;
-  [key: string]: unknown;
-}
-
-interface SprintStatus {
-  development_status: Record<string, SprintStatusEntry>;
-  [key: string]: unknown;
-}
-
-function readSprintStatus(project: ProjectConfig): SprintStatus {
-  const filePath = sprintStatusPath(project);
-  if (!existsSync(filePath)) {
-    throw new Error(`sprint-status.yaml not found at ${filePath}`);
-  }
-  try {
-    const content = readFileSync(filePath, "utf-8");
-    const parsed: unknown = parseYaml(content);
-    if (!parsed || typeof parsed !== "object" || !("development_status" in parsed)) {
-      throw new Error("sprint-status.yaml missing 'development_status' key");
-    }
-    const devStatus = (parsed as SprintStatus).development_status;
-    if (!devStatus || typeof devStatus !== "object" || Array.isArray(devStatus)) {
-      throw new Error("sprint-status.yaml 'development_status' must be a mapping");
-    }
-    // Coerce non-string field values (YAML numbers, booleans) to strings
-    // so downstream code can safely call .startsWith() etc.
-    for (const entry of Object.values(devStatus)) {
-      if (entry.status !== undefined && typeof entry.status !== "string") {
-        entry.status = String(entry.status);
-      }
-      if (entry.epic !== undefined && typeof entry.epic !== "string") {
-        entry.epic = String(entry.epic);
-      }
-    }
-
-    return parsed as SprintStatus;
-  } catch (err) {
-    if (err instanceof Error && err.message.includes("sprint-status.yaml")) {
-      throw err;
-    }
-    throw new Error(
-      `Failed to parse sprint-status.yaml: ${err instanceof Error ? err.message : String(err)}`,
-      { cause: err },
-    );
-  }
 }
 
 function readFileOrNull(filePath: string): string | null {
@@ -525,6 +476,66 @@ function createBmadTracker(): Tracker {
 
       // Record history after successful write so retried transitions aren't missing
       appendHistory(project, identifier, oldStatus, newStatus);
+    },
+
+    async validateIssue(
+      identifier: string,
+      project: ProjectConfig,
+    ): Promise<IssueValidationResult> {
+      const errors: string[] = [];
+      const warnings: string[] = [];
+
+      // Check story file exists and has content
+      const storyPath = storyFilePath(identifier, project);
+      const storyContent = readFileOrNull(storyPath);
+
+      if (storyContent === null) {
+        errors.push(`Story file not found: story-${identifier}.md`);
+        return { valid: false, errors, warnings };
+      }
+
+      if (storyContent.trim().length === 0) {
+        errors.push("Story file is empty");
+        return { valid: false, errors, warnings };
+      }
+
+      // Check has H1 title
+      const title = extractTitle(storyContent, "");
+      if (!title) {
+        errors.push("Story has no title (missing # heading)");
+      }
+
+      // Check has acceptance criteria
+      const criteria = extractAcceptanceCriteria(storyContent);
+      if (criteria.length === 0) {
+        errors.push("Story has no acceptance criteria");
+      }
+
+      // Check status is valid for spawning
+      try {
+        const sprint = readSprintStatus(project);
+        const entry = sprint.development_status[identifier];
+        if (entry) {
+          const status = typeof entry.status === "string" ? entry.status : "backlog";
+          if (status === "done") {
+            errors.push("Story is already completed");
+          } else if (status === "in-progress") {
+            errors.push("Story is already in progress");
+          } else if (status === "review") {
+            errors.push("Story is already in review");
+          }
+        }
+      } catch {
+        // sprint-status.yaml missing — non-fatal for validation
+      }
+
+      // Warn if no tech spec
+      const techSpec = readFileOrNull(techSpecPath(identifier, project));
+      if (!techSpec) {
+        warnings.push("No tech spec file found");
+      }
+
+      return { valid: errors.length === 0, errors, warnings };
     },
   };
 }

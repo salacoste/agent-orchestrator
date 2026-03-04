@@ -1,7 +1,13 @@
 import chalk from "chalk";
 import type { Command } from "commander";
 import { loadConfig, type Issue, type Session } from "@composio/ao-core";
-import { getBmadStatus, categorizeStatus, BMAD_COLUMNS } from "@composio/ao-plugin-tracker-bmad";
+import {
+  getBmadStatus,
+  categorizeStatus,
+  BMAD_COLUMNS,
+  computeForecast,
+  type SprintForecast,
+} from "@composio/ao-plugin-tracker-bmad";
 import { getTracker } from "../lib/plugins.js";
 import { getSessionManager } from "../lib/create-session-manager.js";
 import { header } from "../lib/format.js";
@@ -44,6 +50,7 @@ interface SprintData {
   inProgressCount: number;
   openCount: number;
   columns: Record<string, Array<{ id: string; title: string; sessionInfo: string | null }>>;
+  forecast?: SprintForecast;
 }
 
 export function registerSprint(program: Command): void {
@@ -133,6 +140,16 @@ export function registerSprint(program: Command): void {
       }
       const openCount = totalStories - doneCount - inProgressCount;
 
+      // Compute forecast (bmad only, non-fatal)
+      let forecast: SprintForecast | undefined;
+      if (tracker.name === "bmad") {
+        try {
+          forecast = computeForecast(project);
+        } catch {
+          // Non-fatal — forecast is supplementary
+        }
+      }
+
       // JSON output
       if (opts.json) {
         const data: SprintData = {
@@ -142,6 +159,7 @@ export function registerSprint(program: Command): void {
           inProgressCount,
           openCount,
           columns: {},
+          forecast,
         };
 
         for (const col of COLUMNS) {
@@ -164,6 +182,29 @@ export function registerSprint(program: Command): void {
       console.log(header(`Sprint Progress: ${project.name || projectId}`));
       console.log();
       console.log(`  ${progressBar(doneCount, totalStories)}`);
+
+      // Forecast summary line
+      if (forecast && forecast.currentVelocity > 0) {
+        const parts: string[] = [];
+        if (forecast.daysRemaining !== null) {
+          parts.push(`${forecast.daysRemaining}d remaining`);
+        }
+        if (forecast.projectedCompletionDate) {
+          const dateLabel = forecast.projectedCompletionDate.slice(5).replace("-", "/");
+          parts.push(dateLabel);
+        }
+        const paceColors: Record<string, (s: string) => string> = {
+          ahead: chalk.green,
+          "on-pace": chalk.yellow,
+          behind: chalk.red,
+        };
+        const paceColor = paceColors[forecast.pace];
+        if (paceColor) {
+          parts.push(paceColor(forecast.pace));
+        }
+        parts.push(`velocity ${forecast.currentVelocity.toFixed(1)}/day`);
+        console.log(`  ${chalk.dim("Forecast:")} ${parts.join(chalk.dim(" — "))}`);
+      }
       console.log();
 
       for (const col of COLUMNS) {

@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react";
 import type { BmadColumn } from "@composio/ao-plugin-tracker-bmad";
 import { BurndownChart } from "./BurndownChart";
+import { CycleTimeChart } from "./CycleTimeChart";
 import { EpicProgress, type EpicSummary } from "./EpicProgress";
+import { HealthIndicators } from "./HealthIndicators";
 
 interface StoryCard {
   id: string;
@@ -45,6 +47,7 @@ export function SprintBoard({ projectId }: { projectId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showBurndown, setShowBurndown] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(false);
   const [activeEpic, setActiveEpic] = useState<string | null>(null);
 
   useEffect(() => {
@@ -107,6 +110,9 @@ export function SprintBoard({ projectId }: { projectId: string }) {
 
   return (
     <div className="space-y-4">
+      {/* Health indicators */}
+      <HealthIndicators projectId={projectId} />
+
       {/* Progress bar */}
       <div className="rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-4">
         <div className="flex items-center justify-between mb-2">
@@ -216,6 +222,25 @@ export function SprintBoard({ projectId }: { projectId: string }) {
         {showBurndown && (
           <div className="px-4 pb-4">
             <BurndownChart projectId={projectId} />
+          </div>
+        )}
+      </div>
+
+      {/* Cycle Time Metrics — collapsible */}
+      <div className="rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
+        <button
+          onClick={() => setShowMetrics((prev) => !prev)}
+          aria-expanded={showMetrics}
+          className="w-full flex items-center justify-between px-4 py-3 text-[12px] font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+        >
+          <span>Cycle Time Metrics</span>
+          <span className="text-[10px] text-[var(--color-text-muted)]">
+            {showMetrics ? "Hide" : "Show"}
+          </span>
+        </button>
+        {showMetrics && (
+          <div className="px-4 pb-4">
+            <CycleTimeChart projectId={projectId} />
           </div>
         )}
       </div>

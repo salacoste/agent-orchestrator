@@ -45,6 +45,12 @@ vi.mock("@composio/ao-plugin-tracker-bmad", () => ({
     const last = labels[labels.length - 1];
     return last ? last.toLowerCase() : "backlog";
   },
+  categorizeStatus: (bmadStatus: string): "done" | "in-progress" | "open" => {
+    if (bmadStatus === "done") return "done";
+    if (bmadStatus === "in-progress" || bmadStatus === "review") return "in-progress";
+    return "open";
+  },
+  BMAD_COLUMNS: ["backlog", "ready-for-dev", "in-progress", "review", "done"],
 }));
 
 let tmpDir: string;

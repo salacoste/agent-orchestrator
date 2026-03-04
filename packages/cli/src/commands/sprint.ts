@@ -1,7 +1,7 @@
 import chalk from "chalk";
 import type { Command } from "commander";
 import { loadConfig, type Issue, type Session } from "@composio/ao-core";
-import { getBmadStatus, BMAD_COLUMNS } from "@composio/ao-plugin-tracker-bmad";
+import { getBmadStatus, categorizeStatus, BMAD_COLUMNS } from "@composio/ao-plugin-tracker-bmad";
 import { getTracker } from "../lib/plugins.js";
 import { getSessionManager } from "../lib/create-session-manager.js";
 import { header } from "../lib/format.js";
@@ -124,9 +124,13 @@ export function registerSprint(program: Command): void {
       }
 
       const totalStories = issues.length;
-      const doneCount = grouped.get("done")?.length ?? 0;
-      const inProgressCount =
-        (grouped.get("in-progress")?.length ?? 0) + (grouped.get("review")?.length ?? 0);
+      let doneCount = 0;
+      let inProgressCount = 0;
+      for (const issue of issues) {
+        const cat = categorizeStatus(getBmadStatus(issue.labels));
+        if (cat === "done") doneCount++;
+        else if (cat === "in-progress") inProgressCount++;
+      }
       const openCount = totalStories - doneCount - inProgressCount;
 
       // JSON output

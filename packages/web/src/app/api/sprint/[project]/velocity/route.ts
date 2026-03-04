@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServices } from "@/lib/services";
 import type { Tracker } from "@composio/ao-core";
-import { readHistory } from "@composio/ao-plugin-tracker-bmad";
+import { readHistory, getBmadStatus, categorizeStatus } from "@composio/ao-plugin-tracker-bmad";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ project: string }> }) {
   try {
@@ -56,7 +56,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
     if (tracker?.listIssues) {
       const issues = await tracker.listIssues({ state: "all", limit: 200 }, project);
       totalStories = issues.length;
-      doneCount = issues.filter((i) => i.state === "closed" || i.state === "cancelled").length;
+      doneCount = issues.filter((i) => categorizeStatus(getBmadStatus(i.labels)) === "done").length;
     }
 
     return NextResponse.json({

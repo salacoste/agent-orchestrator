@@ -29,7 +29,7 @@ import {
   type SprintStatus,
 } from "./sprint-status-reader.js";
 
-export { readHistory, appendComment } from "./history.js";
+export { readHistory, appendHistory, appendComment } from "./history.js";
 export type { HistoryEntry } from "./history.js";
 export { computeCycleTime } from "./cycle-time.js";
 export type { CycleTimeStats, StoryCycleTime, ColumnDwell } from "./cycle-time.js";
@@ -41,6 +41,8 @@ export { computeRetrospective } from "./retrospective.js";
 export type { RetrospectiveResult, SprintPeriod } from "./retrospective.js";
 export { getStoryDetail } from "./story-detail.js";
 export type { StoryDetail, StoryTransition } from "./story-detail.js";
+export { readSprintStatus } from "./sprint-status-reader.js";
+export type { SprintStatus, SprintStatusEntry } from "./sprint-status-reader.js";
 export { transitionOnMerge, writeStoryStatus, findStoryForPR } from "./auto-transition.js";
 export type { AutoTransitionEvent, AutoTransitionResult } from "./auto-transition.js";
 export {

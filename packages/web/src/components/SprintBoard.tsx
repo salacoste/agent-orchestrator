@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import type { BmadColumn } from "@composio/ao-plugin-tracker-bmad";
 import { BurndownChart } from "./BurndownChart";
 import { CreateStoryForm } from "./CreateStoryForm";
@@ -52,6 +52,8 @@ export function SprintBoard({ projectId }: { projectId: string }) {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [activeEpic, setActiveEpic] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null);
+  const [moveError, setMoveError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -89,6 +91,73 @@ export function SprintBoard({ projectId }: { projectId: string }) {
     };
   }, [projectId, refreshKey]);
 
+  const handleDragStart = useCallback((e: React.DragEvent, storyId: string, fromCol: string) => {
+    e.dataTransfer.setData("text/plain", JSON.stringify({ storyId, fromCol }));
+    e.dataTransfer.effectAllowed = "move";
+  }, []);
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent, toCol: string) => {
+      e.preventDefault();
+      setDragOverCol(null);
+      setMoveError(null);
+
+      let parsed: { storyId: string; fromCol: string };
+      try {
+        parsed = JSON.parse(e.dataTransfer.getData("text/plain")) as {
+          storyId: string;
+          fromCol: string;
+        };
+      } catch {
+        return;
+      }
+
+      const { storyId, fromCol } = parsed;
+      if (fromCol === toCol) return;
+
+      // Optimistic update
+      setData((prev) => {
+        if (!prev) return prev;
+        const columns = { ...prev.columns };
+        const fromStories = [...(columns[fromCol] || [])];
+        const toStories = [...(columns[toCol] || [])];
+        const idx = fromStories.findIndex((s) => s.id === storyId);
+        if (idx === -1) return prev;
+        const [moved] = fromStories.splice(idx, 1);
+        toStories.push({ ...moved, bmadStatus: toCol });
+        columns[fromCol] = fromStories;
+        columns[toCol] = toStories;
+        return { ...prev, columns };
+      });
+
+      try {
+        const res = await fetch(
+          `/api/sprint/${encodeURIComponent(projectId)}/story/${encodeURIComponent(storyId)}`,
+          {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: toCol }),
+          },
+        );
+
+        if (!res.ok) {
+          const body = (await res.json()) as { error?: string };
+          throw new Error(body.error || `HTTP ${res.status}`);
+        }
+
+        // Refresh to get accurate stats
+        setRefreshKey((k) => k + 1);
+      } catch (err) {
+        // Rollback optimistic update
+        setRefreshKey((k) => k + 1);
+        setMoveError(
+          `Failed to move ${storyId}: ${err instanceof Error ? err.message : "Unknown error"}`,
+        );
+      }
+    },
+    [projectId],
+  );
+
   if (loading) {
     return <div className="text-[var(--color-text-muted)] text-sm p-4">Loading sprint data...</div>;
   }
@@ -115,6 +184,13 @@ export function SprintBoard({ projectId }: { projectId: string }) {
     <div className="space-y-4">
       {/* Health indicators */}
       <HealthIndicators projectId={projectId} />
+
+      {/* Move error */}
+      {moveError && (
+        <div className="rounded-[6px] border border-red-700 bg-red-950/30 px-4 py-2 text-[12px] text-red-400">
+          {moveError}
+        </div>
+      )}
 
       {/* Progress bar */}
       <div className="rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-4">
@@ -145,10 +221,18 @@ export function SprintBoard({ projectId }: { projectId: string }) {
           const stories = (data.columns[col] || []).filter(
             (s) => !activeEpic || s.epic === activeEpic,
           );
+          const isOver = dragOverCol === col;
           return (
             <div
               key={col}
-              className={`rounded-[6px] border-t-2 ${COLUMN_COLORS[col] || "border-zinc-700"} border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-3`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                setDragOverCol(col);
+              }}
+              onDragLeave={() => setDragOverCol(null)}
+              onDrop={(e) => handleDrop(e, col)}
+              className={`rounded-[6px] border-t-2 ${COLUMN_COLORS[col] || "border-zinc-700"} border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-3 transition-colors ${isOver ? "bg-[var(--color-bg-inset)]" : ""}`}
             >
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-[10px] font-bold uppercase tracking-[0.10em] text-[var(--color-text-tertiary)]">
@@ -162,7 +246,9 @@ export function SprintBoard({ projectId }: { projectId: string }) {
                 {stories.map((story) => (
                   <div
                     key={story.id}
-                    className="rounded-[5px] border border-[var(--color-border-muted)] bg-[var(--color-bg-base)] p-2.5 hover:border-[var(--color-border-default)] transition-colors"
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, story.id, col)}
+                    className="rounded-[5px] border border-[var(--color-border-muted)] bg-[var(--color-bg-base)] p-2.5 hover:border-[var(--color-border-default)] transition-colors cursor-grab active:cursor-grabbing"
                   >
                     <div className="text-[10px] font-mono text-[var(--color-text-muted)] mb-1">
                       {story.url && !story.url.startsWith("file://") ? (

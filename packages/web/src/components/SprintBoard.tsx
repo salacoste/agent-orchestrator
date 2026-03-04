@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { BmadColumn } from "@composio/ao-plugin-tracker-bmad";
 import { BurndownChart } from "./BurndownChart";
 import { EpicProgress, type EpicSummary } from "./EpicProgress";
 
@@ -23,7 +24,7 @@ interface SprintData {
   stats: { total: number; done: number; inProgress: number; open: number };
 }
 
-const COLUMN_LABELS: Record<string, string> = {
+const COLUMN_LABELS: Record<BmadColumn, string> & Record<string, string | undefined> = {
   backlog: "Backlog",
   "ready-for-dev": "Ready",
   "in-progress": "In Progress",
@@ -31,7 +32,7 @@ const COLUMN_LABELS: Record<string, string> = {
   done: "Done",
 };
 
-const COLUMN_COLORS: Record<string, string> = {
+const COLUMN_COLORS: Record<BmadColumn, string> & Record<string, string | undefined> = {
   backlog: "border-zinc-700",
   "ready-for-dev": "border-yellow-700",
   "in-progress": "border-blue-700",

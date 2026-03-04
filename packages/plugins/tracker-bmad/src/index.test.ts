@@ -12,6 +12,7 @@ vi.mock("node:fs", () => ({
 
 vi.mock("./history.js", () => ({
   appendHistory: vi.fn(),
+  appendComment: vi.fn(),
 }));
 
 import { readFileSync, writeFileSync, existsSync, renameSync } from "node:fs";
@@ -23,7 +24,7 @@ import plugin, {
   BMAD_COLUMNS,
   categorizeStatus,
 } from "./index.js";
-import { appendHistory } from "./history.js";
+import { appendHistory, appendComment } from "./history.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -977,7 +978,7 @@ describe("updateIssue", () => {
     );
   });
 
-  it("is a no-op when no state in update", async () => {
+  it("is a no-op when no state or comment in update", async () => {
     setupFs();
     const tracker = create();
 
@@ -985,6 +986,53 @@ describe("updateIssue", () => {
 
     expect(mockWriteFileSync).not.toHaveBeenCalled();
     expect(appendHistory).not.toHaveBeenCalled();
+    expect(appendComment).not.toHaveBeenCalled();
+  });
+
+  it("appends comment to history when comment is provided with state change", async () => {
+    setupFs();
+    const tracker = create();
+
+    await tracker.updateIssue!(
+      "1-1-user-authentication",
+      { state: "closed", comment: "Merged via PR #42" },
+      PROJECT,
+    );
+
+    expect(appendHistory).toHaveBeenCalledWith(
+      PROJECT,
+      "1-1-user-authentication",
+      "ready-for-dev",
+      "done",
+    );
+    expect(appendComment).toHaveBeenCalledWith(
+      PROJECT,
+      "1-1-user-authentication",
+      "Merged via PR #42",
+      "done",
+    );
+  });
+
+  it("appends comment without state change", async () => {
+    setupFs();
+    const tracker = create();
+
+    await tracker.updateIssue!(
+      "1-1-user-authentication",
+      { comment: "Agent encountered a build error" },
+      PROJECT,
+    );
+
+    // No YAML write or state transition
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+    expect(appendHistory).not.toHaveBeenCalled();
+    // Comment still appended
+    expect(appendComment).toHaveBeenCalledWith(
+      PROJECT,
+      "1-1-user-authentication",
+      "Agent encountered a build error",
+      "ready-for-dev",
+    );
   });
 
   it("propagates renameSync failure and does not call appendHistory", async () => {

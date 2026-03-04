@@ -21,7 +21,7 @@ import type {
 } from "@composio/ao-core";
 import { transitionOnMerge, findStoryForPR, writeStoryStatus } from "./auto-transition.js";
 import { checkSprintNotifications, formatNotificationEvent } from "./sprint-notifications.js";
-import { appendHistory } from "./history.js";
+import { appendHistory, appendComment } from "./history.js";
 import {
   readSprintStatus,
   sprintStatusPath,
@@ -29,7 +29,7 @@ import {
   type SprintStatus,
 } from "./sprint-status-reader.js";
 
-export { readHistory } from "./history.js";
+export { readHistory, appendComment } from "./history.js";
 export type { HistoryEntry } from "./history.js";
 export { computeCycleTime } from "./cycle-time.js";
 export type { CycleTimeStats, StoryCycleTime, ColumnDwell } from "./cycle-time.js";
@@ -463,7 +463,7 @@ function createBmadTracker(): Tracker {
       update: IssueUpdate,
       project: ProjectConfig,
     ): Promise<void> {
-      if (!update.state) return;
+      if (!update.state && !update.comment) return;
 
       const filePath = sprintStatusPath(project);
       if (!existsSync(filePath)) {
@@ -483,15 +483,23 @@ function createBmadTracker(): Tracker {
       }
 
       const oldStatus = typeof entry.status === "string" ? entry.status : "backlog";
-      const newStatus = reverseMapState(update.state);
 
-      entry.status = newStatus;
-      const tmpPath = filePath + `.tmp.${process.pid}.${Date.now()}`;
-      writeFileSync(tmpPath, stringifyYaml(typed), "utf-8");
-      renameSync(tmpPath, filePath);
+      if (update.state) {
+        const newStatus = reverseMapState(update.state);
+        entry.status = newStatus;
+        const tmpPath = filePath + `.tmp.${process.pid}.${Date.now()}`;
+        writeFileSync(tmpPath, stringifyYaml(typed), "utf-8");
+        renameSync(tmpPath, filePath);
 
-      // Record history after successful write so retried transitions aren't missing
-      appendHistory(project, identifier, oldStatus, newStatus);
+        // Record history after successful write so retried transitions aren't missing
+        appendHistory(project, identifier, oldStatus, newStatus);
+      }
+
+      // Append comment as audit trail entry in history
+      if (update.comment) {
+        const currentStatus = update.state ? reverseMapState(update.state) : oldStatus;
+        appendComment(project, identifier, update.comment, currentStatus);
+      }
     },
 
     async createIssue(input: CreateIssueInput, project: ProjectConfig): Promise<Issue> {

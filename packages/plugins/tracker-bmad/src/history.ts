@@ -7,6 +7,8 @@ export interface HistoryEntry {
   storyId: string;
   fromStatus: string;
   toStatus: string;
+  /** Optional comment attached to this entry (audit trail). */
+  comment?: string;
 }
 
 function historyPath(project: ProjectConfig): string {
@@ -26,6 +28,28 @@ export function appendHistory(
     storyId,
     fromStatus,
     toStatus,
+  };
+  try {
+    const filePath = historyPath(project);
+    mkdirSync(dirname(filePath), { recursive: true });
+    appendFileSync(filePath, JSON.stringify(entry) + "\n", "utf-8");
+  } catch {
+    // Non-fatal — history is best-effort
+  }
+}
+
+export function appendComment(
+  project: ProjectConfig,
+  storyId: string,
+  comment: string,
+  currentStatus: string,
+): void {
+  const entry: HistoryEntry = {
+    timestamp: new Date().toISOString(),
+    storyId,
+    fromStatus: currentStatus,
+    toStatus: currentStatus,
+    comment,
   };
   try {
     const filePath = historyPath(project);

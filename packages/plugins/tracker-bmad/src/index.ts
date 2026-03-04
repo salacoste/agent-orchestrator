@@ -500,7 +500,7 @@ function createBmadTracker(): Tracker {
       const newStatus = reverseMapState(update.state);
 
       entry.status = newStatus;
-      const tmpPath = filePath + `.tmp.${process.pid}`;
+      const tmpPath = filePath + `.tmp.${process.pid}.${Date.now()}`;
       writeFileSync(tmpPath, stringifyYaml(typed), "utf-8");
       renameSync(tmpPath, filePath);
 

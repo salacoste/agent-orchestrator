@@ -892,7 +892,7 @@ describe("updateIssue", () => {
 
     expect(mockWriteFileSync).toHaveBeenCalledOnce();
     const [tmpPath, writtenContent] = mockWriteFileSync.mock.calls[0] as [string, string, string];
-    expect(tmpPath).toMatch(/sprint-status\.yaml\.tmp\.\d+$/);
+    expect(tmpPath).toMatch(/sprint-status\.yaml\.tmp\.\d+\.\d+$/);
     expect(writtenContent).toContain("in-progress");
 
     expect(mockRenameSync).toHaveBeenCalledOnce();

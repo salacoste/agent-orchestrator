@@ -18,6 +18,7 @@ import { registerRetro } from "./commands/retro.js";
 import { registerStory } from "./commands/story.js";
 import { registerStart, registerStop } from "./commands/start.js";
 import { registerCreate } from "./commands/create.js";
+import { registerSprintConfig } from "./commands/sprint-config.js";
 
 const program = new Command();
 
@@ -45,5 +46,6 @@ registerHealth(program);
 registerRetro(program);
 registerStory(program);
 registerCreate(program);
+registerSprintConfig(program);
 
 program.parse();

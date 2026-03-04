@@ -17,7 +17,7 @@ import { appendHistory } from "./history.js";
 // ---------------------------------------------------------------------------
 
 export interface AutoTransitionEvent {
-  type: "bmad.story_done";
+  type: "tracker.story_done";
   storyId: string;
   timestamp: string; // ISO-8601
   previousStatus: string;
@@ -105,7 +105,7 @@ export function transitionOnMerge(
   appendHistory(project, storyId, currentStatus, "done");
 
   const event: AutoTransitionEvent = {
-    type: "bmad.story_done",
+    type: "tracker.story_done",
     storyId,
     timestamp: new Date().toISOString(),
     previousStatus: currentStatus,

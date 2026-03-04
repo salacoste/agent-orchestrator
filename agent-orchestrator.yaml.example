@@ -120,14 +120,14 @@ projects:
 #     action: notify
 #     priority: urgent
 #
-#   # BMad-specific reactions
-#   bmad-story-done:
-#     auto: true              # notify when a BMad story completes (PR merged)
+#   # Tracker reactions (works with any tracker plugin)
+#   tracker-story-done:
+#     auto: true              # notify when a story completes (PR merged)
 #     action: notify
 #     priority: info
 #     includeSummary: true    # include story summary in notification
 #
-#   bmad-sprint-complete:
+#   tracker-sprint-complete:
 #     auto: true              # notify when all sprint stories are done
 #     action: notify
 #     priority: action

@@ -269,13 +269,13 @@ function applyDefaultReactions(config: OrchestratorConfig): OrchestratorConfig {
       priority: "info",
       includeSummary: true,
     },
-    "bmad-story-done": {
+    "tracker-story-done": {
       auto: true,
       action: "notify",
       priority: "info",
       includeSummary: true,
     },
-    "bmad-sprint-complete": {
+    "tracker-sprint-complete": {
       auto: true,
       action: "notify",
       priority: "action",

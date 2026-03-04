@@ -879,11 +879,11 @@ describe("reactions", () => {
   });
 });
 
-describe("bmad.story_done", () => {
-  function makeBmadConfig(): OrchestratorConfig {
+describe("tracker.story_done", () => {
+  function makeTrackerConfig(): OrchestratorConfig {
     return {
       ...config,
-      // Route info-priority events to desktop so bmad.story_done notifications are delivered
+      // Route info-priority events to desktop so tracker.story_done notifications are delivered
       notificationRouting: {
         ...config.notificationRouting,
         info: ["desktop"],
@@ -897,7 +897,7 @@ describe("bmad.story_done", () => {
     };
   }
 
-  function makeBmadSCM(): SCM {
+  function makeTrackerSCM(): SCM {
     return {
       name: "mock-scm",
       detectPR: vi.fn(),
@@ -914,14 +914,14 @@ describe("bmad.story_done", () => {
     };
   }
 
-  it("emits bmad.story_done event when BMad project session merges", async () => {
+  it("emits tracker.story_done event when project session merges", async () => {
     const mockNotifier: Notifier = {
       name: "mock-notifier",
       notify: vi.fn().mockResolvedValue(undefined),
     };
 
-    const mockSCM = makeBmadSCM();
-    const bmadConfig = makeBmadConfig();
+    const mockSCM = makeTrackerSCM();
+    const bmadConfig = makeTrackerConfig();
 
     const mockTracker = {
       name: "bmad",
@@ -975,7 +975,7 @@ describe("bmad.story_done", () => {
 
     expect(lm.getStates().get("app-1")).toBe("merged");
     expect(mockNotifier.notify).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "bmad.story_done" }),
+      expect.objectContaining({ type: "tracker.story_done" }),
     );
   });
 
@@ -985,8 +985,8 @@ describe("bmad.story_done", () => {
       notify: vi.fn().mockResolvedValue(undefined),
     };
 
-    const mockSCM = makeBmadSCM();
-    const bmadConfig = makeBmadConfig();
+    const mockSCM = makeTrackerSCM();
+    const bmadConfig = makeTrackerConfig();
 
     const mockTracker = {
       name: "bmad",
@@ -1040,7 +1040,7 @@ describe("bmad.story_done", () => {
 
     expect(mockNotifier.notify).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: "bmad.story_done",
+        type: "tracker.story_done",
         data: expect.objectContaining({
           identifier: "STORY-2",
           epicId: "epic-42",
@@ -1049,15 +1049,15 @@ describe("bmad.story_done", () => {
     );
   });
 
-  it("does not emit bmad.story_done for non-BMad projects", async () => {
+  it("does not emit tracker.story_done when tracker plugin is not registered", async () => {
     const mockNotifier: Notifier = {
       name: "mock-notifier",
       notify: vi.fn().mockResolvedValue(undefined),
     };
 
-    const mockSCM = makeBmadSCM();
+    const mockSCM = makeTrackerSCM();
 
-    // Use base config — no bmad tracker
+    // Tracker configured but plugin not registered in registry
     const nonBmadConfig: OrchestratorConfig = {
       ...config,
       projects: {
@@ -1104,18 +1104,18 @@ describe("bmad.story_done", () => {
     expect(lm.getStates().get("app-1")).toBe("merged");
     const bmadCall = vi
       .mocked(mockNotifier.notify)
-      .mock.calls.find((call) => call[0].type === "bmad.story_done");
+      .mock.calls.find((call) => call[0].type === "tracker.story_done");
     expect(bmadCall).toBeUndefined();
   });
 
-  it("emits bmad.story_done without epicId when tracker.getIssue throws", async () => {
+  it("emits tracker.story_done without epicId when tracker.getIssue throws", async () => {
     const mockNotifier: Notifier = {
       name: "mock-notifier",
       notify: vi.fn().mockResolvedValue(undefined),
     };
 
-    const mockSCM = makeBmadSCM();
-    const bmadConfig = makeBmadConfig();
+    const mockSCM = makeTrackerSCM();
+    const bmadConfig = makeTrackerConfig();
 
     const mockTracker = {
       name: "bmad",
@@ -1163,24 +1163,24 @@ describe("bmad.story_done", () => {
     expect(lm.getStates().get("app-1")).toBe("merged");
     expect(mockNotifier.notify).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: "bmad.story_done",
+        type: "tracker.story_done",
         data: expect.objectContaining({ identifier: "STORY-3" }),
       }),
     );
     const notifyCall = vi
       .mocked(mockNotifier.notify)
-      .mock.calls.find((call) => call[0].type === "bmad.story_done");
+      .mock.calls.find((call) => call[0].type === "tracker.story_done");
     expect(notifyCall?.[0].data["epicId"]).toBeUndefined();
   });
 
-  it("eventToReactionKey maps bmad.story_done to bmad-story-done via reaction config", async () => {
-    // Verify the reaction key mapping by configuring a bmad-story-done reaction
+  it("eventToReactionKey maps tracker.story_done to tracker-story-done via reaction config", async () => {
+    // Verify the reaction key mapping by configuring a tracker-story-done reaction
     // and confirming it gets executed when the event fires.
-    const mockSCM = makeBmadSCM();
+    const mockSCM = makeTrackerSCM();
     const bmadConfig: OrchestratorConfig = {
-      ...makeBmadConfig(),
+      ...makeTrackerConfig(),
       reactions: {
-        "bmad-story-done": {
+        "tracker-story-done": {
           auto: true,
           action: "notify",
           priority: "action",
@@ -1243,18 +1243,18 @@ describe("bmad.story_done", () => {
 
     await lm.check("app-1");
 
-    // The bmad-story-done reaction (notify action) should have triggered notifyHuman
+    // The tracker-story-done reaction (notify action) should have triggered notifyHuman
     expect(mockNotifier.notify).toHaveBeenCalledWith(
       expect.objectContaining({ type: "reaction.triggered" }),
     );
   });
 
-  it("does not execute bmad-story-done reaction when auto=false and action is send-to-agent", async () => {
-    const mockSCM = makeBmadSCM();
+  it("does not execute tracker-story-done reaction when auto=false and action is send-to-agent", async () => {
+    const mockSCM = makeTrackerSCM();
     const bmadConfig: OrchestratorConfig = {
-      ...makeBmadConfig(),
+      ...makeTrackerConfig(),
       reactions: {
-        "bmad-story-done": {
+        "tracker-story-done": {
           auto: false,
           action: "send-to-agent",
           priority: "action",
@@ -1327,14 +1327,14 @@ describe("bmad.story_done", () => {
 
     // Should have a direct notification instead
     const storyDoneCall = notifyCalls.find(
-      (call: [OrchestratorEvent]) => call[0].type === "bmad.story_done",
+      (call: [OrchestratorEvent]) => call[0].type === "tracker.story_done",
     );
     expect(storyDoneCall).toBeDefined();
   });
 });
 
-describe("bmad.sprint_complete", () => {
-  function makeBmadConfig(): OrchestratorConfig {
+describe("tracker.sprint_complete", () => {
+  function makeTrackerConfig(): OrchestratorConfig {
     return {
       ...config,
       notificationRouting: {
@@ -1350,7 +1350,7 @@ describe("bmad.sprint_complete", () => {
     };
   }
 
-  function makeBmadSCM(): SCM {
+  function makeTrackerSCM(): SCM {
     return {
       name: "mock-scm",
       detectPR: vi.fn(),
@@ -1390,14 +1390,14 @@ describe("bmad.sprint_complete", () => {
     };
   }
 
-  it("emits bmad.sprint_complete when all stories are closed", async () => {
+  it("emits tracker.sprint_complete when all stories are closed", async () => {
     const mockNotifier: Notifier = {
       name: "mock-notifier",
       notify: vi.fn().mockResolvedValue(undefined),
     };
 
-    const bmadConfig = makeBmadConfig();
-    const mockSCM = makeBmadSCM();
+    const bmadConfig = makeTrackerConfig();
+    const mockSCM = makeTrackerSCM();
     const tracker = makeSprintTracker([
       { id: "S-1", state: "closed" },
       { id: "S-2", state: "closed" },
@@ -1429,7 +1429,7 @@ describe("bmad.sprint_complete", () => {
     try {
       await vi.waitFor(() => {
         expect(mockNotifier.notify).toHaveBeenCalledWith(
-          expect.objectContaining({ type: "bmad.sprint_complete" }),
+          expect.objectContaining({ type: "tracker.sprint_complete" }),
         );
       });
     } finally {
@@ -1445,8 +1445,8 @@ describe("bmad.sprint_complete", () => {
       notify: vi.fn().mockResolvedValue(undefined),
     };
 
-    const bmadConfig = makeBmadConfig();
-    const mockSCM = makeBmadSCM();
+    const bmadConfig = makeTrackerConfig();
+    const mockSCM = makeTrackerSCM();
     const tracker = makeSprintTracker([{ id: "S-1", state: "closed" }]);
 
     const registryWithBmad: PluginRegistry = {
@@ -1485,7 +1485,7 @@ describe("bmad.sprint_complete", () => {
 
     const sprintCalls = vi
       .mocked(mockNotifier.notify)
-      .mock.calls.filter((call) => call[0].type === "bmad.sprint_complete");
+      .mock.calls.filter((call) => call[0].type === "tracker.sprint_complete");
     expect(sprintCalls).toHaveLength(1);
   });
 
@@ -1495,8 +1495,8 @@ describe("bmad.sprint_complete", () => {
       notify: vi.fn().mockResolvedValue(undefined),
     };
 
-    const bmadConfig = makeBmadConfig();
-    const mockSCM = makeBmadSCM();
+    const bmadConfig = makeTrackerConfig();
+    const mockSCM = makeTrackerSCM();
     const tracker = makeSprintTracker([
       { id: "S-1", state: "closed" },
       { id: "S-2", state: "open" },
@@ -1532,21 +1532,21 @@ describe("bmad.sprint_complete", () => {
 
       const sprintCalls = vi
         .mocked(mockNotifier.notify)
-        .mock.calls.filter((call) => call[0].type === "bmad.sprint_complete");
+        .mock.calls.filter((call) => call[0].type === "tracker.sprint_complete");
       expect(sprintCalls).toHaveLength(0);
     } finally {
       lm.stop();
     }
   });
 
-  it("does not emit for non-BMad projects", async () => {
+  it("does not emit for projects without tracker configured", async () => {
     const mockNotifier: Notifier = {
       name: "mock-notifier",
       notify: vi.fn().mockResolvedValue(undefined),
     };
 
-    // Use github tracker, not bmad
-    const nonBmadConfig: OrchestratorConfig = {
+    // No tracker configured for this project
+    const noTrackerConfig: OrchestratorConfig = {
       ...config,
       notificationRouting: {
         ...config.notificationRouting,
@@ -1555,19 +1555,16 @@ describe("bmad.sprint_complete", () => {
       projects: {
         "my-app": {
           ...config.projects["my-app"]!,
-          tracker: { plugin: "github" },
+          tracker: undefined,
         },
       },
     };
 
-    const tracker = makeSprintTracker([{ id: "S-1", state: "closed" }]);
-
-    const registryWithTracker: PluginRegistry = {
+    const registryWithNotifier: PluginRegistry = {
       ...mockRegistry,
       get: vi.fn().mockImplementation((slot: string, name: string) => {
         if (slot === "runtime") return mockRuntime;
         if (slot === "agent") return mockAgent;
-        if (slot === "tracker" && name === "github") return tracker;
         if (slot === "notifier" && name === "desktop") return mockNotifier;
         return null;
       }),
@@ -1576,39 +1573,35 @@ describe("bmad.sprint_complete", () => {
     vi.mocked(mockSessionManager.list).mockResolvedValue([]);
 
     const lm = createLifecycleManager({
-      config: nonBmadConfig,
-      registry: registryWithTracker,
+      config: noTrackerConfig,
+      registry: registryWithNotifier,
       sessionManager: mockSessionManager,
     });
 
     lm.start(60_000);
 
     try {
-      // Give pollAll time to run — wait for sessionManager.list to have been called
       await vi.waitFor(() => {
         expect(mockSessionManager.list).toHaveBeenCalled();
       });
 
-      // listIssues should never be called since project is not bmad
-      expect(tracker.listIssues).not.toHaveBeenCalled();
-
       const sprintCalls = vi
         .mocked(mockNotifier.notify)
-        .mock.calls.filter((call) => call[0].type === "bmad.sprint_complete");
+        .mock.calls.filter((call) => call[0].type === "tracker.sprint_complete");
       expect(sprintCalls).toHaveLength(0);
     } finally {
       lm.stop();
     }
   });
 
-  it("emits bmad.sprint_complete when all stories are cancelled", async () => {
+  it("emits tracker.sprint_complete when all stories are cancelled", async () => {
     const mockNotifier: Notifier = {
       name: "mock-notifier",
       notify: vi.fn().mockResolvedValue(undefined),
     };
 
-    const bmadConfig = makeBmadConfig();
-    const mockSCM = makeBmadSCM();
+    const bmadConfig = makeTrackerConfig();
+    const mockSCM = makeTrackerSCM();
     const tracker = makeSprintTracker([
       { id: "S-1", state: "cancelled" },
       { id: "S-2", state: "cancelled" },
@@ -1639,7 +1632,7 @@ describe("bmad.sprint_complete", () => {
     try {
       await vi.waitFor(() => {
         expect(mockNotifier.notify).toHaveBeenCalledWith(
-          expect.objectContaining({ type: "bmad.sprint_complete" }),
+          expect.objectContaining({ type: "tracker.sprint_complete" }),
         );
       });
     } finally {
@@ -1647,14 +1640,14 @@ describe("bmad.sprint_complete", () => {
     }
   });
 
-  it("emits bmad.sprint_complete for mixed closed and cancelled", async () => {
+  it("emits tracker.sprint_complete for mixed closed and cancelled", async () => {
     const mockNotifier: Notifier = {
       name: "mock-notifier",
       notify: vi.fn().mockResolvedValue(undefined),
     };
 
-    const bmadConfig = makeBmadConfig();
-    const mockSCM = makeBmadSCM();
+    const bmadConfig = makeTrackerConfig();
+    const mockSCM = makeTrackerSCM();
     const tracker = makeSprintTracker([
       { id: "S-1", state: "closed" },
       { id: "S-2", state: "cancelled" },
@@ -1685,7 +1678,7 @@ describe("bmad.sprint_complete", () => {
     try {
       await vi.waitFor(() => {
         expect(mockNotifier.notify).toHaveBeenCalledWith(
-          expect.objectContaining({ type: "bmad.sprint_complete" }),
+          expect.objectContaining({ type: "tracker.sprint_complete" }),
         );
       });
     } finally {
@@ -1699,8 +1692,8 @@ describe("bmad.sprint_complete", () => {
       notify: vi.fn().mockResolvedValue(undefined),
     };
 
-    const bmadConfig = makeBmadConfig();
-    const mockSCM = makeBmadSCM();
+    const bmadConfig = makeTrackerConfig();
+    const mockSCM = makeTrackerSCM();
     const tracker = makeSprintTracker([]);
 
     const registryWithBmad: PluginRegistry = {
@@ -1732,7 +1725,7 @@ describe("bmad.sprint_complete", () => {
 
       const sprintCalls = vi
         .mocked(mockNotifier.notify)
-        .mock.calls.filter((call) => call[0].type === "bmad.sprint_complete");
+        .mock.calls.filter((call) => call[0].type === "tracker.sprint_complete");
       expect(sprintCalls).toHaveLength(0);
     } finally {
       lm.stop();
@@ -1746,16 +1739,16 @@ describe("bmad.sprint_complete", () => {
     };
 
     const bmadConfig: OrchestratorConfig = {
-      ...makeBmadConfig(),
+      ...makeTrackerConfig(),
       reactions: {
-        "bmad-sprint-complete": {
+        "tracker-sprint-complete": {
           auto: false,
           action: "send-to-agent" as const,
           message: "Sprint complete",
         },
       },
     };
-    const mockSCM = makeBmadSCM();
+    const mockSCM = makeTrackerSCM();
     const tracker = makeSprintTracker([
       { id: "S-1", state: "closed" },
       { id: "S-2", state: "closed" },
@@ -1787,7 +1780,7 @@ describe("bmad.sprint_complete", () => {
       // Even with auto:false reaction, notifyHuman should still be called as fallback
       await vi.waitFor(() => {
         expect(mockNotifier.notify).toHaveBeenCalledWith(
-          expect.objectContaining({ type: "bmad.sprint_complete" }),
+          expect.objectContaining({ type: "tracker.sprint_complete" }),
         );
       });
     } finally {
@@ -1801,8 +1794,8 @@ describe("bmad.sprint_complete", () => {
       notify: vi.fn().mockResolvedValue(undefined),
     };
 
-    const bmadConfig = makeBmadConfig();
-    const mockSCM = makeBmadSCM();
+    const bmadConfig = makeTrackerConfig();
+    const mockSCM = makeTrackerSCM();
     const tracker: Tracker = {
       name: "bmad",
       getIssue: vi.fn(),
@@ -1843,7 +1836,7 @@ describe("bmad.sprint_complete", () => {
       // No crash, no sprint_complete event
       const sprintCalls = vi
         .mocked(mockNotifier.notify)
-        .mock.calls.filter((call) => call[0].type === "bmad.sprint_complete");
+        .mock.calls.filter((call) => call[0].type === "tracker.sprint_complete");
       expect(sprintCalls).toHaveLength(0);
     } finally {
       lm.stop();

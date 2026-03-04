@@ -151,10 +151,10 @@ function eventToReactionKey(eventType: EventType): string | null {
       return "agent-exited";
     case "summary.all_complete":
       return "all-complete";
-    case "bmad.story_done":
-      return "bmad-story-done";
-    case "bmad.sprint_complete":
-      return "bmad-sprint-complete";
+    case "tracker.story_done":
+      return "tracker-story-done";
+    case "tracker.sprint_complete":
+      return "tracker-sprint-complete";
     default:
       return null;
   }
@@ -504,8 +504,8 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
                 // Non-fatal -- don't disrupt lifecycle management if tracker update fails
               }
 
-              // Emit bmad.story_done event and check for reactions
-              const bmadEvent = createEvent("bmad.story_done", {
+              // Emit tracker.story_done event and check for reactions
+              const storyDoneEvent = createEvent("tracker.story_done", {
                 sessionId: session.id,
                 projectId: session.projectId,
                 message: `Story ${issueId} completed (PR merged)`,
@@ -515,18 +515,18 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
               // Enrich event with issue details
               try {
                 const issue = await tracker.getIssue(issueId, project);
-                bmadEvent.message = `Story "${issue.title}" (${issueId}) completed`;
-                bmadEvent.data["storyTitle"] = issue.title;
+                storyDoneEvent.message = `Story "${issue.title}" (${issueId}) completed`;
+                storyDoneEvent.data["storyTitle"] = issue.title;
                 const epicLabel = issue.labels.find((l) => l.startsWith("epic-"));
                 if (epicLabel) {
-                  bmadEvent.data["epicId"] = epicLabel;
+                  storyDoneEvent.data["epicId"] = epicLabel;
                 }
               } catch {
                 // Non-fatal -- emit event without title or epic info
               }
 
               // Check for reaction config
-              const reactionKey = eventToReactionKey("bmad.story_done");
+              const reactionKey = eventToReactionKey("tracker.story_done");
               if (reactionKey) {
                 const globalReaction = config.reactions[reactionKey];
                 const projectReaction = project?.reactions?.[reactionKey];
@@ -547,7 +547,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
                   }
                 }
                 if (!reactionHandled) {
-                  await notifyHuman(bmadEvent, "info");
+                  await notifyHuman(storyDoneEvent, "info");
                 }
               }
             }
@@ -680,11 +680,11 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
         }
       }
 
-      // Check BMad sprint completion for each project that has a BMad tracker.
-      // Uses sprintCompleteCache to emit bmad.sprint_complete only on the
+      // Check sprint completion for each project that has a tracker with listIssues.
+      // Uses sprintCompleteCache to emit tracker.sprint_complete only on the
       // transition from not-complete to complete (avoids repeated notifications).
       for (const [projectId, project] of Object.entries(config.projects)) {
-        if (project.tracker?.plugin !== "bmad") continue;
+        if (!project.tracker?.plugin) continue;
 
         const tracker = registry.get<Tracker>("tracker", project.tracker.plugin);
         if (!tracker?.listIssues) continue;
@@ -706,15 +706,15 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
 
         // Emit only on the transition from not-complete to complete
         if (allDone && !wasComplete) {
-          const sprintEvent = createEvent("bmad.sprint_complete", {
+          const sprintEvent = createEvent("tracker.sprint_complete", {
             sessionId: "system",
             projectId,
-            message: `BMad sprint complete for project ${projectId}`,
+            message: `Sprint complete for project ${projectId}`,
             priority: "action",
             data: { projectId },
           });
 
-          const sprintReactionKey = eventToReactionKey("bmad.sprint_complete");
+          const sprintReactionKey = eventToReactionKey("tracker.sprint_complete");
           if (sprintReactionKey) {
             const globalReaction = config.reactions[sprintReactionKey];
             const projectReaction = project.reactions?.[sprintReactionKey];

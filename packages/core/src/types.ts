@@ -465,11 +465,7 @@ export interface Tracker {
   findIssueByBranch?(branch: string, project: ProjectConfig): Promise<string | null>;
 
   /** Optional: handle PR merge for an issue (transition status, emit events) */
-  onPRMerge?(
-    issueId: string,
-    prUrl: string | undefined,
-    project: ProjectConfig,
-  ): Promise<void>;
+  onPRMerge?(issueId: string, prUrl: string | undefined, project: ProjectConfig): Promise<void>;
 
   /** Optional: handle session death — reset story status if appropriate */
   onSessionDeath?(issueId: string, project: ProjectConfig): Promise<void>;
@@ -768,9 +764,9 @@ export type EventType =
   | "reaction.escalated"
   // Summary
   | "summary.all_complete"
-  // BMad
-  | "bmad.story_done"
-  | "bmad.sprint_complete";
+  // Tracker
+  | "tracker.story_done"
+  | "tracker.sprint_complete";
 
 /** An event emitted by the orchestrator */
 export interface OrchestratorEvent {

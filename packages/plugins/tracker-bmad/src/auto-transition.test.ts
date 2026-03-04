@@ -88,7 +88,7 @@ describe("transitionOnMerge", () => {
 
     // Event should be populated
     expect(result.event).not.toBeNull();
-    expect(result.event?.type).toBe("bmad.story_done");
+    expect(result.event?.type).toBe("tracker.story_done");
     expect(result.event?.storyId).toBe("story-1");
     expect(result.event?.previousStatus).toBe("review");
     expect(result.event?.prUrl).toBe("https://github.com/org/repo/pull/42");

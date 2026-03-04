@@ -22,6 +22,7 @@ import type {
 import { transitionOnMerge, findStoryForPR, writeStoryStatus } from "./auto-transition.js";
 import { checkSprintNotifications, formatNotificationEvent } from "./sprint-notifications.js";
 import { appendHistory, appendComment } from "./history.js";
+import { validateDependencies } from "./dependencies.js";
 import {
   readSprintStatus,
   sprintStatusPath,
@@ -33,8 +34,13 @@ export { readHistory, appendHistory, appendComment } from "./history.js";
 export type { HistoryEntry } from "./history.js";
 export { computeCycleTime } from "./cycle-time.js";
 export type { CycleTimeStats, StoryCycleTime, ColumnDwell } from "./cycle-time.js";
-export { computeSprintHealth } from "./sprint-health.js";
-export type { SprintHealthResult, HealthIndicator, HealthSeverity } from "./sprint-health.js";
+export { computeSprintHealth, checkWipLimit, getWipStatus } from "./sprint-health.js";
+export type {
+  SprintHealthResult,
+  HealthIndicator,
+  HealthSeverity,
+  WipLimitResult,
+} from "./sprint-health.js";
 export { computeForecast } from "./forecast.js";
 export type { SprintForecast } from "./forecast.js";
 export { computeRetrospective } from "./retrospective.js";
@@ -44,6 +50,16 @@ export type { StoryDetail, StoryTransition } from "./story-detail.js";
 export { readSprintStatus } from "./sprint-status-reader.js";
 export type { SprintStatus, SprintStatusEntry } from "./sprint-status-reader.js";
 export { transitionOnMerge, writeStoryStatus, findStoryForPR } from "./auto-transition.js";
+export {
+  computeDependencyGraph,
+  validateDependencies,
+  getStoryDependencies,
+} from "./dependencies.js";
+export type { DependencyNode, DependencyGraph, DependencyValidation } from "./dependencies.js";
+export { computeVelocityComparison } from "./velocity-comparison.js";
+export type { VelocityComparisonResult, WeeklyVelocity } from "./velocity-comparison.js";
+export { computeSprintPlan } from "./planning.js";
+export type { SprintPlanningResult, PlannableStory } from "./planning.js";
 export type { AutoTransitionEvent, AutoTransitionResult } from "./auto-transition.js";
 export {
   checkSprintNotifications,
@@ -312,6 +328,23 @@ function createBmadTracker(): Tracker {
       lines.push(`You are working on BMad story: ${issue.title}`);
       lines.push(`Identifier: ${identifier}`);
       lines.push("");
+
+      // Dependency warnings
+      try {
+        const depResult = validateDependencies(identifier, project);
+        if (depResult.blocked) {
+          lines.push("## ⚠ Dependency Warning", "");
+          lines.push("This story has unfinished dependencies:");
+          for (const b of depResult.blockers) {
+            lines.push(`- ${b.id} (${b.status})`);
+          }
+          lines.push("");
+          lines.push("Proceed with caution — blocked work may need to be rebased or revised.");
+          lines.push("");
+        }
+      } catch {
+        // Non-fatal
+      }
 
       // Story content
       if (issue.description) {
@@ -625,6 +658,20 @@ function createBmadTracker(): Tracker {
         }
       } catch {
         // sprint-status.yaml missing — non-fatal for validation
+      }
+
+      // Check dependencies — blocked stories should not be spawned
+      try {
+        const depResult = validateDependencies(identifier, project);
+        if (depResult.blocked) {
+          const blockerIds = depResult.blockers.map((b) => `${b.id} (${b.status})`).join(", ");
+          errors.push(`Blocked by unfinished dependencies: ${blockerIds}`);
+        }
+        for (const w of depResult.warnings) {
+          warnings.push(w);
+        }
+      } catch {
+        // Dependency check failure is non-fatal
       }
 
       // Warn if no tech spec

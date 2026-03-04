@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import type { BmadColumn } from "@composio/ao-plugin-tracker-bmad";
+import type { BmadColumn, DependencyGraph, DependencyNode } from "@composio/ao-plugin-tracker-bmad";
 import { BurndownChart } from "./BurndownChart";
 import { CreateStoryForm } from "./CreateStoryForm";
 import { CycleTimeChart } from "./CycleTimeChart";
 import { EpicProgress, type EpicSummary } from "./EpicProgress";
 import { HealthIndicators } from "./HealthIndicators";
+import { VelocityChart } from "./VelocityChart";
+import { PlanningView } from "./PlanningView";
 
 interface StoryCard {
   id: string;
@@ -25,6 +27,10 @@ interface SprintData {
   columnOrder: string[];
   epics?: EpicSummary[];
   stats: { total: number; done: number; inProgress: number; open: number };
+}
+
+interface WipStatus {
+  [column: string]: { current: number; limit: number };
 }
 
 const COLUMN_LABELS: Record<BmadColumn, string> & Record<string, string | undefined> = {
@@ -50,10 +56,21 @@ export function SprintBoard({ projectId }: { projectId: string }) {
   const [showBurndown, setShowBurndown] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
   const [showCreateForm, setShowCreateForm] = useState(false);
+  const [showVelocity, setShowVelocity] = useState(false);
+  const [showPlanning, setShowPlanning] = useState(false);
   const [activeEpic, setActiveEpic] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [dragOverCol, setDragOverCol] = useState<string | null>(null);
   const [moveError, setMoveError] = useState<string | null>(null);
+  const [depGraph, setDepGraph] = useState<DependencyGraph | null>(null);
+  const [wipStatus, setWipStatus] = useState<WipStatus>({});
+  const [wipConfirm, setWipConfirm] = useState<{
+    storyId: string;
+    fromCol: string;
+    toCol: string;
+    current: number;
+    limit: number;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -91,30 +108,65 @@ export function SprintBoard({ projectId }: { projectId: string }) {
     };
   }, [projectId, refreshKey]);
 
+  // Fetch dependency graph
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/sprint/${encodeURIComponent(projectId)}/dependencies`)
+      .then((res) => res.json())
+      .then((d) => {
+        if (!cancelled) setDepGraph(d as DependencyGraph);
+      })
+      .catch(() => {
+        // Non-critical
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, refreshKey]);
+
+  // Fetch WIP status
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/sprint/${encodeURIComponent(projectId)}/health`)
+      .then((res) => res.json())
+      .then(() => {
+        // WIP status comes from a dedicated endpoint or config
+        // For now, parse from the sprint config API
+        return fetch(`/api/sprint/${encodeURIComponent(projectId)}/config`);
+      })
+      .then((res) => res.json())
+      .then((cfg) => {
+        if (!cancelled) {
+          const rawLimits = (cfg as Record<string, unknown>)?.["wipLimits"];
+          if (rawLimits && typeof rawLimits === "object" && !Array.isArray(rawLimits)) {
+            // We have limits configured — compute current counts from data
+            const limits = rawLimits as Record<string, number>;
+            const status: WipStatus = {};
+            if (data) {
+              for (const [col, limit] of Object.entries(limits)) {
+                const stories = data.columns[col] ?? [];
+                status[col] = { current: stories.length, limit };
+              }
+            }
+            setWipStatus(status);
+          }
+        }
+      })
+      .catch(() => {
+        // Non-critical
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, refreshKey, data]);
+
   const handleDragStart = useCallback((e: React.DragEvent, storyId: string, fromCol: string) => {
     e.dataTransfer.setData("text/plain", JSON.stringify({ storyId, fromCol }));
     e.dataTransfer.effectAllowed = "move";
   }, []);
 
-  const handleDrop = useCallback(
-    async (e: React.DragEvent, toCol: string) => {
-      e.preventDefault();
-      setDragOverCol(null);
-      setMoveError(null);
-
-      let parsed: { storyId: string; fromCol: string };
-      try {
-        parsed = JSON.parse(e.dataTransfer.getData("text/plain")) as {
-          storyId: string;
-          fromCol: string;
-        };
-      } catch {
-        return;
-      }
-
-      const { storyId, fromCol } = parsed;
-      if (fromCol === toCol) return;
-
+  const moveStory = useCallback(
+    async (storyId: string, fromCol: string, toCol: string, force: boolean = false) => {
       // Optimistic update
       setData((prev) => {
         if (!prev) return prev;
@@ -136,19 +188,36 @@ export function SprintBoard({ projectId }: { projectId: string }) {
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ status: toCol }),
+            body: JSON.stringify({ status: toCol, force }),
           },
         );
 
         if (!res.ok) {
-          const body = (await res.json()) as { error?: string };
+          const body = (await res.json()) as {
+            error?: string;
+            wipExceeded?: boolean;
+            current?: number;
+            limit?: number;
+          };
+
+          if (body.wipExceeded) {
+            // Rollback and show confirmation
+            setRefreshKey((k) => k + 1);
+            setWipConfirm({
+              storyId,
+              fromCol,
+              toCol,
+              current: body.current ?? 0,
+              limit: body.limit ?? 0,
+            });
+            return;
+          }
+
           throw new Error(body.error || `HTTP ${res.status}`);
         }
 
-        // Refresh to get accurate stats
         setRefreshKey((k) => k + 1);
       } catch (err) {
-        // Rollback optimistic update
         setRefreshKey((k) => k + 1);
         setMoveError(
           `Failed to move ${storyId}: ${err instanceof Error ? err.message : "Unknown error"}`,
@@ -156,6 +225,30 @@ export function SprintBoard({ projectId }: { projectId: string }) {
       }
     },
     [projectId],
+  );
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent, toCol: string) => {
+      e.preventDefault();
+      setDragOverCol(null);
+      setMoveError(null);
+
+      let parsed: { storyId: string; fromCol: string };
+      try {
+        parsed = JSON.parse(e.dataTransfer.getData("text/plain")) as {
+          storyId: string;
+          fromCol: string;
+        };
+      } catch {
+        return;
+      }
+
+      const { storyId, fromCol } = parsed;
+      if (fromCol === toCol) return;
+
+      await moveStory(storyId, fromCol, toCol);
+    },
+    [moveStory],
   );
 
   if (loading) {
@@ -180,6 +273,8 @@ export function SprintBoard({ projectId }: { projectId: string }) {
   })();
   const pct = stats.total > 0 ? Math.round((stats.done / stats.total) * 100) : 0;
 
+  const getDepNode = (storyId: string): DependencyNode | undefined => depGraph?.nodes[storyId];
+
   return (
     <div className="space-y-4">
       {/* Health indicators */}
@@ -189,6 +284,34 @@ export function SprintBoard({ projectId }: { projectId: string }) {
       {moveError && (
         <div className="rounded-[6px] border border-red-700 bg-red-950/30 px-4 py-2 text-[12px] text-red-400">
           {moveError}
+        </div>
+      )}
+
+      {/* WIP confirmation dialog */}
+      {wipConfirm && (
+        <div className="rounded-[6px] border border-yellow-700 bg-yellow-950/30 px-4 py-3 text-[12px]">
+          <p className="text-yellow-400 mb-2">
+            WIP limit exceeded for &quot;{wipConfirm.toCol}&quot; ({wipConfirm.current}/
+            {wipConfirm.limit}). Move anyway?
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                const { storyId, fromCol, toCol } = wipConfirm;
+                setWipConfirm(null);
+                void moveStory(storyId, fromCol, toCol, true);
+              }}
+              className="px-3 py-1 rounded bg-yellow-700 text-white text-[11px] hover:bg-yellow-600"
+            >
+              Force Move
+            </button>
+            <button
+              onClick={() => setWipConfirm(null)}
+              className="px-3 py-1 rounded bg-[var(--color-bg-inset)] text-[var(--color-text-secondary)] text-[11px] hover:bg-[var(--color-bg-surface)]"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
@@ -222,6 +345,9 @@ export function SprintBoard({ projectId }: { projectId: string }) {
             (s) => !activeEpic || s.epic === activeEpic,
           );
           const isOver = dragOverCol === col;
+          const wip = wipStatus[col];
+          const atWipLimit = wip && wip.current >= wip.limit;
+
           return (
             <div
               key={col}
@@ -232,59 +358,75 @@ export function SprintBoard({ projectId }: { projectId: string }) {
               }}
               onDragLeave={() => setDragOverCol(null)}
               onDrop={(e) => handleDrop(e, col)}
-              className={`rounded-[6px] border-t-2 ${COLUMN_COLORS[col] || "border-zinc-700"} border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-3 transition-colors ${isOver ? "bg-[var(--color-bg-inset)]" : ""}`}
+              className={`rounded-[6px] border-t-2 ${atWipLimit ? "border-red-600" : COLUMN_COLORS[col] || "border-zinc-700"} border border-[var(--color-border-default)] bg-[var(--color-bg-surface)] p-3 transition-colors ${isOver ? "bg-[var(--color-bg-inset)]" : ""}`}
             >
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-[10px] font-bold uppercase tracking-[0.10em] text-[var(--color-text-tertiary)]">
                   {COLUMN_LABELS[col] || col}
                 </h3>
-                <span className="text-[10px] text-[var(--color-text-muted)] bg-[var(--color-bg-inset)] px-1.5 py-0.5 rounded">
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded ${atWipLimit ? "bg-red-950 text-red-400" : "bg-[var(--color-bg-inset)] text-[var(--color-text-muted)]"}`}
+                >
                   {stories.length}
+                  {wip ? `/${wip.limit}` : ""}
                 </span>
               </div>
               <div className="space-y-2">
-                {stories.map((story) => (
-                  <div
-                    key={story.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, story.id, col)}
-                    className="rounded-[5px] border border-[var(--color-border-muted)] bg-[var(--color-bg-base)] p-2.5 hover:border-[var(--color-border-default)] transition-colors cursor-grab active:cursor-grabbing"
-                  >
-                    <div className="text-[10px] font-mono text-[var(--color-text-muted)] mb-1">
-                      {story.url && !story.url.startsWith("file://") ? (
-                        <a
-                          href={story.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="hover:text-[var(--color-accent)] hover:underline"
-                        >
-                          {story.id}
-                        </a>
-                      ) : (
-                        story.id
-                      )}
+                {stories.map((story) => {
+                  const depNode = getDepNode(story.id);
+                  const isBlocked = depNode?.isBlocked ?? false;
+
+                  return (
+                    <div
+                      key={story.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, story.id, col)}
+                      className={`rounded-[5px] border border-[var(--color-border-muted)] bg-[var(--color-bg-base)] p-2.5 hover:border-[var(--color-border-default)] transition-colors cursor-grab active:cursor-grabbing ${isBlocked ? "opacity-60" : ""}`}
+                    >
+                      <div className="text-[10px] font-mono text-[var(--color-text-muted)] mb-1 flex items-center gap-1">
+                        {story.url && !story.url.startsWith("file://") ? (
+                          <a
+                            href={story.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-[var(--color-accent)] hover:underline"
+                          >
+                            {story.id}
+                          </a>
+                        ) : (
+                          story.id
+                        )}
+                        {isBlocked && (
+                          <span
+                            className="text-red-400"
+                            title={`Blocked by: ${depNode!.blockedBy.join(", ")}`}
+                          >
+                            🔒{depNode!.blockedBy.length}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[12px] text-[var(--color-text-primary)] mb-1.5 line-clamp-2">
+                        {story.title}
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {story.epic && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-bg-inset)] text-[var(--color-text-muted)]">
+                            {story.epic}
+                          </span>
+                        )}
+                        {story.session && (
+                          <a
+                            href={`/sessions/${encodeURIComponent(story.session.id)}`}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-[rgba(59,130,246,0.1)] text-[var(--color-status-working)] hover:bg-[rgba(59,130,246,0.2)]"
+                          >
+                            {story.session.id}
+                            {story.session.activity ? ` (${story.session.activity})` : ""}
+                          </a>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-[12px] text-[var(--color-text-primary)] mb-1.5 line-clamp-2">
-                      {story.title}
-                    </div>
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {story.epic && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-bg-inset)] text-[var(--color-text-muted)]">
-                          {story.epic}
-                        </span>
-                      )}
-                      {story.session && (
-                        <a
-                          href={`/sessions/${encodeURIComponent(story.session.id)}`}
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-[rgba(59,130,246,0.1)] text-[var(--color-status-working)] hover:bg-[rgba(59,130,246,0.2)]"
-                        >
-                          {story.session.id}
-                          {story.session.activity ? ` (${story.session.activity})` : ""}
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {stories.length === 0 && (
                   <div className="text-[11px] text-[var(--color-text-muted)] text-center py-4">
                     No stories
@@ -297,66 +439,66 @@ export function SprintBoard({ projectId }: { projectId: string }) {
       </div>
 
       {/* Burndown chart — collapsible */}
-      <div className="rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
-        <button
-          onClick={() => setShowBurndown((prev) => !prev)}
-          aria-expanded={showBurndown}
-          className="w-full flex items-center justify-between px-4 py-3 text-[12px] font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
-        >
-          <span>Burndown</span>
-          <span className="text-[10px] text-[var(--color-text-muted)]">
-            {showBurndown ? "Hide" : "Show"}
-          </span>
-        </button>
-        {showBurndown && (
-          <div className="px-4 pb-4">
-            <BurndownChart projectId={projectId} />
-          </div>
-        )}
-      </div>
+      <CollapsibleSection title="Burndown" isOpen={showBurndown} onToggle={setShowBurndown}>
+        <BurndownChart projectId={projectId} />
+      </CollapsibleSection>
 
       {/* Cycle Time Metrics — collapsible */}
-      <div className="rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
-        <button
-          onClick={() => setShowMetrics((prev) => !prev)}
-          aria-expanded={showMetrics}
-          className="w-full flex items-center justify-between px-4 py-3 text-[12px] font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
-        >
-          <span>Cycle Time Metrics</span>
-          <span className="text-[10px] text-[var(--color-text-muted)]">
-            {showMetrics ? "Hide" : "Show"}
-          </span>
-        </button>
-        {showMetrics && (
-          <div className="px-4 pb-4">
-            <CycleTimeChart projectId={projectId} />
-          </div>
-        )}
-      </div>
+      <CollapsibleSection title="Cycle Time Metrics" isOpen={showMetrics} onToggle={setShowMetrics}>
+        <CycleTimeChart projectId={projectId} />
+      </CollapsibleSection>
+
+      {/* Velocity Comparison — collapsible */}
+      <CollapsibleSection
+        title="Velocity Comparison"
+        isOpen={showVelocity}
+        onToggle={setShowVelocity}
+      >
+        <VelocityChart projectId={projectId} />
+      </CollapsibleSection>
+
+      {/* Sprint Planning — collapsible */}
+      <CollapsibleSection title="Sprint Planning" isOpen={showPlanning} onToggle={setShowPlanning}>
+        <PlanningView projectId={projectId} />
+      </CollapsibleSection>
 
       {/* Create Story — collapsible */}
-      <div className="rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
-        <button
-          onClick={() => setShowCreateForm((prev) => !prev)}
-          aria-expanded={showCreateForm}
-          className="w-full flex items-center justify-between px-4 py-3 text-[12px] font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
-        >
-          <span>Create Story</span>
-          <span className="text-[10px] text-[var(--color-text-muted)]">
-            {showCreateForm ? "Hide" : "Show"}
-          </span>
-        </button>
-        {showCreateForm && (
-          <div className="px-4 pb-4">
-            <CreateStoryForm
-              projectId={projectId}
-              onCreated={() => {
-                setRefreshKey((k) => k + 1);
-              }}
-            />
-          </div>
-        )}
-      </div>
+      <CollapsibleSection title="Create Story" isOpen={showCreateForm} onToggle={setShowCreateForm}>
+        <CreateStoryForm
+          projectId={projectId}
+          onCreated={() => {
+            setRefreshKey((k) => k + 1);
+          }}
+        />
+      </CollapsibleSection>
+    </div>
+  );
+}
+
+function CollapsibleSection({
+  title,
+  isOpen,
+  onToggle,
+  children,
+}: {
+  title: string;
+  isOpen: boolean;
+  onToggle: (open: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
+      <button
+        onClick={() => onToggle(!isOpen)}
+        aria-expanded={isOpen}
+        className="w-full flex items-center justify-between px-4 py-3 text-[12px] font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+      >
+        <span>{title}</span>
+        <span className="text-[10px] text-[var(--color-text-muted)]">
+          {isOpen ? "Hide" : "Show"}
+        </span>
+      </button>
+      {isOpen && <div className="px-4 pb-4">{children}</div>}
     </div>
   );
 }

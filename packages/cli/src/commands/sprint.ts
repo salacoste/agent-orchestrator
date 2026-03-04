@@ -6,7 +6,10 @@ import {
   categorizeStatus,
   BMAD_COLUMNS,
   computeForecast,
+  computeDependencyGraph,
+  getWipStatus,
   type SprintForecast,
+  type DependencyGraph,
 } from "@composio/ao-plugin-tracker-bmad";
 import { getTracker } from "../lib/plugins.js";
 import { getSessionManager } from "../lib/create-session-manager.js";
@@ -49,7 +52,12 @@ interface SprintData {
   doneCount: number;
   inProgressCount: number;
   openCount: number;
-  columns: Record<string, Array<{ id: string; title: string; sessionInfo: string | null }>>;
+  blockedCount: number;
+  columns: Record<
+    string,
+    Array<{ id: string; title: string; sessionInfo: string | null; blockedBy?: string[] }>
+  >;
+  wipStatus: Record<string, { current: number; limit: number }>;
   forecast?: SprintForecast;
 }
 
@@ -113,6 +121,26 @@ export function registerSprint(program: Command): void {
         }
       }
 
+      // Compute dependency graph (bmad only, non-fatal)
+      let depGraph: DependencyGraph | undefined;
+      if (tracker.name === "bmad") {
+        try {
+          depGraph = computeDependencyGraph(project);
+        } catch {
+          // Non-fatal
+        }
+      }
+
+      // Compute WIP status (bmad only, non-fatal)
+      let wipStatus: Record<string, { current: number; limit: number }> = {};
+      if (tracker.name === "bmad") {
+        try {
+          wipStatus = getWipStatus(project);
+        } catch {
+          // Non-fatal
+        }
+      }
+
       // Group issues by BMad status column
       const grouped = new Map<string, Issue[]>();
       for (const col of COLUMNS) {
@@ -140,6 +168,14 @@ export function registerSprint(program: Command): void {
       }
       const openCount = totalStories - doneCount - inProgressCount;
 
+      // Count blocked stories
+      let blockedCount = 0;
+      if (depGraph) {
+        for (const node of Object.values(depGraph.nodes)) {
+          if (node.isBlocked) blockedCount++;
+        }
+      }
+
       // Compute forecast (bmad only, non-fatal)
       let forecast: SprintForecast | undefined;
       if (tracker.name === "bmad") {
@@ -158,7 +194,9 @@ export function registerSprint(program: Command): void {
           doneCount,
           inProgressCount,
           openCount,
+          blockedCount,
           columns: {},
+          wipStatus,
           forecast,
         };
 
@@ -166,10 +204,12 @@ export function registerSprint(program: Command): void {
           const colIssues = grouped.get(col) ?? [];
           data.columns[col] = colIssues.map((issue) => {
             const session = issueSessionMap.get(issue.id.toLowerCase());
+            const node = depGraph?.nodes[issue.id];
             return {
               id: issue.id,
               title: issue.title,
               sessionInfo: session ? `${session.id} (${session.activity ?? session.status})` : null,
+              blockedBy: node?.isBlocked ? node.blockedBy : undefined,
             };
           });
         }
@@ -205,13 +245,24 @@ export function registerSprint(program: Command): void {
         parts.push(`velocity ${forecast.currentVelocity.toFixed(1)}/day`);
         console.log(`  ${chalk.dim("Forecast:")} ${parts.join(chalk.dim(" — "))}`);
       }
+
+      // Stats summary
+      if (blockedCount > 0) {
+        console.log(`  ${chalk.red(`${blockedCount} blocked`)}`);
+      }
       console.log();
 
       for (const col of COLUMNS) {
         const colIssues = grouped.get(col) ?? [];
+        const wipInfo = wipStatus[col];
+        const wipStr = wipInfo ? ` ${chalk.dim(`(${wipInfo.current}/${wipInfo.limit})`)}` : "";
+        const atLimit = wipInfo && wipInfo.current >= wipInfo.limit;
         const countStr = `(${colIssues.length})`;
 
-        console.log(`  ${columnColor(col)} ${chalk.dim(countStr)}`);
+        const colLabel = atLimit
+          ? chalk.red(columnColor(col)) + " " + chalk.red(countStr) + wipStr
+          : columnColor(col) + " " + chalk.dim(countStr) + wipStr;
+        console.log(`  ${colLabel}`);
 
         if (opts.compact) {
           continue;
@@ -225,7 +276,15 @@ export function registerSprint(program: Command): void {
             const activity = session.activity ?? session.status;
             sessionStr = chalk.dim("  \u2190 ") + chalk.yellow(`${session.id} (${activity})`);
           }
-          console.log(`    ${idStr}${issue.title}${sessionStr}`);
+
+          // Dependency badge
+          let depStr = "";
+          const node = depGraph?.nodes[issue.id];
+          if (node?.isBlocked) {
+            depStr = chalk.dim("  ") + chalk.red(`⊘ blocked by: ${node.blockedBy.join(", ")}`);
+          }
+
+          console.log(`    ${idStr}${issue.title}${sessionStr}${depStr}`);
         }
 
         console.log();

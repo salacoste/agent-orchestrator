@@ -34,8 +34,7 @@ export interface SprintHealthResult {
 
 const STUCK_WARNING_MS = 48 * 60 * 60 * 1000; // 48 hours
 const STUCK_CRITICAL_MS = 96 * 60 * 60 * 1000; // 96 hours
-const WIP_WARNING = 3;
-const WIP_CRITICAL = 5;
+const DEFAULT_WIP_LIMIT = 3;
 const THROUGHPUT_WARNING_RATIO = 0.7;
 const THROUGHPUT_CRITICAL_RATIO = 0.4;
 const BOTTLENECK_RATIO = 2;
@@ -50,6 +49,92 @@ function worstSeverity(indicators: HealthIndicator[]): HealthSeverity {
   if (indicators.some((i) => i.severity === "critical")) return "critical";
   if (indicators.some((i) => i.severity === "warning")) return "warning";
   return "ok";
+}
+
+/**
+ * Read per-column WIP limits from tracker config.
+ * Falls back to DEFAULT_WIP_LIMIT for unconfigured columns.
+ */
+function getWipLimits(project: ProjectConfig): Record<string, number> {
+  const raw = project.tracker?.["wipLimits"];
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  const limits: Record<string, number> = {};
+  for (const [col, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof val === "number" && val > 0) {
+      limits[col] = val;
+    }
+  }
+  return limits;
+}
+
+function countStoriesInColumn(
+  entries: Record<string, { status: string; [key: string]: unknown }>,
+  column: string,
+): number {
+  return Object.values(entries).filter((e) => {
+    const s = typeof e.status === "string" ? e.status : "backlog";
+    return s === column;
+  }).length;
+}
+
+// ---------------------------------------------------------------------------
+// Public: WIP limit check (used by PATCH endpoint)
+// ---------------------------------------------------------------------------
+
+export interface WipLimitResult {
+  allowed: boolean;
+  current: number;
+  limit: number;
+}
+
+/**
+ * Check whether a column is at or over its WIP limit.
+ * Returns `allowed: false` if current count >= limit.
+ */
+export function checkWipLimit(project: ProjectConfig, column: string): WipLimitResult {
+  const wipLimits = getWipLimits(project);
+
+  // Only enforce if a limit is configured for this column
+  const limit = wipLimits[column];
+  if (limit === undefined) {
+    return { allowed: true, current: 0, limit: 0 };
+  }
+
+  let entries: Record<string, { status: string; [key: string]: unknown }>;
+  try {
+    const sprint = readSprintStatus(project);
+    entries = sprint.development_status;
+  } catch {
+    return { allowed: true, current: 0, limit };
+  }
+
+  const current = countStoriesInColumn(entries, column);
+  return { allowed: current < limit, current, limit };
+}
+
+/**
+ * Get all configured WIP limits with current counts.
+ * Returns only columns that have configured limits.
+ */
+export function getWipStatus(
+  project: ProjectConfig,
+): Record<string, { current: number; limit: number }> {
+  const wipLimits = getWipLimits(project);
+  if (Object.keys(wipLimits).length === 0) return {};
+
+  let entries: Record<string, { status: string; [key: string]: unknown }>;
+  try {
+    const sprint = readSprintStatus(project);
+    entries = sprint.development_status;
+  } catch {
+    return {};
+  }
+
+  const result: Record<string, { current: number; limit: number }> = {};
+  for (const [col, limit] of Object.entries(wipLimits)) {
+    result[col] = { current: countStoriesInColumn(entries, col), limit };
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -72,6 +157,7 @@ export function computeSprintHealth(project: ProjectConfig): SprintHealthResult 
 
   const history = readHistory(project);
   const now = Date.now();
+  const wipLimits = getWipLimits(project);
 
   // -------------------------------------------------------------------------
   // 1. Stuck stories — stories in active columns with no recent transition
@@ -125,25 +211,26 @@ export function computeSprintHealth(project: ProjectConfig): SprintHealthResult 
   // 2. WIP alerts — too many stories in active columns
   // -------------------------------------------------------------------------
   for (const col of ACTIVE_COLUMNS) {
-    const count = Object.values(sprintEntries).filter((e) => {
-      const s = typeof e.status === "string" ? e.status : "backlog";
-      return s === col;
-    }).length;
+    const count = countStoriesInColumn(sprintEntries, col);
+    // Use per-column config, falling back to default thresholds
+    const configuredLimit = wipLimits[col];
+    const wipWarning = configuredLimit ?? DEFAULT_WIP_LIMIT;
+    const wipCritical = configuredLimit ? configuredLimit + 2 : wipWarning + 2;
 
-    if (count > WIP_CRITICAL) {
+    if (count > wipCritical) {
       wipColumns.push(col);
       indicators.push({
         id: "wip-alert",
         severity: "critical",
-        message: `${col} has ${count} stories (limit: ${WIP_CRITICAL})`,
+        message: `${col} has ${count} stories (limit: ${wipCritical})`,
         details: [col],
       });
-    } else if (count > WIP_WARNING) {
+    } else if (count > wipWarning) {
       wipColumns.push(col);
       indicators.push({
         id: "wip-alert",
         severity: "warning",
-        message: `${col} has ${count} stories (limit: ${WIP_WARNING})`,
+        message: `${col} has ${count} stories (limit: ${wipWarning})`,
         details: [col],
       });
     }

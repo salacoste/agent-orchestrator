@@ -12,7 +12,7 @@ vi.mock("node:fs", () => ({
 }));
 
 import { readFileSync, existsSync } from "node:fs";
-import { computeSprintHealth } from "./sprint-health.js";
+import { computeSprintHealth, checkWipLimit, getWipStatus } from "./sprint-health.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -311,5 +311,169 @@ describe("computeSprintHealth", () => {
     expect(result.stuckStories).toContain("s1");
     expect(result.stuckStories).toContain("s2");
     expect(result.wipColumns).toContain("review");
+  });
+
+  it("uses per-column WIP limits from config", () => {
+    const projectWithWip: ProjectConfig = {
+      ...PROJECT,
+      tracker: {
+        ...PROJECT.tracker,
+        plugin: "bmad" as const,
+        wipLimits: { "in-progress": 2, review: 1 },
+      },
+    };
+
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: in-progress",
+        "  s2:",
+        "    status: in-progress",
+        "  s3:",
+        "    status: in-progress",
+      ].join("\n"),
+      historyLines: [],
+    });
+
+    const result = computeSprintHealth(projectWithWip);
+
+    expect(result.wipColumns).toContain("in-progress");
+    const wipIndicator = result.indicators.find((i) => i.id === "wip-alert");
+    expect(wipIndicator).toBeDefined();
+  });
+
+  it("falls back to defaults when no wipLimits configured", () => {
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: in-progress",
+        "  s2:",
+        "    status: in-progress",
+      ].join("\n"),
+      historyLines: [],
+    });
+
+    // Default is 3, so 2 stories should NOT trigger
+    const result = computeSprintHealth(PROJECT);
+
+    expect(result.wipColumns).toEqual([]);
+    expect(result.indicators.find((i) => i.id === "wip-alert")).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// checkWipLimit
+// ---------------------------------------------------------------------------
+
+describe("checkWipLimit", () => {
+  it("returns allowed=true when no WIP limit configured", () => {
+    setFiles({
+      statusYaml: ["development_status:", "  s1:", "    status: in-progress"].join("\n"),
+    });
+
+    const result = checkWipLimit(PROJECT, "in-progress");
+
+    expect(result.allowed).toBe(true);
+    expect(result.limit).toBe(0);
+  });
+
+  it("returns allowed=true when under limit", () => {
+    const projectWithWip: ProjectConfig = {
+      ...PROJECT,
+      tracker: {
+        ...PROJECT.tracker,
+        plugin: "bmad" as const,
+        wipLimits: { "in-progress": 3 },
+      },
+    };
+
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: in-progress",
+        "  s2:",
+        "    status: in-progress",
+      ].join("\n"),
+    });
+
+    const result = checkWipLimit(projectWithWip, "in-progress");
+
+    expect(result.allowed).toBe(true);
+    expect(result.current).toBe(2);
+    expect(result.limit).toBe(3);
+  });
+
+  it("returns allowed=false when at limit", () => {
+    const projectWithWip: ProjectConfig = {
+      ...PROJECT,
+      tracker: {
+        ...PROJECT.tracker,
+        plugin: "bmad" as const,
+        wipLimits: { "in-progress": 2 },
+      },
+    };
+
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: in-progress",
+        "  s2:",
+        "    status: in-progress",
+      ].join("\n"),
+    });
+
+    const result = checkWipLimit(projectWithWip, "in-progress");
+
+    expect(result.allowed).toBe(false);
+    expect(result.current).toBe(2);
+    expect(result.limit).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getWipStatus
+// ---------------------------------------------------------------------------
+
+describe("getWipStatus", () => {
+  it("returns empty when no WIP limits configured", () => {
+    setFiles({
+      statusYaml: ["development_status:", "  s1:", "    status: in-progress"].join("\n"),
+    });
+
+    const result = getWipStatus(PROJECT);
+
+    expect(result).toEqual({});
+  });
+
+  it("returns counts for configured columns", () => {
+    const projectWithWip: ProjectConfig = {
+      ...PROJECT,
+      tracker: {
+        ...PROJECT.tracker,
+        plugin: "bmad" as const,
+        wipLimits: { "in-progress": 3, review: 2 },
+      },
+    };
+
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: in-progress",
+        "  s2:",
+        "    status: review",
+        "  s3:",
+        "    status: review",
+      ].join("\n"),
+    });
+
+    const result = getWipStatus(projectWithWip);
+
+    expect(result["in-progress"]).toEqual({ current: 1, limit: 3 });
+    expect(result["review"]).toEqual({ current: 2, limit: 2 });
   });
 });

@@ -19,6 +19,8 @@ import { registerStory } from "./commands/story.js";
 import { registerStart, registerStop } from "./commands/start.js";
 import { registerCreate } from "./commands/create.js";
 import { registerSprintConfig } from "./commands/sprint-config.js";
+import { registerVelocity } from "./commands/velocity.js";
+import { registerPlan } from "./commands/plan.js";
 
 const program = new Command();
 
@@ -47,5 +49,7 @@ registerRetro(program);
 registerStory(program);
 registerCreate(program);
 registerSprintConfig(program);
+registerVelocity(program);
+registerPlan(program);
 
 program.parse();

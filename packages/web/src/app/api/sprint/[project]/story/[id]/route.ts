@@ -6,6 +6,8 @@ import {
   writeStoryStatus,
   appendHistory,
   readSprintStatus,
+  checkWipLimit,
+  validateDependencies,
   type StoryDetail,
 } from "@composio/ao-plugin-tracker-bmad";
 
@@ -72,7 +74,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
 
-    const { status: newStatus } = body as Record<string, unknown>;
+    const { status: newStatus, force } = body as Record<string, unknown>;
 
     if (!newStatus || typeof newStatus !== "string" || !VALID_COLUMNS.has(newStatus)) {
       return NextResponse.json(
@@ -94,10 +96,39 @@ export async function PATCH(
       return NextResponse.json({ storyId, status: newStatus, changed: false });
     }
 
+    // WIP limit check (unless force override)
+    if (force !== true) {
+      const wipResult = checkWipLimit(project, newStatus);
+      if (!wipResult.allowed) {
+        return NextResponse.json(
+          {
+            error: `WIP limit exceeded for '${newStatus}' (${wipResult.current}/${wipResult.limit})`,
+            wipExceeded: true,
+            current: wipResult.current,
+            limit: wipResult.limit,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     writeStoryStatus(project, storyId, newStatus);
     appendHistory(project, storyId, oldStatus, newStatus);
 
-    return NextResponse.json({ storyId, status: newStatus, changed: true });
+    // Dependency warnings (informational, non-blocking)
+    const warnings: string[] = [];
+    try {
+      const depResult = validateDependencies(storyId, project);
+      if (depResult.blocked) {
+        const blockerIds = depResult.blockers.map((b) => `${b.id} (${b.status})`);
+        warnings.push(`Story has unfinished dependencies: ${blockerIds.join(", ")}`);
+      }
+      warnings.push(...depResult.warnings);
+    } catch {
+      // Non-fatal
+    }
+
+    return NextResponse.json({ storyId, status: newStatus, changed: true, warnings });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unknown error" },

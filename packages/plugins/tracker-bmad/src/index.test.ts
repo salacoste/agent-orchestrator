@@ -7,6 +7,7 @@ vi.mock("node:fs", () => ({
   writeFileSync: vi.fn(),
   existsSync: vi.fn(),
   renameSync: vi.fn(),
+  mkdirSync: vi.fn(),
 }));
 
 vi.mock("./history.js", () => ({
@@ -1257,5 +1258,348 @@ Just a paragraph with no bullets.
     const tracker = create();
     const prompt = await tracker.generatePrompt("1-1-user-authentication", PROJECT);
     expect(prompt).toContain("- [ ] Only criterion");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateIssue
+// ---------------------------------------------------------------------------
+
+describe("validateIssue", () => {
+  it("returns valid for a well-formed ready-for-dev story", async () => {
+    setupFs();
+    const tracker = create();
+    const result = await tracker.validateIssue!("1-1-user-authentication", PROJECT);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+    // Tech spec exists, so no warning for it
+  });
+
+  it("returns error when story file is missing", async () => {
+    setupFs({ story: null });
+    const tracker = create();
+    const result = await tracker.validateIssue!("1-1-user-authentication", PROJECT);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(expect.arrayContaining([expect.stringContaining("not found")]));
+  });
+
+  it("returns error when story file is empty", async () => {
+    setupFs({ story: "" });
+    const tracker = create();
+    const result = await tracker.validateIssue!("1-1-user-authentication", PROJECT);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(expect.arrayContaining([expect.stringContaining("empty")]));
+  });
+
+  it("returns error when story has no title (no H1)", async () => {
+    setupFs({
+      story: `## No H1 here
+
+## Acceptance Criteria
+- Some criterion`,
+    });
+    const tracker = create();
+    const result = await tracker.validateIssue!("1-1-user-authentication", PROJECT);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(expect.arrayContaining([expect.stringContaining("no title")]));
+  });
+
+  it("returns error when story has no acceptance criteria", async () => {
+    setupFs({
+      story: `# A Story
+
+## Overview
+Some overview but no AC section.`,
+    });
+    const tracker = create();
+    const result = await tracker.validateIssue!("1-1-user-authentication", PROJECT);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([expect.stringContaining("acceptance criteria")]),
+    );
+  });
+
+  it("returns error when status is done", async () => {
+    setupFs();
+    const tracker = create();
+    // 2-1-payment-integration has status: done
+    const result = await tracker.validateIssue!("2-1-payment-integration", PROJECT);
+    // Story file won't exist for this identifier with setupFs defaults,
+    // so it will fail on missing file first. Let's set up the story file.
+    expect(result.valid).toBe(false);
+  });
+
+  it("returns error for done status with valid story content", async () => {
+    // Create custom sprint status where our test story is done
+    const yaml = `
+development_status:
+  test-story:
+    status: done
+    epic: epic-1`;
+    setupFs({ sprintStatus: yaml, story: STORY_CONTENT });
+    // Override existsSync to also find the story for "test-story"
+    const storyPath =
+      "/home/user/test-app/_bmad-output/implementation-artifacts/story-test-story.md";
+    const sprintPath = "/home/user/test-app/_bmad-output/sprint-status.yaml";
+    const techSpecPath =
+      "/home/user/test-app/_bmad-output/implementation-artifacts/tech-spec-test-story.md";
+    mockExistsSync.mockImplementation(
+      (p: string) => p === sprintPath || p === storyPath || p === techSpecPath,
+    );
+    mockReadFileSync.mockImplementation((p: string) => {
+      if (p === sprintPath) return yaml;
+      if (p === storyPath) return STORY_CONTENT;
+      if (p === techSpecPath) return TECH_SPEC_CONTENT;
+      throw new Error(`ENOENT: ${p}`);
+    });
+
+    const tracker = create();
+    const result = await tracker.validateIssue!("test-story", PROJECT);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([expect.stringContaining("already completed")]),
+    );
+  });
+
+  it("returns error for in-progress status", async () => {
+    const yaml = `
+development_status:
+  test-story:
+    status: in-progress
+    epic: epic-1`;
+    const storyPath =
+      "/home/user/test-app/_bmad-output/implementation-artifacts/story-test-story.md";
+    const sprintPath = "/home/user/test-app/_bmad-output/sprint-status.yaml";
+    mockExistsSync.mockImplementation((p: string) => p === sprintPath || p === storyPath);
+    mockReadFileSync.mockImplementation((p: string) => {
+      if (p === sprintPath) return yaml;
+      if (p === storyPath) return STORY_CONTENT;
+      throw new Error(`ENOENT: ${p}`);
+    });
+
+    const tracker = create();
+    const result = await tracker.validateIssue!("test-story", PROJECT);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toEqual(
+      expect.arrayContaining([expect.stringContaining("already in progress")]),
+    );
+  });
+
+  it("returns valid for backlog status", async () => {
+    setupFs();
+    // 3-1-dashboard has status: backlog
+    // Need story file for this identifier
+    const storyPath =
+      "/home/user/test-app/_bmad-output/implementation-artifacts/story-3-1-dashboard.md";
+    const techSpecPath =
+      "/home/user/test-app/_bmad-output/implementation-artifacts/tech-spec-3-1-dashboard.md";
+    const sprintPath = "/home/user/test-app/_bmad-output/sprint-status.yaml";
+    mockExistsSync.mockImplementation(
+      (p: string) => p === sprintPath || p === storyPath || p === techSpecPath,
+    );
+    mockReadFileSync.mockImplementation((p: string) => {
+      if (p === sprintPath) return SPRINT_STATUS_YAML;
+      if (p === storyPath) return STORY_CONTENT;
+      if (p === techSpecPath) return TECH_SPEC_CONTENT;
+      throw new Error(`ENOENT: ${p}`);
+    });
+
+    const tracker = create();
+    const result = await tracker.validateIssue!("3-1-dashboard", PROJECT);
+    expect(result.valid).toBe(true);
+  });
+
+  it("returns warning when tech spec is missing", async () => {
+    setupFs({ techSpec: null });
+    const tracker = create();
+    const result = await tracker.validateIssue!("1-1-user-authentication", PROJECT);
+    expect(result.valid).toBe(true);
+    expect(result.warnings).toEqual(expect.arrayContaining([expect.stringContaining("tech spec")]));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createIssue
+// ---------------------------------------------------------------------------
+
+describe("createIssue", () => {
+  it("creates a new story with auto-incremented ID", async () => {
+    setupFs();
+    const tracker = create();
+
+    const issue = await tracker.createIssue!(
+      { title: "New Feature", description: "A cool feature", labels: [] },
+      PROJECT,
+    );
+
+    expect(issue.id).toBe("s3"); // highest existing numeric suffix is 2 (from 2-1)
+    expect(issue.title).toBe("New Feature");
+    expect(issue.state).toBe("open");
+    expect(issue.labels).toContain("backlog");
+
+    // Should have written the YAML and story file
+    expect(mockWriteFileSync).toHaveBeenCalled();
+  });
+
+  it("includes epic label in sprint status entry", async () => {
+    setupFs();
+    const tracker = create();
+
+    const issue = await tracker.createIssue!(
+      { title: "Auth Story", description: "", labels: ["epic-auth"] },
+      PROJECT,
+    );
+
+    expect(issue.labels).toContain("epic-auth");
+    expect(issue.labels).toContain("backlog");
+  });
+
+  it("throws when title is empty", async () => {
+    setupFs();
+    const tracker = create();
+
+    await expect(tracker.createIssue!({ title: "", description: "" }, PROJECT)).rejects.toThrow(
+      "Title is required",
+    );
+  });
+
+  it("records history for the new story", async () => {
+    setupFs();
+    const mockAppendHistory = appendHistory as ReturnType<typeof vi.fn>;
+    const tracker = create();
+
+    await tracker.createIssue!({ title: "New Feature", description: "" }, PROJECT);
+
+    expect(mockAppendHistory).toHaveBeenCalledWith(
+      PROJECT,
+      expect.stringMatching(/^s\d+$/),
+      "",
+      "backlog",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// findIssueByBranch
+// ---------------------------------------------------------------------------
+
+describe("findIssueByBranch", () => {
+  it("finds story by branch name", async () => {
+    setupFs();
+    const tracker = create();
+
+    const result = await tracker.findIssueByBranch!("feat/1-1-user-authentication-impl", PROJECT);
+    expect(result).toBe("1-1-user-authentication");
+  });
+
+  it("returns null when no match", async () => {
+    setupFs();
+    const tracker = create();
+
+    const result = await tracker.findIssueByBranch!("feat/unknown-story", PROJECT);
+    expect(result).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// onPRMerge
+// ---------------------------------------------------------------------------
+
+describe("onPRMerge", () => {
+  it("transitions story to done", async () => {
+    setupFs();
+    const tracker = create();
+
+    await tracker.onPRMerge!("1-2-user-profile", undefined, PROJECT);
+
+    // Should have written updated YAML
+    expect(mockWriteFileSync).toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// onSessionDeath
+// ---------------------------------------------------------------------------
+
+describe("onSessionDeath", () => {
+  it("resets in-progress story to ready-for-dev", async () => {
+    setupFs();
+    const mockAppendHistory = appendHistory as ReturnType<typeof vi.fn>;
+    const tracker = create();
+
+    await tracker.onSessionDeath!("1-2-user-profile", PROJECT);
+
+    // Should write updated YAML
+    expect(mockWriteFileSync).toHaveBeenCalled();
+    // Should record history
+    expect(mockAppendHistory).toHaveBeenCalledWith(
+      PROJECT,
+      "1-2-user-profile",
+      "in-progress",
+      "ready-for-dev",
+    );
+  });
+
+  it("does not reset review status", async () => {
+    setupFs();
+    mockWriteFileSync.mockClear();
+    const tracker = create();
+
+    await tracker.onSessionDeath!("4-1-review-flow", PROJECT);
+
+    // writeStoryStatus should NOT be called since status is "review" not "in-progress"
+    // However the existing writeFileSync calls from setupFs may interfere, check appendHistory
+    const mockAppendHistory = appendHistory as ReturnType<typeof vi.fn>;
+    expect(mockAppendHistory).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "4-1-review-flow",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("does not reset done status", async () => {
+    setupFs();
+    const mockAppendHistory = appendHistory as ReturnType<typeof vi.fn>;
+    const tracker = create();
+
+    await tracker.onSessionDeath!("2-1-payment-integration", PROJECT);
+
+    expect(mockAppendHistory).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "2-1-payment-integration",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("does nothing for unknown story", async () => {
+    setupFs();
+    const mockAppendHistory = appendHistory as ReturnType<typeof vi.fn>;
+    const tracker = create();
+
+    await tracker.onSessionDeath!("nonexistent", PROJECT);
+
+    expect(mockAppendHistory).not.toHaveBeenCalled();
+  });
+
+  it("respects autoResetOnDeath=false config", async () => {
+    setupFs();
+    const mockAppendHistory = appendHistory as ReturnType<typeof vi.fn>;
+    const tracker = create();
+
+    const projectWithDisable: ProjectConfig = {
+      ...PROJECT,
+      tracker: { ...PROJECT.tracker!, autoResetOnDeath: false },
+    };
+
+    await tracker.onSessionDeath!("1-2-user-profile", projectWithDisable);
+
+    expect(mockAppendHistory).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "1-2-user-profile",
+      expect.anything(),
+      expect.anything(),
+    );
   });
 });

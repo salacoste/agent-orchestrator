@@ -32,7 +32,6 @@ import {
   type Session,
   type EventPriority,
   type Tracker,
-  type ProjectConfig as _ProjectConfig,
 } from "./types.js";
 import { updateMetadata } from "./metadata.js";
 import { getSessionsDir } from "./paths.js";
@@ -180,6 +179,7 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
   const states = new Map<SessionId, SessionStatus>();
   const reactionTrackers = new Map<string, ReactionTracker>(); // "sessionId:reactionKey"
   const sprintCompleteCache = new Map<string, boolean>(); // projectId -> last-known sprint-complete state
+  const activeNotifications = new Map<string, Set<string>>(); // projectId -> set of active notification types
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let polling = false; // re-entrancy guard
   let allCompleteEmitted = false; // guard against repeated all_complete
@@ -476,70 +476,99 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
       }
 
       // Auto-update tracker when PR is merged
-      if (newStatus === "merged" && session.issueId) {
+      if (newStatus === "merged") {
         const project = config.projects[session.projectId];
         if (project?.tracker) {
           const tracker = registry.get<Tracker>("tracker", project.tracker.plugin);
-          if (tracker?.updateIssue) {
-            try {
-              await tracker.updateIssue(session.issueId, { state: "closed" }, project);
-            } catch {
-              // Non-fatal -- don't disrupt lifecycle management if tracker update fails
+          if (tracker) {
+            // Resolve issue ID from branch if not set on the session
+            let issueId = session.issueId;
+            if (!issueId && session.branch && tracker.findIssueByBranch) {
+              try {
+                issueId = await tracker.findIssueByBranch(session.branch, project);
+              } catch {
+                // Non-fatal -- branch lookup failed
+              }
+            }
+
+            if (issueId) {
+              // Use onPRMerge if available (handles transition + history + events)
+              // Otherwise fall back to generic updateIssue
+              try {
+                if (tracker.onPRMerge) {
+                  await tracker.onPRMerge(issueId, session.pr?.url, project);
+                } else if (tracker.updateIssue) {
+                  await tracker.updateIssue(issueId, { state: "closed" }, project);
+                }
+              } catch {
+                // Non-fatal -- don't disrupt lifecycle management if tracker update fails
+              }
+
+              // Emit bmad.story_done event and check for reactions
+              const bmadEvent = createEvent("bmad.story_done", {
+                sessionId: session.id,
+                projectId: session.projectId,
+                message: `Story ${issueId} completed (PR merged)`,
+                data: { identifier: issueId },
+              });
+
+              // Enrich event with issue details
+              try {
+                const issue = await tracker.getIssue(issueId, project);
+                bmadEvent.message = `Story "${issue.title}" (${issueId}) completed`;
+                bmadEvent.data["storyTitle"] = issue.title;
+                const epicLabel = issue.labels.find((l) => l.startsWith("epic-"));
+                if (epicLabel) {
+                  bmadEvent.data["epicId"] = epicLabel;
+                }
+              } catch {
+                // Non-fatal -- emit event without title or epic info
+              }
+
+              // Check for reaction config
+              const reactionKey = eventToReactionKey("bmad.story_done");
+              if (reactionKey) {
+                const globalReaction = config.reactions[reactionKey];
+                const projectReaction = project?.reactions?.[reactionKey];
+                const reactionConfig = projectReaction
+                  ? { ...globalReaction, ...projectReaction }
+                  : globalReaction;
+
+                let reactionHandled = false;
+                if (reactionConfig?.action) {
+                  if (reactionConfig.auto !== false || reactionConfig.action === "notify") {
+                    await executeReaction(
+                      session.id,
+                      session.projectId,
+                      reactionKey,
+                      reactionConfig as ReactionConfig,
+                    );
+                    reactionHandled = true;
+                  }
+                }
+                if (!reactionHandled) {
+                  await notifyHuman(bmadEvent, "info");
+                }
+              }
             }
           }
         }
       }
 
-      // Emit bmad.story_done event when a BMad story is completed
-      if (newStatus === "merged" && session.issueId) {
+      // Task 10: Reset story status when session dies without PR merge
+      if (
+        (newStatus === "killed" || newStatus === "errored" || newStatus === "stuck") &&
+        oldStatus !== newStatus
+      ) {
         const project = config.projects[session.projectId];
-        if (project?.tracker?.plugin === "bmad") {
-          const bmadEvent = createEvent("bmad.story_done", {
-            sessionId: session.id,
-            projectId: session.projectId,
-            message: `BMad story ${session.issueId} completed (PR merged)`,
-            data: { identifier: session.issueId },
-          });
-
-          // Try to get epic info and story title for the event data
-          try {
-            const tracker = registry.get<Tracker>("tracker", project.tracker.plugin);
-            if (tracker) {
-              const issue = await tracker.getIssue(session.issueId, project);
-              bmadEvent.message = `BMad story "${issue.title}" (${session.issueId}) completed`;
-              bmadEvent.data["storyTitle"] = issue.title;
-              const epicLabel = issue.labels.find((l) => l.startsWith("epic-"));
-              if (epicLabel) {
-                bmadEvent.data["epicId"] = epicLabel;
-              }
-            }
-          } catch {
-            // Non-fatal -- emit event without title or epic info
-          }
-
-          // Check for reaction config
-          const reactionKey = eventToReactionKey("bmad.story_done");
-          if (reactionKey) {
-            const globalReaction = config.reactions[reactionKey];
-            const projectReaction = project?.reactions?.[reactionKey];
-            const reactionConfig = projectReaction
-              ? { ...globalReaction, ...projectReaction }
-              : globalReaction;
-
-            let reactionHandled = false;
-            if (reactionConfig?.action) {
-              if (reactionConfig.auto !== false || reactionConfig.action === "notify") {
-                await executeReaction(
-                  session.id,
-                  session.projectId,
-                  reactionKey,
-                  reactionConfig as ReactionConfig,
-                );
-                reactionHandled = true;
-              }
-            }
-            if (!reactionHandled) {
-              await notifyHuman(bmadEvent, "info");
+        if (project?.tracker) {
+          const tracker = registry.get<Tracker>("tracker", project.tracker.plugin);
+          const issueId = session.issueId;
+          if (tracker?.onSessionDeath && issueId) {
+            try {
+              await tracker.onSessionDeath(issueId, project);
+            } catch {
+              // Non-fatal -- don't disrupt lifecycle on tracker reset failure
             }
           }
         }
@@ -711,6 +740,33 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
           } else {
             await notifyHuman(sprintEvent, "action");
           }
+        }
+      }
+
+      // Check tracker notifications (health alerts, stuck stories, WIP, forecast).
+      // Uses activeNotifications to debounce: only dispatch when a new notification
+      // type appears, not on every poll cycle.
+      for (const [projectId, project] of Object.entries(config.projects)) {
+        if (!project.tracker) continue;
+
+        const tracker = registry.get<Tracker>("tracker", project.tracker.plugin);
+        if (!tracker?.getNotifications) continue;
+
+        try {
+          const events = await tracker.getNotifications(project);
+          const currentTypes = new Set(events.map((e) => e.type));
+          const previousTypes = activeNotifications.get(projectId) ?? new Set<string>();
+
+          // Find newly appeared notification types
+          for (const event of events) {
+            if (!previousTypes.has(event.type)) {
+              await notifyHuman(event, event.priority);
+            }
+          }
+
+          activeNotifications.set(projectId, currentTypes);
+        } catch {
+          // Non-fatal -- skip notification check for this project on this cycle
         }
       }
     } catch {

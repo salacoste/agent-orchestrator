@@ -356,6 +356,16 @@ export function createSessionManager(deps: SessionManagerDeps): SessionManager {
       }
     }
 
+    // Pre-spawn story validation (if tracker supports it)
+    if (resolvedIssue && plugins.tracker?.validateIssue) {
+      const validation = await plugins.tracker.validateIssue(spawnConfig.issueId!, project);
+      if (!validation.valid) {
+        throw new Error(
+          `Story validation failed for ${spawnConfig.issueId}:\n  - ${validation.errors.join("\n  - ")}`,
+        );
+      }
+    }
+
     // Get the sessions directory for this project
     const sessionsDir = getProjectSessionsDir(project);
 

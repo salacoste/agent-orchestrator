@@ -5,7 +5,7 @@
  * No external API calls — all data is local.
  */
 
-import { readFileSync, writeFileSync, existsSync, renameSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type {
@@ -15,8 +15,12 @@ import type {
   IssueFilters,
   IssueUpdate,
   IssueValidationResult,
+  CreateIssueInput,
   ProjectConfig,
+  OrchestratorEvent,
 } from "@composio/ao-core";
+import { transitionOnMerge, findStoryForPR, writeStoryStatus } from "./auto-transition.js";
+import { checkSprintNotifications, formatNotificationEvent } from "./sprint-notifications.js";
 import { appendHistory } from "./history.js";
 import {
   readSprintStatus,
@@ -33,6 +37,18 @@ export { computeSprintHealth } from "./sprint-health.js";
 export type { SprintHealthResult, HealthIndicator, HealthSeverity } from "./sprint-health.js";
 export { computeForecast } from "./forecast.js";
 export type { SprintForecast } from "./forecast.js";
+export { computeRetrospective } from "./retrospective.js";
+export type { RetrospectiveResult, SprintPeriod } from "./retrospective.js";
+export { getStoryDetail } from "./story-detail.js";
+export type { StoryDetail, StoryTransition } from "./story-detail.js";
+export { transitionOnMerge, writeStoryStatus, findStoryForPR } from "./auto-transition.js";
+export type { AutoTransitionEvent, AutoTransitionResult } from "./auto-transition.js";
+export {
+  checkSprintNotifications,
+  getDefaultThresholds,
+  formatNotificationEvent,
+} from "./sprint-notifications.js";
+export type { SprintNotification, NotificationThresholds } from "./sprint-notifications.js";
 
 // ---------------------------------------------------------------------------
 // Public helpers (shared between CLI and web API)
@@ -478,6 +494,78 @@ function createBmadTracker(): Tracker {
       appendHistory(project, identifier, oldStatus, newStatus);
     },
 
+    async createIssue(input: CreateIssueInput, project: ProjectConfig): Promise<Issue> {
+      // Generate story ID: find highest numeric suffix and increment
+      const sprint = readSprintStatus(project);
+      const existingIds = Object.keys(sprint.development_status);
+      let maxNum = 0;
+      for (const id of existingIds) {
+        const match = id.match(/(\d+)$/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxNum) maxNum = num;
+        }
+      }
+      const newId = `s${maxNum + 1}`;
+
+      // Validate: title is required
+      if (!input.title || !input.title.trim()) {
+        throw new Error("Title is required to create a story");
+      }
+
+      // Check for duplicate ID (shouldn't happen with auto-increment, but guard)
+      if (sprint.development_status[newId]) {
+        throw new Error(`Story ID '${newId}' already exists`);
+      }
+
+      // Determine epic from labels
+      const epicLabel = input.labels?.find((l) => l.startsWith("epic-")) ?? undefined;
+
+      // Add entry to sprint-status.yaml
+      const filePath = sprintStatusPath(project);
+      const entry: Record<string, unknown> = { status: "backlog" };
+      if (epicLabel) entry["epic"] = epicLabel;
+      sprint.development_status[newId] = entry as SprintStatus["development_status"][string];
+
+      const tmpPath = filePath + `.tmp.${process.pid}.${Date.now()}`;
+      writeFileSync(tmpPath, stringifyYaml(sprint), "utf-8");
+      renameSync(tmpPath, filePath);
+
+      // Write story markdown file
+      const storyPath = storyFilePath(newId, project);
+      const storyDir = join(project.path, getOutputDir(project), getStoryDir(project));
+      if (!existsSync(storyDir)) {
+        mkdirSync(storyDir, { recursive: true });
+      }
+      const storyContent = [
+        `# ${input.title}`,
+        "",
+        input.description || "TODO: Add story description",
+        "",
+        "## Acceptance Criteria",
+        "",
+        "- [ ] TODO: Define acceptance criteria",
+        "",
+      ].join("\n");
+      writeFileSync(storyPath, storyContent, "utf-8");
+
+      // Record history
+      appendHistory(project, newId, "", "backlog");
+
+      const labels: string[] = [];
+      if (epicLabel) labels.push(epicLabel);
+      labels.push("backlog");
+
+      return {
+        id: newId,
+        title: input.title,
+        description: storyContent,
+        url: this.issueUrl(newId, project),
+        state: "open",
+        labels,
+      };
+    },
+
     async validateIssue(
       identifier: string,
       project: ProjectConfig,
@@ -536,6 +624,50 @@ function createBmadTracker(): Tracker {
       }
 
       return { valid: errors.length === 0, errors, warnings };
+    },
+
+    async findIssueByBranch(branch: string, project: ProjectConfig): Promise<string | null> {
+      return findStoryForPR(project, branch);
+    },
+
+    async onPRMerge(
+      issueId: string,
+      prUrl: string | undefined,
+      project: ProjectConfig,
+    ): Promise<void> {
+      transitionOnMerge(project, issueId, prUrl);
+    },
+
+    async onSessionDeath(issueId: string, project: ProjectConfig): Promise<void> {
+      // Only reset if story is currently in-progress (not review/done)
+      const sprint = readSprintStatus(project);
+      const entry = sprint.development_status[issueId];
+      if (!entry) return;
+
+      const status = typeof entry.status === "string" ? entry.status : "backlog";
+      if (status !== "in-progress") return;
+
+      // Check if auto-reset is disabled in tracker config
+      const autoReset = project.tracker?.["autoResetOnDeath"];
+      if (autoReset === false) return;
+
+      writeStoryStatus(project, issueId, "ready-for-dev");
+      appendHistory(project, issueId, status, "ready-for-dev");
+    },
+
+    async getNotifications(project: ProjectConfig): Promise<OrchestratorEvent[]> {
+      // Read optional thresholds from tracker config
+      const thresholds: Record<string, unknown> = {};
+      const cfg = project.tracker;
+      if (cfg?.["stuckHours"] !== undefined) thresholds["stuckHours"] = cfg["stuckHours"];
+      if (cfg?.["wipLimit"] !== undefined) thresholds["wipLimit"] = cfg["wipLimit"];
+      if (cfg?.["throughputDropPct"] !== undefined)
+        thresholds["throughputDropPct"] = cfg["throughputDropPct"];
+      if (cfg?.["forecastBehind"] !== undefined)
+        thresholds["forecastBehind"] = cfg["forecastBehind"];
+
+      const notifications = checkSprintNotifications(project, thresholds);
+      return notifications.map((n) => formatNotificationEvent(n));
     },
   };
 }

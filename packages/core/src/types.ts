@@ -457,6 +457,31 @@ export interface Tracker {
 
   /** Optional: create a new issue */
   createIssue?(input: CreateIssueInput, project: ProjectConfig): Promise<Issue>;
+
+  /** Optional: validate issue before spawning (pre-flight check) */
+  validateIssue?(identifier: string, project: ProjectConfig): Promise<IssueValidationResult>;
+
+  /** Optional: find issue ID by branch name (reverse lookup) */
+  findIssueByBranch?(branch: string, project: ProjectConfig): Promise<string | null>;
+
+  /** Optional: handle PR merge for an issue (transition status, emit events) */
+  onPRMerge?(
+    issueId: string,
+    prUrl: string | undefined,
+    project: ProjectConfig,
+  ): Promise<void>;
+
+  /** Optional: handle session death — reset story status if appropriate */
+  onSessionDeath?(issueId: string, project: ProjectConfig): Promise<void>;
+
+  /** Optional: get health/sprint notifications as OrchestratorEvents */
+  getNotifications?(project: ProjectConfig): Promise<OrchestratorEvent[]>;
+}
+
+export interface IssueValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
 }
 
 export interface Issue {

@@ -393,6 +393,39 @@ describe("readHistory", () => {
     expect(result[0]?.storyId).toBe("valid");
   });
 
+  it("skips entries with non-ISO timestamp format", () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue(
+      [
+        JSON.stringify({
+          timestamp: "Mar 4 2026",
+          storyId: "bad-1",
+          fromStatus: "a",
+          toStatus: "done",
+        }),
+        JSON.stringify({ timestamp: "", storyId: "bad-2", fromStatus: "a", toStatus: "done" }),
+        JSON.stringify({
+          timestamp: "not-a-date",
+          storyId: "bad-3",
+          fromStatus: "a",
+          toStatus: "done",
+        }),
+        JSON.stringify({
+          timestamp: "2026-03-04T14:30:00.000Z",
+          storyId: "good",
+          fromStatus: "in-progress",
+          toStatus: "done",
+        }),
+        "",
+      ].join("\n"),
+    );
+
+    const result = readHistory(PROJECT);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.storyId).toBe("good");
+  });
+
   it("handles single entry without trailing newline", () => {
     const entry = {
       timestamp: "2024-01-01T00:00:00.000Z",

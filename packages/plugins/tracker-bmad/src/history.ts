@@ -55,6 +55,9 @@ export function readHistory(project: ProjectConfig): HistoryEntry[] {
           typeof (parsed as Record<string, unknown>).fromStatus === "string" &&
           typeof (parsed as Record<string, unknown>).toStatus === "string"
         ) {
+          // Validate ISO-8601 date prefix (YYYY-MM-DD) so consumers can safely slice(0,10)
+          const ts = (parsed as Record<string, unknown>).timestamp as string;
+          if (!/^\d{4}-\d{2}-\d{2}/.test(ts)) continue;
           entries.push(parsed as HistoryEntry);
         }
       } catch {

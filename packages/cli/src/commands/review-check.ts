@@ -1,61 +1,15 @@
 import chalk from "chalk";
 import ora from "ora";
 import type { Command } from "commander";
-import { loadConfig } from "@composio/ao-core";
-import { exec, gh } from "../lib/shell.js";
+import { loadConfig, type PRInfo } from "@composio/ao-core";
+import { getSCM } from "../lib/plugins.js";
 import { getSessionManager } from "../lib/create-session-manager.js";
 
 interface ReviewInfo {
   sessionId: string;
-  tmuxTarget: string;
-  prNumber: string;
+  prNumber: number;
   pendingComments: number;
   reviewDecision: string | null;
-}
-
-async function checkPRReviews(
-  repo: string,
-  prNumber: string,
-): Promise<{ pendingComments: number; reviewDecision: string | null }> {
-  const [owner, name] = repo.split("/");
-  if (!owner || !name) {
-    return { pendingComments: 0, reviewDecision: null };
-  }
-
-  // Use GraphQL with variable passing (-F) to avoid injection via repo names
-  const query =
-    "query($owner:String!,$name:String!,$pr:Int!){repository(owner:$owner,name:$name){pullRequest(number:$pr){reviewDecision reviewThreads(first:100){nodes{isResolved}}}}}";
-  const result = await gh([
-    "api",
-    "graphql",
-    "-f",
-    `query=${query}`,
-    "-f",
-    `owner=${owner}`,
-    "-f",
-    `name=${name}`,
-    "-F",
-    `pr=${prNumber}`,
-    "--jq",
-    ".data.repository.pullRequest",
-  ]);
-
-  if (!result) {
-    return { pendingComments: 0, reviewDecision: null };
-  }
-
-  try {
-    const data = JSON.parse(result);
-    const unresolvedCount = Array.isArray(data.reviewThreads?.nodes)
-      ? data.reviewThreads.nodes.filter((t: { isResolved: boolean }) => !t.isResolved).length
-      : 0;
-    return {
-      pendingComments: unresolvedCount,
-      reviewDecision: data.reviewDecision || null,
-    };
-  } catch {
-    return { pendingComments: 0, reviewDecision: null };
-  }
 }
 
 export function registerReviewCheck(program: Command): void {
@@ -79,23 +33,39 @@ export function registerReviewCheck(program: Command): void {
       const results: ReviewInfo[] = [];
 
       for (const session of sessions) {
-        const prUrl = session.metadata["pr"];
-        if (!prUrl) continue;
-
         const project = config.projects[session.projectId];
         if (!project?.repo) continue;
 
-        const prNum = prUrl.match(/(\d+)\s*$/)?.[1];
-        if (!prNum) continue;
+        let scm;
+        try {
+          scm = getSCM(config, session.projectId);
+        } catch {
+          continue;
+        }
+
+        let pr: PRInfo | null;
+        try {
+          pr = await scm.detectPR(session, project);
+        } catch {
+          // No PR found — skip
+          continue;
+        }
+
+        if (!pr) continue;
 
         try {
-          const { pendingComments, reviewDecision } = await checkPRReviews(project.repo, prNum);
-          if (pendingComments > 0 || reviewDecision === "CHANGES_REQUESTED") {
+          const [pendingComments, reviewDecision] = await Promise.all([
+            scm.getPendingComments(pr),
+            scm.getReviewDecision(pr),
+          ]);
+
+          const commentCount = pendingComments.length;
+
+          if (commentCount > 0 || reviewDecision === "changes_requested") {
             results.push({
               sessionId: session.id,
-              tmuxTarget: session.runtimeHandle?.id ?? session.id,
-              prNumber: prNum,
-              pendingComments,
+              prNumber: pr.number,
+              pendingComments: commentCount,
               reviewDecision,
             });
           }
@@ -128,16 +98,9 @@ export function registerReviewCheck(program: Command): void {
 
         if (!opts.dryRun) {
           try {
-            // Interrupt busy agent and clear partial input before sending
-            await exec("tmux", ["send-keys", "-t", result.tmuxTarget, "C-c"]);
-            await new Promise((resolve) => setTimeout(resolve, 500));
-            await exec("tmux", ["send-keys", "-t", result.tmuxTarget, "C-u"]);
-            await new Promise((resolve) => setTimeout(resolve, 200));
             const message =
               "There are review comments on your PR. Check with `gh pr view --comments` and `gh api` for inline comments. Address each one, push fixes, and reply.";
-            await exec("tmux", ["send-keys", "-t", result.tmuxTarget, "-l", message]);
-            await new Promise((resolve) => setTimeout(resolve, 200));
-            await exec("tmux", ["send-keys", "-t", result.tmuxTarget, "Enter"]);
+            await sm.send(result.sessionId, message);
             console.log(chalk.green(`    -> Fix prompt sent`));
           } catch (err) {
             console.error(chalk.red(`    -> Failed to send: ${err}`));

@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { getServices } from "@/lib/services";
 import type { Tracker } from "@composio/ao-core";
-import { getBmadStatus, readEpicTitle, BMAD_COLUMNS } from "@composio/ao-plugin-tracker-bmad";
+import {
+  getBmadStatus,
+  readEpicTitle,
+  BMAD_COLUMNS,
+  categorizeStatus,
+} from "@composio/ao-plugin-tracker-bmad";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ project: string }> }) {
   try {
@@ -80,15 +85,16 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       const bmadStatus = getBmadStatus(issue.labels);
       const epic = issue.labels.find((l) => l.startsWith("epic-")) ?? null;
 
-      if (bmadStatus === "done") done++;
-      else if (bmadStatus === "in-progress" || bmadStatus === "review") inProgress++;
+      const category = categorizeStatus(bmadStatus);
+      if (category === "done") done++;
+      else if (category === "in-progress") inProgress++;
 
       // Aggregate per-epic stats
       if (epic) {
         const epicStats = epicMap.get(epic) ?? { total: 0, done: 0, inProgress: 0, open: 0 };
         epicStats.total++;
-        if (bmadStatus === "done") epicStats.done++;
-        else if (bmadStatus === "in-progress" || bmadStatus === "review") epicStats.inProgress++;
+        if (category === "done") epicStats.done++;
+        else if (category === "in-progress") epicStats.inProgress++;
         else epicStats.open++;
         epicMap.set(epic, epicStats);
       }

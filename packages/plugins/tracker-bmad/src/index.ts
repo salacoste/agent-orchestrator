@@ -28,6 +28,9 @@ export type { HistoryEntry } from "./history.js";
 /** Ordered BMad sprint columns — shared between CLI and web dashboard. */
 export const BMAD_COLUMNS = ["backlog", "ready-for-dev", "in-progress", "review", "done"] as const;
 
+/** A valid BMad sprint column name. */
+export type BmadColumn = (typeof BMAD_COLUMNS)[number];
+
 /**
  * Extract BMad status from an issue's labels (last label is the status).
  * Returns lowercase status string, falls back to "backlog".
@@ -37,6 +40,16 @@ export function getBmadStatus(labels: string[]): string {
   const lastLabel = labels[labels.length - 1];
   if (!lastLabel) return "backlog";
   return lastLabel.toLowerCase();
+}
+
+/**
+ * Categorize a BMad status into a high-level bucket.
+ * Used by both CLI and web to compute sprint statistics consistently.
+ */
+export function categorizeStatus(bmadStatus: string): "done" | "in-progress" | "open" {
+  if (bmadStatus === "done") return "done";
+  if (bmadStatus === "in-progress" || bmadStatus === "review") return "in-progress";
+  return "open";
 }
 
 /**

@@ -14,7 +14,14 @@ vi.mock("./history.js", () => ({
 }));
 
 import { readFileSync, writeFileSync, existsSync, renameSync } from "node:fs";
-import plugin, { manifest, create, readEpicTitle, getBmadStatus, BMAD_COLUMNS } from "./index.js";
+import plugin, {
+  manifest,
+  create,
+  readEpicTitle,
+  getBmadStatus,
+  BMAD_COLUMNS,
+  categorizeStatus,
+} from "./index.js";
 import { appendHistory } from "./history.js";
 
 // ---------------------------------------------------------------------------
@@ -1077,6 +1084,32 @@ describe("getBmadStatus", () => {
 
   it("handles single-label array", () => {
     expect(getBmadStatus(["done"])).toBe("done");
+  });
+});
+
+describe("categorizeStatus", () => {
+  it("returns 'done' for done status", () => {
+    expect(categorizeStatus("done")).toBe("done");
+  });
+
+  it("returns 'in-progress' for in-progress status", () => {
+    expect(categorizeStatus("in-progress")).toBe("in-progress");
+  });
+
+  it("returns 'in-progress' for review status", () => {
+    expect(categorizeStatus("review")).toBe("in-progress");
+  });
+
+  it("returns 'open' for backlog status", () => {
+    expect(categorizeStatus("backlog")).toBe("open");
+  });
+
+  it("returns 'open' for ready-for-dev status", () => {
+    expect(categorizeStatus("ready-for-dev")).toBe("open");
+  });
+
+  it("returns 'open' for unknown status", () => {
+    expect(categorizeStatus("custom-status")).toBe("open");
   });
 });
 

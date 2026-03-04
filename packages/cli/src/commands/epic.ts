@@ -114,7 +114,8 @@ function printSingleEpic(epic: EpicSummary): void {
     else if (cat === "in-progress") stateStr = chalk.yellow("in-progress");
     else {
       const lastLabel = story.labels[story.labels.length - 1];
-      const status = lastLabel && !lastLabel.startsWith("epic-") ? lastLabel : "backlog";
+      const status =
+        typeof lastLabel === "string" && !lastLabel.startsWith("epic-") ? lastLabel : "backlog";
       stateStr = chalk.dim(status);
     }
 

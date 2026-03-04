@@ -134,6 +134,18 @@ function readSprintStatus(project: ProjectConfig): SprintStatus {
     if (!parsed || typeof parsed !== "object" || !("development_status" in parsed)) {
       throw new Error("sprint-status.yaml missing 'development_status' key");
     }
+    // Coerce non-string field values (YAML numbers, booleans) to strings
+    // so downstream code can safely call .startsWith() etc.
+    const devStatus = (parsed as SprintStatus).development_status;
+    for (const entry of Object.values(devStatus)) {
+      if (entry.status !== undefined && typeof entry.status !== "string") {
+        entry.status = String(entry.status);
+      }
+      if (entry.epic !== undefined && typeof entry.epic !== "string") {
+        entry.epic = String(entry.epic);
+      }
+    }
+
     return parsed as SprintStatus;
   } catch (err) {
     if (err instanceof Error && err.message.includes("sprint-status.yaml")) {
@@ -283,7 +295,8 @@ function createBmadTracker(): Tracker {
 
     issueUrl(identifier: string, project: ProjectConfig): string {
       const filePath = storyFilePath(identifier, project);
-      return `file://${filePath}`;
+      // Encode path segments so spaces/special chars produce valid file:// URLs
+      return `file://${encodeURI(filePath)}`;
     },
 
     issueLabel(url: string, _project: ProjectConfig): string {

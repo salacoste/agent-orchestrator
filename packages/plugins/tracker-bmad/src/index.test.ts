@@ -395,6 +395,17 @@ describe("issueUrl", () => {
     const url = tracker.issueUrl("any-story", PROJECT);
     expect(url).toMatch(/^file:\/\//);
   });
+
+  it("encodes spaces in project path", () => {
+    const tracker = create();
+    const projectWithSpaces = {
+      ...PROJECT,
+      path: "/home/user/My Project",
+    };
+    const url = tracker.issueUrl("1-1-auth", projectWithSpaces);
+    expect(url).toContain("My%20Project");
+    expect(url).not.toContain("My Project");
+  });
 });
 
 describe("issueLabel", () => {
@@ -837,6 +848,38 @@ describe("listIssues", () => {
     const issues = await tracker.listIssues!({ state: "all", labels: ["nonexistent"] }, PROJECT);
 
     expect(issues).toHaveLength(0);
+  });
+
+  it("coerces non-string epic and status values from YAML", async () => {
+    const yamlWithNonStringEpic = `
+development_status:
+  1-1-user-authentication:
+    status: in-progress
+    epic: 123
+  2-1-data-model:
+    status: true
+    epic: null
+`;
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockImplementation((p: string) => {
+      if (p.endsWith("sprint-status.yaml")) return yamlWithNonStringEpic;
+      return "# Story\nTitle here";
+    });
+
+    const tracker = create();
+    const issues = await tracker.listIssues!({ state: "all" }, PROJECT);
+
+    // Non-string epic 123 should be coerced to "123"
+    const story1 = issues.find((i) => i.id === "1-1-user-authentication");
+    expect(story1).toBeDefined();
+    expect(story1!.labels).toContain("123");
+    // .startsWith should work without crashing
+    expect(story1!.labels.every((l) => typeof l === "string")).toBe(true);
+
+    // Boolean status should be coerced to "true", null epic should be excluded
+    const story2 = issues.find((i) => i.id === "2-1-data-model");
+    expect(story2).toBeDefined();
+    expect(story2!.labels.every((l) => typeof l === "string")).toBe(true);
   });
 });
 

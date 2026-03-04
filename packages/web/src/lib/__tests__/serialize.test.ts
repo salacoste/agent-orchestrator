@@ -17,6 +17,7 @@ import {
   sessionToDashboard,
   resolveProject,
   enrichSessionPR,
+  enrichSessionIssue,
   enrichSessionAgentSummary,
   enrichSessionIssueTitle,
   enrichSessionsMetadata,
@@ -562,6 +563,176 @@ describe("enrichSessionAgentSummary", () => {
 
     expect(dashboard.summary).toBeNull();
     expect(dashboard.summaryIsFallback).toBe(false);
+  });
+});
+
+describe("enrichSessionIssue", () => {
+  function makeProject(overrides?: Partial<ProjectConfig>): ProjectConfig {
+    return {
+      name: "test",
+      repo: "test/repo",
+      path: "/test",
+      defaultBranch: "main",
+      sessionPrefix: "test",
+      ...overrides,
+    };
+  }
+
+  function makeDashboard(overrides?: Partial<DashboardSession>): DashboardSession {
+    return {
+      id: "test-1",
+      projectId: "test",
+      status: "working",
+      activity: "active",
+      branch: "feat/test",
+      issueId: null,
+      issueUrl: null,
+      issueLabel: null,
+      issueTitle: null,
+      summary: null,
+      summaryIsFallback: false,
+      createdAt: new Date().toISOString(),
+      lastActivityAt: new Date().toISOString(),
+      pr: null,
+      metadata: {},
+      ...overrides,
+    };
+  }
+
+  it("should use tracker.issueLabel when available", () => {
+    const dashboard = makeDashboard({
+      issueUrl: "https://github.com/test/repo/issues/42",
+    });
+    const tracker: Tracker = {
+      name: "mock",
+      getIssue: vi
+        .fn()
+        .mockResolvedValue({
+          id: "42",
+          title: "",
+          description: "",
+          url: "",
+          state: "open",
+          labels: [],
+        }),
+      isCompleted: vi.fn().mockResolvedValue(false),
+      issueUrl: vi.fn(),
+      issueLabel: vi.fn().mockReturnValue("#42"),
+      branchName: vi.fn(),
+      generatePrompt: vi.fn().mockResolvedValue(""),
+    };
+
+    enrichSessionIssue(dashboard, tracker, makeProject());
+    expect(dashboard.issueLabel).toBe("#42");
+  });
+
+  it("should extract identifier from file:// URL when issueLabel throws", () => {
+    const dashboard = makeDashboard({
+      issueUrl: "file:///home/user/project/_bmad-output/implementation-artifacts/story-1-1-auth.md",
+    });
+    const tracker: Tracker = {
+      name: "mock",
+      getIssue: vi
+        .fn()
+        .mockResolvedValue({
+          id: "1",
+          title: "",
+          description: "",
+          url: "",
+          state: "open",
+          labels: [],
+        }),
+      isCompleted: vi.fn().mockResolvedValue(false),
+      issueUrl: vi.fn(),
+      issueLabel: vi.fn().mockImplementation(() => {
+        throw new Error("parse error");
+      }),
+      branchName: vi.fn(),
+      generatePrompt: vi.fn().mockResolvedValue(""),
+    };
+
+    enrichSessionIssue(dashboard, tracker, makeProject());
+    // Should extract "1-1-auth" from "story-1-1-auth.md", not "story-1-1-auth.md"
+    expect(dashboard.issueLabel).toBe("1-1-auth");
+  });
+
+  it("should extract identifier from file:// URL when tracker has no issueLabel", () => {
+    const dashboard = makeDashboard({
+      issueUrl:
+        "file:///home/user/project/_bmad-output/implementation-artifacts/story-2-3-login.md",
+    });
+    const tracker: Tracker = {
+      name: "mock",
+      getIssue: vi
+        .fn()
+        .mockResolvedValue({
+          id: "1",
+          title: "",
+          description: "",
+          url: "",
+          state: "open",
+          labels: [],
+        }),
+      isCompleted: vi.fn().mockResolvedValue(false),
+      issueUrl: vi.fn(),
+      branchName: vi.fn(),
+      generatePrompt: vi.fn().mockResolvedValue(""),
+    };
+
+    enrichSessionIssue(dashboard, tracker, makeProject());
+    expect(dashboard.issueLabel).toBe("2-3-login");
+  });
+
+  it("should return last path segment for HTTP URLs in fallback", () => {
+    const dashboard = makeDashboard({
+      issueUrl: "https://github.com/test/repo/issues/99",
+    });
+    const tracker: Tracker = {
+      name: "mock",
+      getIssue: vi
+        .fn()
+        .mockResolvedValue({
+          id: "99",
+          title: "",
+          description: "",
+          url: "",
+          state: "open",
+          labels: [],
+        }),
+      isCompleted: vi.fn().mockResolvedValue(false),
+      issueUrl: vi.fn(),
+      branchName: vi.fn(),
+      generatePrompt: vi.fn().mockResolvedValue(""),
+    };
+
+    enrichSessionIssue(dashboard, tracker, makeProject());
+    expect(dashboard.issueLabel).toBe("99");
+  });
+
+  it("should skip when issueUrl is null", () => {
+    const dashboard = makeDashboard({ issueUrl: null });
+    const tracker: Tracker = {
+      name: "mock",
+      getIssue: vi
+        .fn()
+        .mockResolvedValue({
+          id: "1",
+          title: "",
+          description: "",
+          url: "",
+          state: "open",
+          labels: [],
+        }),
+      isCompleted: vi.fn().mockResolvedValue(false),
+      issueUrl: vi.fn(),
+      issueLabel: vi.fn(),
+      branchName: vi.fn(),
+      generatePrompt: vi.fn().mockResolvedValue(""),
+    };
+
+    enrichSessionIssue(dashboard, tracker, makeProject());
+    expect(dashboard.issueLabel).toBeNull();
+    expect(tracker.issueLabel).not.toHaveBeenCalled();
   });
 });
 

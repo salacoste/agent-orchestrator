@@ -55,9 +55,7 @@ export function sessionToDashboard(session: Session): DashboardSession {
     issueLabel: null, // Will be enriched by enrichSessionIssue()
     issueTitle: null, // Will be enriched by enrichSessionIssueTitle()
     summary,
-    summaryIsFallback: agentSummary
-      ? (session.agentInfo?.summaryIsFallback ?? false)
-      : false,
+    summaryIsFallback: agentSummary ? (session.agentInfo?.summaryIsFallback ?? false) : false,
     createdAt: session.createdAt.toISOString(),
     lastActivityAt: session.lastActivityAt.toISOString(),
     pr: session.pr ? basicPRToDashboard(session.pr) : null,
@@ -252,6 +250,24 @@ export async function enrichSessionPR(
   return true;
 }
 
+/**
+ * Extract a human-readable label from an issue URL.
+ * For file:// URLs (BMad), strips the "story-" prefix and ".md" extension
+ * so "file:///path/to/story-1-1-auth.md" → "1-1-auth".
+ * For HTTP URLs, returns the last path segment (e.g. "#123").
+ */
+function extractLabelFromUrl(url: string): string {
+  const parts = url.split("/");
+  const last = parts[parts.length - 1] || url;
+
+  // BMad file:// URLs: story-{id}.md → {id}
+  if (url.startsWith("file://")) {
+    return last.replace(/^story-/, "").replace(/\.md$/, "") || last;
+  }
+
+  return last;
+}
+
 /** Enrich a DashboardSession's issue label using the tracker plugin. */
 export function enrichSessionIssue(
   dashboard: DashboardSession,
@@ -266,13 +282,11 @@ export function enrichSessionIssue(
       dashboard.issueLabel = tracker.issueLabel(dashboard.issueUrl, project);
     } catch {
       // If extraction fails, fall back to extracting from URL manually
-      const parts = dashboard.issueUrl.split("/");
-      dashboard.issueLabel = parts[parts.length - 1] || dashboard.issueUrl;
+      dashboard.issueLabel = extractLabelFromUrl(dashboard.issueUrl);
     }
   } else {
     // Fallback if tracker doesn't implement issueLabel method
-    const parts = dashboard.issueUrl.split("/");
-    dashboard.issueLabel = parts[parts.length - 1] || dashboard.issueUrl;
+    dashboard.issueLabel = extractLabelFromUrl(dashboard.issueUrl);
   }
 }
 
@@ -319,7 +333,7 @@ export async function enrichSessionIssueTitle(
 
   try {
     // Strip "#" prefix from GitHub-style labels to get the identifier
-    const identifier = dashboard.issueLabel.replace(/^#/, "");
+    const identifier = (dashboard.issueLabel ?? "").replace(/^#/, "");
     const issue = await tracker.getIssue(identifier, project);
     if (issue.title) {
       dashboard.issueTitle = issue.title;

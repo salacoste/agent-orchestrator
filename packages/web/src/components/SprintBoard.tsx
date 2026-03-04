@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import type { BmadColumn } from "@composio/ao-plugin-tracker-bmad";
 import { BurndownChart } from "./BurndownChart";
+import { CreateStoryForm } from "./CreateStoryForm";
 import { CycleTimeChart } from "./CycleTimeChart";
 import { EpicProgress, type EpicSummary } from "./EpicProgress";
 import { HealthIndicators } from "./HealthIndicators";
@@ -48,7 +49,9 @@ export function SprintBoard({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [showBurndown, setShowBurndown] = useState(false);
   const [showMetrics, setShowMetrics] = useState(false);
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const [activeEpic, setActiveEpic] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,7 +87,7 @@ export function SprintBoard({ projectId }: { projectId: string }) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [projectId]);
+  }, [projectId, refreshKey]);
 
   if (loading) {
     return <div className="text-[var(--color-text-muted)] text-sm p-4">Loading sprint data...</div>;
@@ -241,6 +244,30 @@ export function SprintBoard({ projectId }: { projectId: string }) {
         {showMetrics && (
           <div className="px-4 pb-4">
             <CycleTimeChart projectId={projectId} />
+          </div>
+        )}
+      </div>
+
+      {/* Create Story — collapsible */}
+      <div className="rounded-[6px] border border-[var(--color-border-default)] bg-[var(--color-bg-surface)]">
+        <button
+          onClick={() => setShowCreateForm((prev) => !prev)}
+          aria-expanded={showCreateForm}
+          className="w-full flex items-center justify-between px-4 py-3 text-[12px] font-semibold text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)]"
+        >
+          <span>Create Story</span>
+          <span className="text-[10px] text-[var(--color-text-muted)]">
+            {showCreateForm ? "Hide" : "Show"}
+          </span>
+        </button>
+        {showCreateForm && (
+          <div className="px-4 pb-4">
+            <CreateStoryForm
+              projectId={projectId}
+              onCreated={() => {
+                setRefreshKey((k) => k + 1);
+              }}
+            />
           </div>
         )}
       </div>

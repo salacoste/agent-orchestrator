@@ -48,8 +48,8 @@ development_status:
   1-4-cli-view-story-agent-status: done
   1-5-cli-manual-story-assignment: done
   1-6-agent-completion-detection: review
-  1-7-cli-resume-blocked-story: ready-for-dev
-  1-8-cli-fleet-monitoring-table: ready-for-dev
+  1-7-cli-resume-blocked-story: done
+  1-8-cli-fleet-monitoring-table: done
   epic-1-retrospective: optional
 
   # Epic 2: Event Bus & State Synchronization

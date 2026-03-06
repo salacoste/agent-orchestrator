@@ -468,10 +468,13 @@ export interface Tracker {
   onPRMerge?(issueId: string, prUrl: string | undefined, project: ProjectConfig): Promise<void>;
 
   /** Optional: handle session death — reset story status if appropriate */
-  onSessionDeath?(issueId: string, project: ProjectConfig): Promise<void>;
+  onSessionDeath?(issueId: string, project: ProjectConfig, sessionId?: string): Promise<void>;
 
   /** Optional: get health/sprint notifications as OrchestratorEvents */
   getNotifications?(project: ProjectConfig): Promise<OrchestratorEvent[]>;
+
+  /** Optional: resolve a human-readable title for an epic identifier */
+  getEpicTitle?(epicId: string, project: ProjectConfig): string;
 }
 
 export interface IssueValidationResult {
@@ -1006,6 +1009,11 @@ export interface SessionMetadata {
   dashboardPort?: number;
   terminalWsPort?: number;
   directTerminalWsPort?: number;
+  // Agent failure/crash details for resume functionality
+  exitCode?: number; // Exit code when agent failed
+  signal?: string; // Signal that terminated the agent (e.g., "SIGSEGV", "SIGTERM")
+  failureReason?: string; // "failed", "crashed", "timed_out", "disconnected"
+  previousLogsPath?: string; // Path to previous session logs for inspection
 }
 
 // =============================================================================
@@ -1119,4 +1127,380 @@ export class WorkspaceMissingError extends Error {
     super(`Workspace missing at ${path}${detail ? `: ${detail}` : ""}`);
     this.name = "WorkspaceMissingError";
   }
+}
+
+// =============================================================================
+// AGENT REGISTRY — Story assignment tracking
+// =============================================================================
+
+/**
+ * Agent lifecycle and assignment status.
+ * Tracks which agents are working on which stories.
+ */
+export type AgentStatus =
+  | "spawning" // Session starting up
+  | "active" // Agent is working
+  | "idle" // No activity for threshold period
+  | "completed" // Story done
+  | "blocked" // Error requiring human intervention
+  | "disconnected"; // Session/killed
+
+/** Agent status constants */
+export const AGENT_STATUS = {
+  SPAWNING: "spawning" as const,
+  ACTIVE: "active" as const,
+  IDLE: "idle" as const,
+  COMPLETED: "completed" as const,
+  BLOCKED: "blocked" as const,
+  DISCONNECTED: "disconnected" as const,
+} satisfies Record<string, AgentStatus>;
+
+/**
+ * Agent assignment record - tracks which agent is working on which story.
+ * Stored in session metadata for persistence across restarts.
+ */
+export interface AgentAssignment {
+  /** Agent ID (typically the session ID) */
+  agentId: string;
+  /** Story ID from sprint-status.yaml (e.g., "1-2-cli-spawn-agent") */
+  storyId: string;
+  /** When the agent was assigned to this story */
+  assignedAt: Date;
+  /** Current agent status */
+  status: AgentStatus;
+  /** SHA-256 hash of story context (for conflict detection) */
+  contextHash: string;
+}
+
+/**
+ * Agent registry - manages agent-to-story assignments.
+ * Provides fast lookups with in-memory caching and persistent storage.
+ */
+export interface AgentRegistry {
+  /**
+   * Register an agent assignment.
+   * Creates or updates the assignment record in memory and storage.
+   */
+  register(assignment: AgentAssignment): void;
+
+  /**
+   * Query by agent ID.
+   * Returns the assignment if the agent exists, null otherwise.
+   */
+  getByAgent(agentId: string): AgentAssignment | null;
+
+  /**
+   * Query by story ID.
+   * Returns the most recent assignment for this story.
+   */
+  getByStory(storyId: string): AgentAssignment | null;
+
+  /**
+   * Find active assignment for a story.
+   * Used for duplicate assignment detection.
+   */
+  findActiveByStory(storyId: string): AgentAssignment | null;
+
+  /**
+   * List all assignments.
+   */
+  list(): AgentAssignment[];
+
+  /**
+   * Remove an assignment (when agent completes or errors).
+   */
+  remove(agentId: string): void;
+
+  /**
+   * Get zombie/disconnected agents.
+   * Returns agents with status=disconnected for cleanup.
+   */
+  getZombies(): AgentAssignment[];
+
+  /**
+   * Reload from persistent storage.
+   * Refreshes in-memory cache from disk metadata.
+   */
+  reload(): Promise<void>;
+
+  /**
+   * Get retry count for a story.
+   * Returns the number of times the story has been resumed.
+   */
+  getRetryCount(storyId: string): number;
+
+  /**
+   * Increment retry count and track history.
+   * Called when resuming a story with a new agent.
+   */
+  incrementRetry(storyId: string, newAgentId: string): void;
+
+  /**
+   * Get retry history for a story.
+   */
+  getRetryHistory(
+    storyId: string,
+  ): { attempts: number; lastRetryAt: Date; previousAgents: string[] } | null;
+}
+
+/**
+ * Agent completion detector interfaces
+ */
+
+export interface AgentCompletionDetector {
+  /** Start monitoring agent for completion */
+  monitor(agentId: string): Promise<void>;
+
+  /** Stop monitoring agent */
+  unmonitor(agentId: string): Promise<void>;
+
+  /** Get detection status for agent */
+  getStatus(agentId: string): DetectionStatus | null;
+
+  /** Set completion handler callback */
+  onCompletion(handler: CompletionHandler): void;
+
+  /** Set failure handler callback */
+  onFailure(handler: FailureHandler): void;
+}
+
+export interface DetectionStatus {
+  agentId: string;
+  isMonitoring: boolean;
+  startTime: Date;
+  lastCheck: Date;
+  status: "monitoring" | "completed" | "failed" | "crashed" | "timed_out" | "disconnected";
+}
+
+export type CompletionHandler = (event: CompletionEvent) => void | Promise<void>;
+export type FailureHandler = (event: FailureEvent) => void | Promise<void>;
+
+export interface CompletionEvent {
+  agentId: string;
+  storyId: string;
+  exitCode: number;
+  duration: number; // milliseconds
+  completedAt: Date;
+}
+
+export interface FailureEvent {
+  agentId: string;
+  storyId: string;
+  exitCode?: number;
+  signal?: string;
+  reason: "failed" | "crashed" | "timed_out" | "disconnected";
+  failedAt: Date;
+  duration: number; // milliseconds
+  errorContext?: string;
+}
+
+// =============================================================================
+// EVENT BUS — Plugin Slot 9 (planned)
+// =============================================================================
+
+/**
+ * Event bus for pub/sub messaging across processes.
+ * Enables real-time state synchronization between orchestrator instances.
+ */
+export interface EventBus {
+  /** Event bus plugin name */
+  readonly name: string;
+
+  /** Publish an event to the bus */
+  publish(event: Omit<EventBusEvent, "eventId" | "timestamp">): Promise<void>;
+
+  /** Subscribe to all events */
+  subscribe(callback: EventSubscriber): Promise<() => void>;
+
+  /** Check if connected to backend */
+  isConnected(): boolean;
+
+  /** Check if operating in degraded mode */
+  isDegraded(): boolean;
+
+  /** Get number of queued events */
+  getQueueSize(): number;
+
+  /** Close event bus connection */
+  close(): Promise<void>;
+}
+
+export interface EventBusEvent {
+  /** Unique event identifier (UUID) */
+  eventId: string;
+  /** Event type identifier */
+  eventType: string;
+  /** ISO 8601 timestamp */
+  timestamp: string;
+  /** Event metadata payload */
+  metadata: Record<string, unknown>;
+}
+
+export type EventSubscriber = (event: EventBusEvent) => void;
+
+/** Event handler function with optional acknowledgment callback */
+export type EventHandler = (
+  event: EventBusEvent,
+  ack?: () => Promise<void>,
+) => void | Promise<void>;
+
+/** Event bus callback function (internal) */
+export type EventBusCallback = (event: EventBusEvent) => void | Promise<void>;
+
+export interface EventBusConfig {
+  /** Redis connection host */
+  host: string;
+  /** Redis connection port */
+  port: number;
+  /** Redis database number */
+  db?: number;
+  /** Redis password */
+  password?: string;
+  /** Pub/Sub channel name */
+  channel?: string;
+  /** Retry delays in milliseconds (exponential backoff) */
+  retryDelays?: number[];
+  /** Maximum queue size for disconnected mode */
+  queueMaxSize?: number;
+  /** Enable AOF persistence for durability */
+  enableAOF?: boolean;
+}
+
+/**
+ * Event publisher for broadcasting story state changes.
+ * Ensures all subscribers are notified of agent activities.
+ */
+export interface EventPublisher {
+  /** Publish story completed event */
+  publishStoryCompleted(params: StoryCompletedEvent): Promise<void>;
+
+  /** Publish story started event */
+  publishStoryStarted(params: StoryStartedEvent): Promise<void>;
+
+  /** Publish story blocked event */
+  publishStoryBlocked(params: StoryBlockedEvent): Promise<void>;
+
+  /** Publish story assigned event */
+  publishStoryAssigned(params: StoryAssignedEvent): Promise<void>;
+
+  /** Publish agent resumed event */
+  publishAgentResumed(params: AgentResumedEvent): Promise<void>;
+
+  /** Flush queued events */
+  flush(): Promise<void>;
+
+  /** Get queue size */
+  getQueueSize(): number;
+
+  /** Close publisher and cleanup resources */
+  close(): Promise<void>;
+}
+
+export interface StoryCompletedEvent {
+  storyId: string;
+  previousStatus: string;
+  newStatus: string;
+  agentId: string;
+  duration: number; // milliseconds
+  filesModified?: string[];
+  testsPassed?: number;
+  testsFailed?: number;
+}
+
+export interface StoryStartedEvent {
+  storyId: string;
+  agentId: string;
+  contextHash: string;
+}
+
+export interface StoryBlockedEvent {
+  storyId: string;
+  agentId?: string;
+  reason: string;
+  exitCode?: number;
+  signal?: string;
+  errorContext?: string;
+}
+
+export interface StoryAssignedEvent {
+  storyId: string;
+  agentId: string;
+  previousAgentId?: string;
+  reason: "manual" | "auto";
+}
+
+export interface AgentResumedEvent {
+  storyId: string;
+  previousAgentId: string;
+  newAgentId: string;
+  retryCount: number;
+  userMessage?: string;
+}
+
+// =============================================================================
+// AUDIT TRAIL
+// =============================================================================
+
+/** Audit event logged to JSONL file */
+export interface AuditEvent {
+  eventId: string; // UUID
+  eventType: string;
+  timestamp: string; // ISO 8601
+  metadata: Record<string, unknown>;
+  hash: string; // SHA-256
+}
+
+/** Query parameters for audit trail */
+export interface QueryParams {
+  eventType?: string | string[];
+  since?: Date | string;
+  until?: Date | string;
+  last?: number;
+  first?: number;
+  grep?: string;
+  includeArchived?: boolean;
+}
+
+/** Export parameters for audit trail */
+export interface ExportParams {
+  format?: "jsonl" | "json";
+  includeArchived?: boolean;
+  validateHashes?: boolean;
+}
+
+/** Handler for replaying audit events */
+export type ReplayHandler = (event: AuditEvent) => void | Promise<void>;
+
+/** Audit trail statistics */
+export interface AuditTrailStats {
+  totalEvents: number;
+  activeEvents: number;
+  archivedEvents: number;
+  fileSize: number;
+  oldestEvent?: string;
+  newestEvent?: string;
+}
+
+/** Audit trail service interface */
+export interface AuditTrail {
+  // Log an event to the audit trail
+  log(event: AuditEvent): Promise<void>;
+
+  // Query events with filters
+  query(params: QueryParams): AuditEvent[];
+
+  // Export events to file
+  export(path: string, params?: ExportParams): Promise<void>;
+
+  // Replay events for state recovery
+  replay(handler: ReplayHandler): Promise<void>;
+
+  // Get trail statistics
+  getStats(): AuditTrailStats;
+
+  // Close and flush
+  close(): Promise<void>;
+
+  // Wait for initialization to complete
+  ready(): Promise<void>;
 }

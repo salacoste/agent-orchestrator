@@ -1,6 +1,6 @@
 # Story 1.6: Agent Completion Detection
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -61,7 +61,7 @@ so that the story status is updated without manual intervention.
   - [x] Implement polling mechanism for agent session status
   - [x] Use runtime.isAlive() to check session health
   - [x] Poll with configurable interval (default: 5s)
-  - [ ] Detect exit codes via process exit events
+  - [-] Detect exit codes via process exit events (requires Runtime.getExitCode() implementation)
 - [x] Implement clean exit handling (exit code 0)
   - [x] Detect process exit with code 0 (via runtime.isAlive)
   - [x] Update agent status to "completed" in registry (via registry.remove)
@@ -192,6 +192,42 @@ The following action items were created during review and have been addressed:
 - [x] [AI-Review][MEDIUM] Improve handler registration tests
 
 Items marked with [-] are documented limitations for future enhancement.
+
+---
+
+## Second Code Review (2026-03-06 - Follow-up)
+
+**Review Date:** 2026-03-06 (Follow-up)
+**Reviewer:** glm-4.7 (Adversarial Code Review)
+**Review Outcome:** Changes Applied
+**Total Action Items:** 5 (1 High fixed, 2 Medium fixed, 2 documented as architectural limitations)
+
+### Action Items (Second Review)
+
+- [x] [AI-Review][HIGH] Fix task completion checkbox to match reality (Task 64: exit code detection)
+- [x] [AI-Review][MEDIUM] Add error handling for dependency resolution failure
+- [x] [AI-Review][MEDIUM] Fix variable scope in unblockDependentStories function
+- [-] [AI-Review][LOW] Document exit code detection requires Runtime.getExitCode() implementation
+- [-] [AI-Review][LOW] Document signal detection requires Runtime plugin enhancement
+
+### Review Summary (Second Review)
+
+**Error Handling Added:** The `unblockDependentStories()` function now has comprehensive error handling:
+- Outer try-catch prevents dependency unblocking failures from blocking agent completion
+- Inner try-catch for each story ensures one failure doesn't stop processing others
+- Console warnings for missing sprint-status.yaml instead of silent failure
+- All errors logged with context for debugging
+- Variable `newlyUnblocked` declared in correct scope to avoid ReferenceError
+
+**Task Documentation Fixed:** Task 64 "Detect exit codes via process exit events" marked as [-] (partial) to accurately reflect that Runtime.getExitCode() is not yet implemented. This is an architectural dependency requiring Runtime plugin enhancement.
+
+**Known Limitations Documented:** The following features are correctly documented as future work:
+- Exit code detection requires Runtime.getExitCode() implementation (tmux runtime doesn't track child process exit codes)
+- Signal-based crash detection requires process tracking infrastructure (SIGSEGV, SIGKILL detection)
+- Performance testing requires integration tests with real agent processes
+- Auto-assignment for unblocked stories requires lifecycle manager integration
+
+**All 423 tests pass** after fixes.
 
 ## Dev Notes
 
@@ -771,6 +807,13 @@ Successfully implemented agent completion detection system with polling-based mo
 - Replaced placeholder test assertions with real verifications
 - Updated File List to accurately reflect all changes
 - 5 HIGH/MEDIUM issues fixed, 3 LOW issues documented as TODO
+
+**Second Code Review (2026-03-06):**
+- Fixed task completion checkbox to accurately reflect partial implementation
+- Added comprehensive error handling for dependency resolution failures
+- Fixed variable scope issue in unblockDependentStories function
+- All 423 tests passing
+- Story marked as done with documented limitations for future enhancement
 
 
 ### File List

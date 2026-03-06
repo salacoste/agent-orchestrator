@@ -24,6 +24,8 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { parse, stringify } from "yaml";
+import { updateMetadata, getSessionsDir, type SessionId } from "./metadata.js";
+import { captureTmuxSessionLogs, getLogFilePath, storeLogPathInMetadata } from "./log-capture.js";
 
 /**
  * Log an event to the JSONL audit trail
@@ -172,30 +174,51 @@ async function unblockDependentStories(
   auditDir: string,
   notifier?: Notifier,
 ): Promise<string[]> {
-  const sprintStatus = loadSprintStatus(projectPath);
-  if (!sprintStatus) {
-    return [];
-  }
-
   const newlyUnblocked: string[] = [];
-  const dependents = findDependentStories(sprintStatus, completedStoryId);
 
-  for (const storyId of dependents) {
-    if (areDependenciesSatisfied(storyId, sprintStatus)) {
-      // Update status to ready-for-dev
-      if (updateSprintStatus(projectPath, storyId, "ready-for-dev")) {
-        newlyUnblocked.push(storyId);
+  try {
+    const sprintStatus = loadSprintStatus(projectPath);
+    if (!sprintStatus) {
+      // No sprint status file - log warning but don't block completion
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[completion-handlers] No sprint-status.yaml found, skipping dependency unblocking for ${completedStoryId}`,
+      );
+      return [];
+    }
 
-        // Log unblocking event
-        logAuditEvent(auditDir, {
-          timestamp: new Date().toISOString(),
-          event_type: "story_unblocked",
-          agent_id: "",
-          story_id: storyId,
-          unblocked_by: completedStoryId,
-        });
+    const dependents = findDependentStories(sprintStatus, completedStoryId);
+
+    for (const storyId of dependents) {
+      try {
+        if (areDependenciesSatisfied(storyId, sprintStatus)) {
+          // Update status to ready-for-dev
+          if (updateSprintStatus(projectPath, storyId, "ready-for-dev")) {
+            newlyUnblocked.push(storyId);
+
+            // Log unblocking event
+            logAuditEvent(auditDir, {
+              timestamp: new Date().toISOString(),
+              event_type: "story_unblocked",
+              agent_id: "",
+              story_id: storyId,
+              unblocked_by: completedStoryId,
+            });
+          }
+        }
+      } catch (err) {
+        // Log error for specific story but continue processing others
+        // eslint-disable-next-line no-console
+        console.error(`[completion-handlers] Failed to unblock story ${storyId}:`, err);
       }
     }
+  } catch (err) {
+    // Log error for dependency unblocking but don't block completion
+    // eslint-disable-next-line no-console
+    console.error(
+      `[completion-handlers] Dependency unblocking failed for ${completedStoryId}:`,
+      err,
+    );
   }
 
   // Send notification if stories were unblocked
@@ -225,10 +248,19 @@ async function unblockDependentStories(
 export function createCompletionHandler(
   registry: AgentRegistry,
   projectPath: string,
+  configPath: string,
   auditDir: string,
   notifier?: Notifier,
 ): CompletionHandler {
   return async (event: CompletionEvent) => {
+    // Capture session logs before completion
+    const sessionsDir = getSessionsDir(configPath, projectPath);
+    const logPath = getLogFilePath(sessionsDir, event.agentId);
+    await captureTmuxSessionLogs(event.agentId, logPath);
+
+    // Store log path in metadata
+    await storeLogPathInMetadata(sessionsDir, event.agentId, logPath);
+
     // Update agent status in registry
     const assignment = registry.getByAgent(event.agentId);
     if (assignment) {
@@ -260,10 +292,19 @@ export function createCompletionHandler(
 export function createFailureHandler(
   registry: AgentRegistry,
   projectPath: string,
+  configPath: string,
   auditDir: string,
   notifier?: Notifier,
 ): FailureHandler {
   return async (event: FailureEvent) => {
+    // Capture session logs before failure (if tmux session still exists)
+    const sessionsDir = getSessionsDir(configPath, projectPath);
+    const logPath = getLogFilePath(sessionsDir, event.agentId);
+    await captureTmuxSessionLogs(event.agentId, logPath);
+
+    // Store log path in metadata along with crash details
+    await storeLogPathInMetadata(sessionsDir, event.agentId, logPath);
+
     // Update agent status in registry
     const assignment = registry.getByAgent(event.agentId);
     if (assignment) {
@@ -275,6 +316,13 @@ export function createFailureHandler(
     if (event.reason !== "disconnected") {
       updateSprintStatus(projectPath, event.storyId, "blocked");
     }
+
+    // Store crash details in agent's session metadata for resume functionality
+    updateMetadata(sessionsDir, event.agentId as SessionId, {
+      exitCode: event.exitCode,
+      signal: event.signal ?? "",
+      failureReason: event.reason,
+    });
 
     // Log failure event
     logAuditEvent(auditDir, {

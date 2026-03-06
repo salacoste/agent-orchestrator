@@ -6,14 +6,34 @@ import {
   updateSprintStatus,
   formatFailureReason,
 } from "../src/completion-handlers.js";
-import type { AgentRegistry, Notifier } from "../src/types.js";
+import type { AgentRegistry, Notifier, CompletionEvent, FailureEvent } from "../src/types.js";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
+
+// Mock metadata functions that require actual files
+vi.mock("../src/metadata.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/metadata.js")>();
+  return {
+    ...actual,
+    updateMetadata: vi.fn(),
+    readMetadata: vi.fn(),
+  };
+});
+
+// Mock getSessionsDir to avoid realpathSync on non-existent files
+vi.mock("../src/paths.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/paths.js")>();
+  return {
+    ...actual,
+    getSessionsDir: vi.fn(() => "/tmp/test-sessions"),
+  };
+});
 
 describe("Completion Handlers", () => {
   let mockRegistry: AgentRegistry;
   let mockNotifier: Notifier;
   let projectPath: string;
+  let configPath: string;
   let auditDir: string;
 
   const testAssignment = {
@@ -29,6 +49,7 @@ describe("Completion Handlers", () => {
 
     // Setup paths
     projectPath = "/tmp/test-project";
+    configPath = "/tmp/agent-orchestrator.yaml";
     auditDir = join(projectPath, "sessions", "audit");
 
     // Mock registry
@@ -117,7 +138,7 @@ development_status:
 
   describe("createCompletionHandler", () => {
     it("should update registry and sprint status on completion", async () => {
-      const handler = createCompletionHandler(mockRegistry, projectPath, auditDir, mockNotifier);
+      const handler = createCompletionHandler(mockRegistry, projectPath, configPath, auditDir, mockNotifier);
 
       const event: CompletionEvent = {
         agentId: "test-agent-1",
@@ -134,7 +155,7 @@ development_status:
     });
 
     it("should log completion event", async () => {
-      const handler = createCompletionHandler(mockRegistry, projectPath, auditDir);
+      const handler = createCompletionHandler(mockRegistry, projectPath, configPath, auditDir);
 
       const event: CompletionEvent = {
         agentId: "test-agent-1",
@@ -153,7 +174,7 @@ development_status:
 
   describe("createFailureHandler", () => {
     it("should update registry and sprint status on failure", async () => {
-      const handler = createFailureHandler(mockRegistry, projectPath, auditDir, mockNotifier);
+      const handler = createFailureHandler(mockRegistry, projectPath, configPath, auditDir, mockNotifier);
 
       const event: FailureEvent = {
         agentId: "test-agent-1",
@@ -171,7 +192,7 @@ development_status:
     });
 
     it("should send notification on failure", async () => {
-      const handler = createFailureHandler(mockRegistry, projectPath, auditDir, mockNotifier);
+      const handler = createFailureHandler(mockRegistry, projectPath, configPath, auditDir, mockNotifier);
 
       const event: FailureEvent = {
         agentId: "test-agent-1",
@@ -189,7 +210,7 @@ development_status:
     });
 
     it("should not send notification for manual termination", async () => {
-      const handler = createFailureHandler(mockRegistry, projectPath, auditDir, mockNotifier);
+      const handler = createFailureHandler(mockRegistry, projectPath, configPath, auditDir, mockNotifier);
 
       const event: FailureEvent = {
         agentId: "test-agent-1",
@@ -206,7 +227,7 @@ development_status:
     });
 
     it("should send urgent notification for crashes", async () => {
-      const handler = createFailureHandler(mockRegistry, projectPath, auditDir, mockNotifier);
+      const handler = createFailureHandler(mockRegistry, projectPath, configPath, auditDir, mockNotifier);
 
       const event: FailureEvent = {
         agentId: "test-agent-1",

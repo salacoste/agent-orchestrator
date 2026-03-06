@@ -52,6 +52,82 @@ export type { SessionManagerDeps } from "./session-manager.js";
 export { createLifecycleManager } from "./lifecycle-manager.js";
 export type { LifecycleManagerDeps } from "./lifecycle-manager.js";
 
+// Agent Registry — story assignment tracking
+export { getAgentRegistry, computeStoryContextHash } from "./agent-registry.js";
+export type { AgentAssignment, AgentRegistry, AgentStatus } from "./types.js";
+
+// Event Publisher — broadcast story state changes
+export { createEventPublisher } from "./event-publisher.js";
+export type { EventPublisherConfig } from "./event-publisher.js";
+export type {
+  EventPublisher,
+  StoryCompletedEvent,
+  StoryStartedEvent,
+  StoryBlockedEvent,
+  StoryAssignedEvent,
+  AgentResumedEvent,
+} from "./types.js";
+
+// Event Subscription — subscribe to events with pattern matching and retry
+export { createEventSubscription } from "./event-subscription.js";
+export type { EventSubscriptionConfig } from "./event-subscription.js";
+export type { EventHandler, EventBusCallback } from "./types.js";
+export type {
+  DeadLetterEvent,
+  SubscriptionStats,
+  SubscriptionHandle,
+  AckCallback,
+  AckContext,
+  SubscriptionParams,
+} from "./event-subscription.js";
+
+// Audit Trail — append-only JSONL logging for all events
+export { createAuditTrail } from "./audit-trail.js";
+export type { AuditTrailConfig } from "./audit-trail.js";
+export type {
+  AuditTrail,
+  AuditEvent,
+  QueryParams,
+  ExportParams,
+  ReplayHandler,
+  AuditTrailStats,
+} from "./types.js";
+
+// State Manager — write-through cache for sprint status
+export { createStateManager } from "./state-manager.js";
+export type { StateManager, StoryState, SetResult, BatchResult } from "./types.js";
+
+// Agent Completion Detection — monitor and detect agent completion
+export { createAgentCompletionDetector } from "./agent-completion-detector.js";
+export type { AgentCompletionDetectorDeps } from "./agent-completion-detector.js";
+export type {
+  AgentCompletionDetector,
+  DetectionStatus,
+  CompletionEvent,
+  FailureEvent,
+  CompletionHandler,
+  FailureHandler,
+} from "./types.js";
+
+// Completion Handlers — handle agent completion and failure events
+export {
+  createCompletionHandler,
+  createFailureHandler,
+  logAuditEvent,
+  updateSprintStatus,
+  formatFailureReason,
+} from "./completion-handlers.js";
+
+// Log Capture — capture and store agent session logs
+export {
+  captureTmuxSessionLogs,
+  readLastLogLines,
+  storeLogPathInMetadata,
+  getLogFilePath,
+  hasLogFile,
+  deleteLogFile,
+} from "./log-capture.js";
+
 // Prompt builder — layered prompt composition
 export { buildPrompt, BASE_AGENT_PROMPT } from "./prompt-builder.js";
 export type { PromptBuildConfig } from "./prompt-builder.js";

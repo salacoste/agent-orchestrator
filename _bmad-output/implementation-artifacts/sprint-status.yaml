@@ -58,7 +58,7 @@ development_status:
   2-2-event-publishing-service: done
   2-3-event-subscription-service: done
   2-4-jsonl-audit-trail: done
-  2-5-state-manager-write-through-cache: ready-for-dev
+  2-5-state-manager-write-through-cache: review
   2-6-yaml-file-watcher: ready-for-dev
   2-7-conflict-resolution-with-optimistic-locking: ready-for-dev
   2-8-state-sync-to-bmad-tracker: ready-for-dev

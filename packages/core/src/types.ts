@@ -1504,3 +1504,83 @@ export interface AuditTrail {
   // Wait for initialization to complete
   ready(): Promise<void>;
 }
+
+// =============================================================================
+// STATE MANAGER
+// =============================================================================
+
+/** Story status values from sprint-status.yaml */
+export type StoryStatus =
+  | "backlog"
+  | "ready-for-dev"
+  | "in-progress"
+  | "review"
+  | "done"
+  | "blocked";
+
+/** Story state tracked by StateManager */
+export interface StoryState {
+  id: string;
+  status: StoryStatus;
+  title: string;
+  description?: string;
+  acceptanceCriteria?: string[];
+  dependencies?: string[];
+  assignedAgent?: string;
+  version: string;
+  updatedAt: string;
+}
+
+/** Result of a set/update operation */
+export interface SetResult {
+  success: boolean;
+  version: string;
+  conflict?: boolean;
+  error?: string;
+}
+
+/** Result of a batch operation */
+export interface BatchResult {
+  succeeded: string[];
+  failed: Array<{ storyId: string; error: string }>;
+}
+
+/** State manager configuration */
+export interface StateManagerConfig {
+  yamlPath: string; // Path to sprint-status.yaml
+  eventBus?: EventBus; // Optional: for publishing events
+}
+
+/** State manager service interface */
+export interface StateManager {
+  // Initialize state manager (load YAML)
+  initialize(): Promise<void>;
+
+  // Get story state (from cache, ≤1ms)
+  get(storyId: string): StoryState | null;
+
+  // Get all stories (from cache)
+  getAll(): Map<string, StoryState>;
+
+  // Set story state (write-through)
+  set(storyId: string, state: StoryState, expectedVersion?: string): Promise<SetResult>;
+
+  // Update story state (partial update)
+  update(
+    storyId: string,
+    updates: Partial<StoryState>,
+    expectedVersion?: string,
+  ): Promise<SetResult>;
+
+  // Batch update multiple stories
+  batchSet(updates: Map<string, StoryState>): Promise<BatchResult>;
+
+  // Invalidate and reload cache
+  invalidate(): Promise<void>;
+
+  // Get current version
+  getVersion(storyId: string): string | null;
+
+  // Close state manager
+  close(): Promise<void>;
+}

@@ -267,6 +267,36 @@ export function BurndownChart({
     }
   }, [data?.dailyCompletions.length]);
 
+  // Inject CSS for smooth burndown line animation (client-side only, once)
+  useEffect(() => {
+    if (typeof document === "undefined") return; // SSR guard
+
+    const existingStyle = document.getElementById("burndown-chart-styles");
+    if (existingStyle) return; // Already injected
+
+    const style = document.createElement("style");
+    style.id = "burndown-chart-styles";
+    style.textContent = `
+      .burndown-line {
+        vector-effect: non-scaling-stroke;
+        transition: d 0.5s ease-in-out, stroke 0.3s ease;
+      }
+      .burndown-line.animate-update {
+        animation: pulse-line 0.6s ease-out;
+      }
+      @keyframes pulse-line {
+        0% { opacity: 0.7; stroke-width: 2; }
+        50% { opacity: 1; stroke-width: 3; }
+        100% { opacity: 1; stroke-width: 2; }
+      }
+    `;
+    document.head.appendChild(style);
+
+    return () => {
+      // Optional cleanup (not removing to preserve styles for other instances)
+    };
+  }, []); // Empty deps - inject once on mount
+
   if (loading)
     return <div className="text-[var(--color-text-muted)] text-sm p-4">Loading burndown...</div>;
   if (error) return <div className="text-red-400 text-sm p-4">{error}</div>;
@@ -721,25 +751,4 @@ export function BurndownChart({
       </div>
     </div>
   );
-}
-
-// Inject CSS for smooth burndown line animation
-if (typeof document !== "undefined" && !document.getElementById("burndown-chart-styles")) {
-  const style = document.createElement("style");
-  style.id = "burndown-chart-styles";
-  style.textContent = `
-    .burndown-line {
-      vector-effect: non-scaling-stroke;
-      transition: d 0.5s ease-in-out, stroke 0.3s ease;
-    }
-    .burndown-line.animate-update {
-      animation: pulse-line 0.6s ease-out;
-    }
-    @keyframes pulse-line {
-      0% { opacity: 0.7; stroke-width: 2; }
-      50% { opacity: 1; stroke-width: 3; }
-      100% { opacity: 1; stroke-width: 2; }
-    }
-  `;
-  document.head.appendChild(style);
 }

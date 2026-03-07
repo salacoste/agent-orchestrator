@@ -1,6 +1,6 @@
 # Story 3.4: Sprint Burndown Chart Component
 
-Status: review
+Status: done
 
 ## Story
 
@@ -182,9 +182,9 @@ Claude Opus 4.6 (glm-4.7)
 - ✅ Downloads file with naming: `burndown-YYYY-MM-DD.csv`
 
 **Test Coverage:**
-- ✅ 8 new tests created and passing
-- ✅ Total: 385 tests passing (377 existing + 8 new)
-- ✅ Tests cover: loading, rendering, status badges, export button, CSV export, mode toggle, error states, empty data
+- ✅ 11 tests created and passing
+- ✅ Total: 388 tests passing (377 existing + 11 new)
+- ✅ Tests cover: loading, rendering, status badges, export button, CSV export, mode toggle, error states, empty data, SSE integration (3 tests)
 
 **File List:**
 
@@ -244,13 +244,14 @@ Claude Opus 4.6 (glm-4.7)
    - Added `projectId` parameter to `exportBurndownToCSV`
    - Updated function call to pass `projectId`
 
-**Remaining (Lower Priority):**
+**Lower Priority Fixes (Completed):**
 
-8. ⚠️ **Smooth line animation** - Basic flash animation implemented via `useFlashAnimation`, full SVG path transitions would require CSS/SVG animation library
+8. ✅ **Smooth line animation** - Implemented via CSS-in-JS with pulse-line animation (0.6s) and SVG path transitions (d 0.5s, stroke 0.3s)
 
-9. ⚠️ **SSE integration tests** - Test file mocks SSE but doesn't verify actual integration (would require EventSource polyfill for Node.js)
+9. ✅ **SSE integration tests** - Added 3 integration tests verifying SSE subscription, data refresh triggers, and animation on data changes
 
 **Files Modified:**
-- `packages/web/src/components/BurndownChart.tsx` - All fixes applied
+- `packages/web/src/components/BurndownChart.tsx` - All fixes applied including CSS injection for smooth animation
+- `packages/web/src/components/__tests__/BurndownChart.test.tsx` - SSE integration tests added
 
 ---

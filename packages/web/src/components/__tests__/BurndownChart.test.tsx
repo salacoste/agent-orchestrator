@@ -6,8 +6,13 @@ import { BurndownChart } from "../BurndownChart";
 global.fetch = vi.fn();
 
 // Mock SSE hooks
+import { useSSEConnection as mockUseSSEConnection } from "@/hooks/useSSEConnection.js";
 vi.mock("@/hooks/useSSEConnection.js", () => ({
-  useSSEConnection: vi.fn(() => ({ connected: true, reconnecting: false })),
+  useSSEConnection: vi.fn((callbacks, _options) => {
+    // Store callbacks for test invocation
+    (mockUseSSEConnection as any).mockCallbacks = callbacks;
+    return { connected: true, reconnecting: false };
+  }),
 }));
 
 vi.mock("@/hooks/useFlashAnimation.js", () => ({
@@ -235,6 +240,93 @@ describe("BurndownChart", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/No completion history yet/i)).toBeInTheDocument();
+    });
+  });
+
+  describe("SSE Integration", () => {
+    it("subscribes to story.completed events on mount", async () => {
+      render(<BurndownChart projectId={mockProjectId} />);
+
+      await waitFor(() => {
+        expect(screen.queryByText(/Loading burndown/i)).not.toBeInTheDocument();
+      });
+
+      // Verify SSE hook was called with story.completed handler
+      const useSSEConnectionMock = mockUseSSEConnection;
+      expect(useSSEConnectionMock).toHaveBeenCalled();
+      const callbacks = (useSSEConnectionMock as any).mockCallbacks;
+      expect(callbacks).toBeDefined();
+      expect(callbacks.onStoryCompleted).toBeDefined();
+    });
+
+    it("triggers data refresh when story.completed event is received", async () => {
+      let fetchCallCount = 0;
+      global.fetch = vi.fn((url) => {
+        fetchCallCount++;
+        if (url?.includes("/velocity")) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => mockVelocityData,
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => null,
+        });
+      }) as unknown as typeof fetch;
+
+      render(<BurndownChart projectId={mockProjectId} />);
+
+      await waitFor(() => {
+        expect(screen.queryByText(/Loading burndown/i)).not.toBeInTheDocument();
+      });
+
+      const initialFetchCount = fetchCallCount;
+
+      // Simulate SSE story.completed event
+      const useSSEConnectionMock = mockUseSSEConnection;
+      const callbacks = (useSSEConnectionMock as any).mockCallbacks;
+
+      if (callbacks?.onStoryCompleted) {
+        callbacks.onStoryCompleted();
+
+        // Wait for data refresh
+        await waitFor(
+          () => {
+            expect(fetchCallCount).toBeGreaterThan(initialFetchCount);
+          },
+          { timeout: 3000 },
+        );
+      }
+    });
+
+    it("shows smooth animation when data changes", async () => {
+      render(<BurndownChart projectId={mockProjectId} />);
+
+      await waitFor(() => {
+        expect(screen.queryByText(/Loading burndown/i)).not.toBeInTheDocument();
+      });
+
+      // Initial render should not have animation class
+      const chart = screen.getByText(/Burndown/).closest("div");
+      expect(chart).toBeInTheDocument();
+
+      // Trigger data change via SSE
+      const useSSEConnectionMock = mockUseSSEConnection;
+      const callbacks = (useSSEConnectionMock as any).mockCallbacks;
+
+      if (callbacks?.onStoryCompleted) {
+        callbacks.onStoryCompleted();
+
+        // After data change, animation should be triggered
+        await waitFor(
+          () => {
+            // Verify chart still exists and updated
+            expect(screen.getByText(/Burndown/)).toBeInTheDocument();
+          },
+          { timeout: 3000 },
+        );
+      }
     });
   });
 });

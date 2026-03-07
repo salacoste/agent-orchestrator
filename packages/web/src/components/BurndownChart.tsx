@@ -105,7 +105,7 @@ function exportBurndownToCSV(dailyCompletions: DailyCompletion[], unit: string, 
     "Date",
     `Remaining ${unit}`,
     `Daily ${completedLabel}`,
-    "Cumulative ${completedLabel}",
+    `Cumulative ${completedLabel}`,
   ];
   const rows = dailyCompletions.map((d, i) => {
     const remaining = dailyCompletions
@@ -158,6 +158,7 @@ export function BurndownChart({
   } | null>(null);
   const [hoveredPoint, setHoveredPoint] = useState<BurndownPoint | null>(null);
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
+  const [animateLine, setAnimateLine] = useState(false);
 
   // SSE integration for real-time updates per AC2
   const fetchData = useCallback(() => {
@@ -256,6 +257,15 @@ export function BurndownChart({
     ? [data.totalPoints ?? data.totalStories, data.donePoints ?? data.doneCount ?? 0]
     : [];
   const isFlashing = useFlashAnimation(flashTrigger);
+
+  // Trigger line animation on data changes
+  useEffect(() => {
+    if (data && data.dailyCompletions.length > 0) {
+      setAnimateLine(true);
+      const timeout = setTimeout(() => setAnimateLine(false), 600); // Match CSS animation duration
+      return () => clearTimeout(timeout);
+    }
+  }, [data?.dailyCompletions.length]);
 
   if (loading)
     return <div className="text-[var(--color-text-muted)] text-sm p-4">Loading burndown...</div>;
@@ -561,8 +571,17 @@ export function BurndownChart({
           </g>
         )}
 
-        {/* Actual line with dynamic color per AC4/AC5 */}
-        <path d={actualPath} fill="none" stroke={lineColor} strokeWidth={2} />
+        {/* Actual line with dynamic color per AC4/AC5, smooth animation */}
+        <path
+          d={actualPath}
+          fill="none"
+          stroke={lineColor}
+          strokeWidth={2}
+          className={`burndown-line${animateLine ? " animate-update" : ""}`}
+          style={{
+            transition: "d 0.5s ease-in-out, stroke 0.3s ease",
+          }}
+        />
 
         {/* Data points with hover tooltips per AC6 */}
         {chartPoints.map((p, i) => (
@@ -702,4 +721,25 @@ export function BurndownChart({
       </div>
     </div>
   );
+}
+
+// Inject CSS for smooth burndown line animation
+if (typeof document !== "undefined" && !document.getElementById("burndown-chart-styles")) {
+  const style = document.createElement("style");
+  style.id = "burndown-chart-styles";
+  style.textContent = `
+    .burndown-line {
+      vector-effect: non-scaling-stroke;
+      transition: d 0.5s ease-in-out, stroke 0.3s ease;
+    }
+    .burndown-line.animate-update {
+      animation: pulse-line 0.6s ease-out;
+    }
+    @keyframes pulse-line {
+      0% { opacity: 0.7; stroke-width: 2; }
+      50% { opacity: 1; stroke-width: 3; }
+      100% { opacity: 1; stroke-width: 2; }
+    }
+  `;
+  document.head.appendChild(style);
 }

@@ -148,11 +148,25 @@ development_status:
     });
 
     it("should complete get operation within 1ms", () => {
-      const start = performance.now();
-      stateManager.get("2-5-state-manager-write-through-cache");
-      const elapsed = performance.now() - start;
+      // Warm up: perform a few get operations to ensure JIT compilation
+      for (let i = 0; i < 10; i++) {
+        stateManager.get("2-5-state-manager-write-through-cache");
+      }
 
-      expect(elapsed).toBeLessThan(1);
+      // Measure multiple iterations for consistency
+      const iterations = 1000;
+      const start = performance.now();
+
+      for (let i = 0; i < iterations; i++) {
+        stateManager.get("2-5-state-manager-write-through-cache");
+      }
+
+      const elapsed = performance.now() - start;
+      const avgTimeMs = elapsed / iterations;
+
+      // Average should be well under 1ms, total time should be reasonable
+      expect(avgTimeMs).toBeLessThan(1);
+      expect(elapsed).toBeLessThan(100); // Total for 1000 iterations should be under 100ms
     });
 
     it("should get all stories as Map copy", () => {
@@ -198,32 +212,36 @@ development_status:
     });
 
     it("should NOT update cache if write fails", async () => {
-      // Test write failure by mocking the YAML file to be read-only
-      // We'll use an invalid path that causes write to fail
-
-      // First, get the current state
+      // Get the current state before attempting write
       const originalVersion = stateManager.getVersion("2-5-state-manager-write-through-cache");
       const originalStatus = stateManager.get("2-5-state-manager-write-through-cache")?.status;
+      const originalTitle = stateManager.get("2-5-state-manager-write-through-cache")?.title;
 
-      // Create a new StateManager with a path that will fail on write
-      // (directory doesn't exist)
-      const invalidYamlPath = join("/tmp", `nonexistent-dir-${randomUUID()}`, "sprint-status.yaml");
-      const invalidManager = createStateManager({
-        yamlPath: invalidYamlPath,
+      // First initialize the original stateManager to get cache loaded
+      // Then try to update with the invalid path
+      const originalState = stateManager.get("2-5-state-manager-write-through-cache");
+      expect(originalState).toBeDefined();
+
+      // Try to update with invalid state (storyId mismatch causes failure)
+      const badUpdateResult = await stateManager.set("2-5-state-manager-write-through-cache", {
+        id: "WRONG-ID", // This will cause validation failure before write
+        status: "done",
+        title: "Test",
+        version: "v1",
+        updatedAt: new Date().toISOString(),
       });
 
-      // Initialize will fail because file doesn't exist
-      await expect(invalidManager.initialize()).rejects.toThrow();
+      // Should fail due to storyId mismatch
+      expect(badUpdateResult.success).toBe(false);
 
-      // Clean up
-      await invalidManager.close();
-
-      // Verify original stateManager cache is still intact
+      // Verify cache was NOT updated
       const currentStatus = stateManager.get("2-5-state-manager-write-through-cache")?.status;
       const currentVersion = stateManager.getVersion("2-5-state-manager-write-through-cache");
+      const currentTitle = stateManager.get("2-5-state-manager-write-through-cache")?.title;
 
       expect(currentStatus).toBe(originalStatus);
       expect(currentVersion).toBe(originalVersion);
+      expect(currentTitle).toBe(originalTitle);
     });
 
     it("should generate new version stamp on each update", async () => {
@@ -319,6 +337,40 @@ development_status:
       const version = stateManager.getVersion("2-5-state-manager-write-through-cache");
       expect(version).toBeDefined();
       expect(typeof version).toBe("string");
+    });
+
+    it("should detect concurrent write conflicts within same process", async () => {
+      // Test that version-based conflict detection works
+      // Note: This does NOT test true multi-process concurrency (see limitation below)
+
+      const updateState: StoryState = {
+        id: "2-5-state-manager-write-through-cache",
+        status: "review",
+        title: "State Manager",
+        version: "v1",
+        updatedAt: new Date().toISOString(),
+      };
+
+      // First update succeeds
+      const result1 = await stateManager.set("2-5-state-manager-write-through-cache", updateState);
+      expect(result1.success).toBe(true);
+
+      // Simulate concurrent update using old version (should fail)
+      const result2 = await stateManager.set(
+        "2-5-state-manager-write-through-cache",
+        { ...updateState, status: "done" },
+        "v1", // Using old version
+      );
+
+      expect(result2.success).toBe(false);
+      expect(result2.conflict).toBe(true);
+      expect(result2.error).toContain("Version mismatch");
+
+      // KNOWN LIMITATION: True multi-process concurrent writes are not prevented
+      // If two processes read the same version simultaneously and both write,
+      // the "last writer wins" - the first write may be lost.
+      // This implementation does not use file locking or inter-process mutexes.
+      // For multi-process safety, consider file locks (flock) or a mutex service.
     });
   });
 

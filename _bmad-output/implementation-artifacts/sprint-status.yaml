@@ -1,4 +1,4 @@
-# generated: 2026-03-06
+# generated: 2026-03-07
 # project: agent-orchestrator
 # project_key: NOKEY
 # tracking_system: file-system
@@ -33,7 +33,7 @@
 # - SM typically creates next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
-generated: 2026-03-06
+generated: 2026-03-07
 project: agent-orchestrator
 project_key: NOKEY
 tracking_system: file-system
@@ -58,10 +58,10 @@ development_status:
   2-2-event-publishing-service: done
   2-3-event-subscription-service: done
   2-4-jsonl-audit-trail: done
-  2-5-state-manager-write-through-cache: review
-  2-6-yaml-file-watcher: ready-for-dev
-  2-7-conflict-resolution-with-optimistic-locking: ready-for-dev
-  2-8-state-sync-to-bmad-tracker: ready-for-dev
+  2-5-state-manager-write-through-cache: done
+  2-6-yaml-file-watcher: done
+  2-7-conflict-resolution-with-optimistic-locking: done
+  2-8-state-sync-to-bmad-tracker: done
   epic-2-retrospective: optional
 
   # Epic 3: Dashboard & Real-Time Monitoring

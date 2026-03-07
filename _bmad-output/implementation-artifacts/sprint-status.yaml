@@ -66,9 +66,9 @@ development_status:
 
   # Epic 3: Dashboard & Real-Time Monitoring
   epic-3: in-progress
-  3-1-notification-service-core: ready-for-dev
-  3-2-desktop-notification-plugin: ready-for-dev
-  3-3-web-dashboard-foundation: ready-for-dev
+  3-1-notification-service-core: done
+  3-2-desktop-notification-plugin: done
+  3-3-web-dashboard-foundation: done
   3-4-sprint-burndown-chart-component: ready-for-dev
   3-5-fleet-monitoring-matrix: ready-for-dev
   3-6-agent-session-cards-with-activity-history: ready-for-dev

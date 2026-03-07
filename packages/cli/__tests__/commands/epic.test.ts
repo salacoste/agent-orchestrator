@@ -48,11 +48,15 @@ function makeIssue(partial: Partial<Issue> & { id: string; title: string }): Iss
   };
 }
 
-function makeTracker(listIssues = mockListIssues): {
+function makeTracker(
+  listIssues = mockListIssues,
+  getEpicTitle?: (epicId: string) => string,
+): {
   name: string;
   listIssues: typeof mockListIssues;
+  getEpicTitle?: (epicId: string) => string;
 } {
-  return { name: "bmad", listIssues };
+  return { name: "bmad", listIssues, ...(getEpicTitle ? { getEpicTitle } : {}) };
 }
 
 beforeEach(() => {
@@ -233,11 +237,9 @@ describe("epic command", () => {
     expect(parsed.done).toBe(0);
   });
 
-  it("uses epicId as title for non-BMad trackers", async () => {
-    // Override config to use a non-BMad tracker
-    const cfg = mockConfigRef.current as Record<string, unknown>;
-    const projects = cfg.projects as Record<string, Record<string, unknown>>;
-    projects["my-app"].tracker = { plugin: "github" };
+  it("uses epicId as title when tracker lacks getEpicTitle", async () => {
+    // Tracker without getEpicTitle — should fall back to raw epicId
+    mockGetTracker.mockReturnValue({ name: "github", listIssues: mockListIssues });
 
     const issues: Issue[] = [
       makeIssue({ id: "S-1", title: "Story 1", state: "open", labels: ["epic-auth"] }),
@@ -250,8 +252,26 @@ describe("epic command", () => {
     const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("");
     const parsed = JSON.parse(output) as Array<{ id: string; title: string }>;
     expect(parsed).toHaveLength(1);
-    // For non-BMad, title should be the raw epicId (not resolved via readEpicTitle)
+    // Without getEpicTitle, title should be the raw epicId
     expect(parsed[0].title).toBe("epic-auth");
+  });
+
+  it("uses getEpicTitle from tracker when available", async () => {
+    mockGetTracker.mockReturnValue(
+      makeTracker(mockListIssues, (epicId: string) => `Resolved: ${epicId}`),
+    );
+
+    const issues: Issue[] = [
+      makeIssue({ id: "S-1", title: "Story 1", state: "open", labels: ["epic-auth"] }),
+    ];
+    mockListIssues.mockResolvedValue(issues);
+
+    await program.parseAsync(["node", "test", "epic", "--json"]);
+
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("");
+    const parsed = JSON.parse(output) as Array<{ id: string; title: string }>;
+    expect(parsed).toHaveLength(1);
+    expect(parsed[0].title).toBe("Resolved: epic-auth");
   });
 
   it("handles listIssues failure with user-friendly message", async () => {

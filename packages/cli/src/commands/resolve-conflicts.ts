@@ -6,14 +6,66 @@
  */
 
 import chalk from "chalk";
+import { createInterface } from "node:readline";
 import type { Command } from "commander";
 import {
   loadConfig,
   createStateManager,
   createConflictResolver,
   type Conflict,
+  type MergeSelections,
   type Resolution,
 } from "@composio/ao-core";
+
+/**
+ * Interactive conflict resolution with field-by-field prompts
+ */
+async function resolveInteractive(
+  conflict: Conflict,
+  resolver: {
+    resolve(
+      conflict: Conflict,
+      resolution: Resolution,
+    ): Promise<{ success: boolean; newVersion?: string; error?: string }>;
+  },
+): Promise<{ success: boolean; newVersion?: string; error?: string }> {
+  console.log();
+  console.log(chalk.bold(`  Interactive Merge Resolution`));
+  console.log();
+
+  const selections: MergeSelections = {};
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  for (const fieldConflict of conflict.conflicts) {
+    const prompt = `  Field: ${chalk.yellow(fieldConflict.field)}\n  [C]urrent: ${chalk.gray(String(fieldConflict.currentValue))}\n  [P]roposed: ${chalk.green(String(fieldConflict.proposedValue))}\n  Choice (c/p): `;
+
+    const answer = await new Promise<string>((resolve) => {
+      rl.question(prompt, (ans) => {
+        resolve(ans.trim().toLowerCase());
+      });
+    });
+
+    if (answer === "c" || answer === "current") {
+      selections[fieldConflict.field] = "current";
+      console.log(chalk.gray("    → Kept current value"));
+    } else if (answer === "p" || answer === "proposed") {
+      selections[fieldConflict.field] = "proposed";
+      console.log(chalk.green("    → Selected proposed value"));
+    } else {
+      console.log(chalk.yellow("    → Invalid choice, keeping current"));
+      selections[fieldConflict.field] = "current";
+    }
+  }
+
+  rl.close();
+
+  // Use the resolver's mergeInteractive with our selections
+  const result = await resolver.mergeInteractive(conflict, selections);
+  return result;
+}
 
 /**
  * Display conflict details in human-readable format
@@ -203,10 +255,8 @@ export function registerResolveConflicts(program: Command): void {
       displayResolutionOptions();
 
       // Resolve conflict
-      let resolution: Resolution | null = null;
-
       if (opts.auto) {
-        resolution = parseResolution(opts.auto);
+        const resolution = parseResolution(opts.auto);
         if (!resolution) {
           console.error(chalk.red(`Invalid auto-resolution strategy: ${opts.auto}`));
           console.error(chalk.dim("Valid strategies: overwrite, retry, merge"));
@@ -214,20 +264,9 @@ export function registerResolveConflicts(program: Command): void {
           process.exit(1);
         }
         console.log(chalk.blue(`  Auto-resolving with strategy: ${resolution}`));
-      } else {
-        // Interactive mode - would require readline
-        // For now, exit with conflict status
-        console.log(chalk.yellow("\n  Interactive resolution requires manual input."));
-        console.log(chalk.dim("  Use --auto <strategy> for automatic resolution."));
-        console.log(chalk.dim("  Strategies: overwrite, retry, merge"));
-        await stateManager.close();
-        process.exit(2);
-      }
 
-      // Apply resolution
-      if (resolution) {
+        // Apply resolution
         const result = await resolver.resolve(conflict, resolution);
-
         if (result.success) {
           console.log(chalk.green(`  Conflict resolved successfully!`));
           console.log(chalk.dim(`  New version: ${result.newVersion}`));
@@ -236,6 +275,19 @@ export function registerResolveConflicts(program: Command): void {
           await stateManager.close();
           process.exit(1);
         }
+      } else {
+        // Interactive mode - prompt user for each resolution
+        const result = await resolveInteractive(conflict, resolver);
+
+        if (result.success) {
+          console.log(chalk.green(`  Conflict resolved successfully!`));
+          console.log(chalk.dim(`  New version: ${result.newVersion}`));
+        } else {
+          console.error(chalk.red(`  Resolution failed: ${result.error}`));
+        }
+
+        await stateManager.close();
+        return;
       }
 
       await stateManager.close();

@@ -17,6 +17,8 @@ import type { ProjectConfig } from "@composio/ao-core";
 export interface SprintStatusEntry {
   status: string;
   epic?: string;
+  points?: number;
+  assignedSession?: string;
   [key: string]: unknown;
 }
 
@@ -62,6 +64,15 @@ export function readSprintStatus(project: ProjectConfig): SprintStatus {
       if (entry.epic !== undefined && typeof entry.epic !== "string") {
         entry.epic = String(entry.epic);
       }
+      // Coerce points to number if present
+      if (entry.points !== undefined) {
+        const parsed = Number(entry.points);
+        entry.points = isNaN(parsed) ? undefined : parsed;
+      }
+      // Coerce assignedSession to string if present
+      if (entry.assignedSession !== undefined && typeof entry.assignedSession !== "string") {
+        entry.assignedSession = String(entry.assignedSession);
+      }
     }
 
     return parsed as SprintStatus;
@@ -74,4 +85,36 @@ export function readSprintStatus(project: ProjectConfig): SprintStatus {
       { cause: err },
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Points helpers
+// ---------------------------------------------------------------------------
+
+/** True if any story entry in the sprint has a numeric `points` value > 0. */
+export function hasPointsData(sprint: SprintStatus): boolean {
+  for (const entry of Object.values(sprint.development_status)) {
+    if (typeof entry.points === "number" && entry.points > 0) return true;
+  }
+  return false;
+}
+
+/** Get the points for a sprint entry — returns entry.points if defined, else 1. */
+export function getPoints(entry: SprintStatusEntry): number {
+  return typeof entry.points === "number" ? entry.points : 1;
+}
+
+// ---------------------------------------------------------------------------
+// Epic filter helpers
+// ---------------------------------------------------------------------------
+
+/** Get the set of story IDs belonging to a given epic. */
+export function getEpicStoryIds(sprint: SprintStatus, epicId: string): Set<string> {
+  const ids = new Set<string>();
+  for (const [id, entry] of Object.entries(sprint.development_status)) {
+    if (entry.epic === epicId) {
+      ids.add(id);
+    }
+  }
+  return ids;
 }

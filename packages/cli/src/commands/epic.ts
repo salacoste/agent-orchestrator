@@ -1,17 +1,21 @@
 /**
- * ao epic — Show epic-level progress with stories and completion percentage.
+ * ao epic — Epic management: list, show, create, rename, delete.
  *
  * Usage:
- *   ao epic [project] [epic-id]
- *
- * Without epic-id: shows all epics with summary stats.
- * With epic-id: shows detailed view of a single epic's stories.
+ *   ao epic [project] [epic-id]           — list all or show single epic
+ *   ao epic create <title> [project]      — create a new epic
+ *   ao epic rename <epic-id> <title> [project] — rename an epic
+ *   ao epic delete <epic-id> [project]    — delete an epic
  */
 
 import chalk from "chalk";
 import type { Command } from "commander";
-import { type Issue, type ProjectConfig, loadConfig } from "@composio/ao-core";
-import { readEpicTitle } from "@composio/ao-plugin-tracker-bmad";
+import { type Issue, type ProjectConfig, type Tracker, loadConfig } from "@composio/ao-core";
+import {
+  createEpic as pluginCreateEpic,
+  renameEpic as pluginRenameEpic,
+  deleteEpic as pluginDeleteEpic,
+} from "@composio/ao-plugin-tracker-bmad";
 import { getTracker } from "../lib/plugins.js";
 import { header } from "../lib/format.js";
 import { resolveProject } from "../lib/resolve-project.js";
@@ -37,7 +41,7 @@ interface EpicSummary {
   done: number;
 }
 
-function groupByEpic(stories: Issue[], project: ProjectConfig, isBmad: boolean): EpicSummary[] {
+function groupByEpic(stories: Issue[], project: ProjectConfig, tracker: Tracker): EpicSummary[] {
   const epicMap = new Map<string, Issue[]>();
 
   for (const story of stories) {
@@ -49,7 +53,8 @@ function groupByEpic(stories: Issue[], project: ProjectConfig, isBmad: boolean):
 
   const summaries: EpicSummary[] = [];
   for (const [epicId, epicStories] of epicMap) {
-    const title = isBmad && epicId !== "(no-epic)" ? readEpicTitle(epicId, project) : epicId;
+    const title =
+      epicId !== "(no-epic)" ? (tracker.getEpicTitle?.(epicId, project) ?? epicId) : epicId;
     let open = 0;
     let inProgress = 0;
     let done = 0;
@@ -129,94 +134,226 @@ function printSingleEpic(epic: EpicSummary): void {
 }
 
 // ---------------------------------------------------------------------------
+// Subcommand helpers
+// ---------------------------------------------------------------------------
+
+function getConfigAndProject(projectArg: string | undefined): {
+  config: ReturnType<typeof loadConfig>;
+  projectId: string;
+  project: ProjectConfig;
+} {
+  let config: ReturnType<typeof loadConfig>;
+  try {
+    config = loadConfig();
+  } catch {
+    console.error(chalk.red("No config found. Run `ao init` first."));
+    process.exit(1);
+  }
+
+  const projectId = resolveProject(config, projectArg);
+  const project = config.projects[projectId];
+  if (!project) {
+    console.error(chalk.red(`Project config not found: ${projectId}`));
+    process.exit(1);
+  }
+
+  if (!project.tracker || project.tracker.plugin !== "bmad") {
+    console.error(chalk.red("Epic management requires the bmad tracker plugin."));
+    process.exit(1);
+  }
+
+  return { config, projectId, project };
+}
+
+// ---------------------------------------------------------------------------
 // Command registration
 // ---------------------------------------------------------------------------
 
 export function registerEpic(program: Command): void {
-  program
+  const epicCmd = program
     .command("epic [project] [epic-id]")
-    .description("Show epic-level progress with stories and completion percentage")
+    .description("Epic management: list/show epics, or use subcommands (create, rename, delete)")
+    .option("--json", "Output as JSON");
+
+  // Subcommand: ao epic create <title> [project]
+  epicCmd
+    .command("create <title>")
+    .description("Create a new epic")
+    .argument("[project]", "Project ID")
+    .option("--description <text>", "Epic description")
     .option("--json", "Output as JSON")
     .action(
       async (
+        title: string,
         projectArg: string | undefined,
-        epicId: string | undefined,
-        opts: { json?: boolean },
+        opts: { description?: string; json?: boolean },
       ) => {
-        let config: ReturnType<typeof loadConfig>;
+        const { project } = getConfigAndProject(projectArg);
+
         try {
-          config = loadConfig();
-        } catch {
-          console.error(chalk.red("No config found. Run `ao init` first."));
-          process.exit(1);
-        }
-
-        const projectId = resolveProject(config, projectArg);
-        const project = config.projects[projectId];
-        const tracker = getTracker(config, projectId);
-
-        if (!tracker) {
-          console.error(chalk.red("No tracker configured for this project."));
-          process.exit(1);
-        }
-
-        if (!tracker.listIssues) {
-          console.error(chalk.red("Tracker does not support listing issues."));
-          process.exit(1);
-        }
-
-        // Fetch all stories
-        const isBmad = project.tracker?.plugin === "bmad";
-        let stories: Issue[];
-        try {
-          stories = await tracker.listIssues({ state: "all", limit: 200 }, project);
+          const result = pluginCreateEpic(project, title, opts.description);
+          if (opts.json) {
+            console.log(JSON.stringify(result, null, 2));
+          } else {
+            console.log(chalk.green(`Created epic: ${result.epicId}`));
+            console.log(chalk.dim(`  File: ${result.filePath}`));
+          }
         } catch (err) {
           console.error(
-            chalk.red(
-              `Failed to list stories: ${err instanceof Error ? err.message : String(err)}`,
-            ),
+            chalk.red(`Failed to create epic: ${err instanceof Error ? err.message : String(err)}`),
           );
           process.exit(1);
         }
-        const epics = groupByEpic(stories, project, isBmad);
+      },
+    );
 
-        if (opts.json) {
-          if (epicId) {
-            const epic = epics.find((e) => e.id === epicId);
-            if (!epic) {
-              console.error(JSON.stringify({ error: `Epic not found: ${epicId}` }));
-              process.exit(1);
-            }
-            console.log(JSON.stringify(epic, null, 2));
+  // Subcommand: ao epic rename <epic-id> <new-title> [project]
+  epicCmd
+    .command("rename <epic-id> <new-title>")
+    .description("Rename an epic")
+    .argument("[project]", "Project ID")
+    .option("--json", "Output as JSON")
+    .action(
+      async (
+        epicId: string,
+        newTitle: string,
+        projectArg: string | undefined,
+        opts: { json?: boolean },
+      ) => {
+        const { project } = getConfigAndProject(projectArg);
+
+        try {
+          pluginRenameEpic(project, epicId, newTitle);
+          if (opts.json) {
+            console.log(JSON.stringify({ epicId, newTitle }, null, 2));
           } else {
-            const jsonData = epics.map((e) => ({
-              id: e.id,
-              title: e.title,
-              open: e.open,
-              inProgress: e.inProgress,
-              done: e.done,
-              total: e.open + e.inProgress + e.done,
-              stories: e.stories.map((s) => ({
-                id: s.id,
-                title: s.title,
-                state: s.state,
-              })),
-            }));
-            console.log(JSON.stringify(jsonData, null, 2));
+            console.log(chalk.green(`Renamed ${epicId} → "${newTitle}"`));
           }
-          return;
-        }
-
-        if (epicId) {
-          const epic = epics.find((e) => e.id === epicId);
-          if (!epic) {
-            console.error(chalk.red(`Epic not found: ${epicId}`));
-            process.exit(1);
-          }
-          printSingleEpic(epic);
-        } else {
-          printAllEpics(project.name || projectId, epics);
+        } catch (err) {
+          console.error(
+            chalk.red(`Failed to rename epic: ${err instanceof Error ? err.message : String(err)}`),
+          );
+          process.exit(1);
         }
       },
     );
+
+  // Subcommand: ao epic delete <epic-id> [project]
+  epicCmd
+    .command("delete <epic-id>")
+    .description("Delete an epic")
+    .argument("[project]", "Project ID")
+    .option("--clear-stories", "Clear epic field from associated stories")
+    .option("--json", "Output as JSON")
+    .action(
+      async (
+        epicId: string,
+        projectArg: string | undefined,
+        opts: { clearStories?: boolean; json?: boolean },
+      ) => {
+        const { project } = getConfigAndProject(projectArg);
+
+        try {
+          const result = pluginDeleteEpic(project, epicId, {
+            clearStories: opts.clearStories,
+          });
+          if (opts.json) {
+            console.log(JSON.stringify({ epicId, ...result }, null, 2));
+          } else {
+            console.log(chalk.green(`Deleted epic: ${epicId}`));
+            if (result.affectedStories.length > 0) {
+              console.log(chalk.dim(`  Affected stories: ${result.affectedStories.join(", ")}`));
+            }
+          }
+        } catch (err) {
+          console.error(
+            chalk.red(`Failed to delete epic: ${err instanceof Error ? err.message : String(err)}`),
+          );
+          process.exit(1);
+        }
+      },
+    );
+
+  // Default action — list/show epics (when no subcommand matches)
+  epicCmd.action(
+    async (
+      projectArg: string | undefined,
+      epicId: string | undefined,
+      opts: { json?: boolean },
+    ) => {
+      // If projectArg is a subcommand, Commander handles it.
+      // This action only runs for the list/show case.
+      let config: ReturnType<typeof loadConfig>;
+      try {
+        config = loadConfig();
+      } catch {
+        console.error(chalk.red("No config found. Run `ao init` first."));
+        process.exit(1);
+      }
+
+      const projectId = resolveProject(config, projectArg);
+      const project = config.projects[projectId];
+      const tracker = getTracker(config, projectId);
+
+      if (!tracker) {
+        console.error(chalk.red("No tracker configured for this project."));
+        process.exit(1);
+      }
+
+      if (!tracker.listIssues) {
+        console.error(chalk.red("Tracker does not support listing issues."));
+        process.exit(1);
+      }
+
+      // Fetch all stories
+      let stories: Issue[];
+      try {
+        stories = await tracker.listIssues({ state: "all", limit: 200 }, project);
+      } catch (err) {
+        console.error(
+          chalk.red(`Failed to list stories: ${err instanceof Error ? err.message : String(err)}`),
+        );
+        process.exit(1);
+      }
+      const epics = groupByEpic(stories, project, tracker);
+
+      if (opts.json) {
+        if (epicId) {
+          const epic = epics.find((e) => e.id === epicId);
+          if (!epic) {
+            console.error(JSON.stringify({ error: `Epic not found: ${epicId}` }));
+            process.exit(1);
+          }
+          console.log(JSON.stringify(epic, null, 2));
+        } else {
+          const jsonData = epics.map((e) => ({
+            id: e.id,
+            title: e.title,
+            open: e.open,
+            inProgress: e.inProgress,
+            done: e.done,
+            total: e.open + e.inProgress + e.done,
+            stories: e.stories.map((s) => ({
+              id: s.id,
+              title: s.title,
+              state: s.state,
+            })),
+          }));
+          console.log(JSON.stringify(jsonData, null, 2));
+        }
+        return;
+      }
+
+      if (epicId) {
+        const epic = epics.find((e) => e.id === epicId);
+        if (!epic) {
+          console.error(chalk.red(`Epic not found: ${epicId}`));
+          process.exit(1);
+        }
+        printSingleEpic(epic);
+      } else {
+        printAllEpics(project.name || projectId, epics);
+      }
+    },
+  );
 }

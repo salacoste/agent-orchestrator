@@ -1188,6 +1188,23 @@ describe("readEpicTitle", () => {
   });
 });
 
+describe("tracker.getEpicTitle", () => {
+  it("delegates to readEpicTitle via the tracker interface", () => {
+    setupFs();
+    const tracker = create();
+    expect(tracker.getEpicTitle).toBeDefined();
+    const title = tracker.getEpicTitle!("epic-1", PROJECT);
+    expect(title).toBe("Epic 1: User Management");
+  });
+
+  it("falls back to slug when epic file is missing", () => {
+    setupFs({ epic: null });
+    const tracker = create();
+    const title = tracker.getEpicTitle!("epic-missing", PROJECT);
+    expect(title).toBe("epic-missing");
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Malformed YAML resilience
 // ---------------------------------------------------------------------------
@@ -1648,6 +1665,77 @@ describe("onSessionDeath", () => {
       "1-2-user-profile",
       expect.anything(),
       expect.anything(),
+    );
+  });
+
+  it("does not reset if assignedSession does not match dying session", async () => {
+    const statusPath = "/home/user/test-app/_bmad-output/sprint-status.yaml";
+    const assignedYaml = `
+development_status:
+  1-2-user-profile:
+    status: in-progress
+    epic: epic-1
+    assignedSession: session-A
+`;
+    mockExistsSync.mockImplementation((p: string) => p === statusPath);
+    mockReadFileSync.mockImplementation((p: string) => {
+      if (p === statusPath) return assignedYaml;
+      return "";
+    });
+
+    const mockAppendHistory = appendHistory as ReturnType<typeof vi.fn>;
+    const tracker = create();
+
+    await tracker.onSessionDeath!("1-2-user-profile", PROJECT, "session-B");
+
+    expect(mockAppendHistory).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "1-2-user-profile",
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it("resets if assignedSession matches dying session", async () => {
+    const statusPath = "/home/user/test-app/_bmad-output/sprint-status.yaml";
+    const assignedYaml = `
+development_status:
+  1-2-user-profile:
+    status: in-progress
+    epic: epic-1
+    assignedSession: session-A
+`;
+    mockExistsSync.mockImplementation((p: string) => p === statusPath);
+    mockReadFileSync.mockImplementation((p: string) => {
+      if (p === statusPath) return assignedYaml;
+      return "";
+    });
+
+    const mockAppendHistory = appendHistory as ReturnType<typeof vi.fn>;
+    const tracker = create();
+
+    await tracker.onSessionDeath!("1-2-user-profile", PROJECT, "session-A");
+
+    expect(mockAppendHistory).toHaveBeenCalledWith(
+      PROJECT,
+      "1-2-user-profile",
+      "in-progress",
+      "ready-for-dev",
+    );
+  });
+
+  it("resets if no sessionId provided (backward compat)", async () => {
+    setupFs();
+    const mockAppendHistory = appendHistory as ReturnType<typeof vi.fn>;
+    const tracker = create();
+
+    await tracker.onSessionDeath!("1-2-user-profile", PROJECT);
+
+    expect(mockAppendHistory).toHaveBeenCalledWith(
+      PROJECT,
+      "1-2-user-profile",
+      "in-progress",
+      "ready-for-dev",
     );
   });
 });

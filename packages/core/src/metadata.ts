@@ -92,7 +92,9 @@ function metadataPath(dataDir: string, sessionId: SessionId): string {
 /**
  * Read metadata for a session. Returns null if the file doesn't exist.
  */
+export type { SessionId };
 export function readMetadata(dataDir: string, sessionId: SessionId): SessionMetadata | null {
+
   const path = metadataPath(dataDir, sessionId);
   if (!existsSync(path)) return null;
 
@@ -116,6 +118,11 @@ export function readMetadata(dataDir: string, sessionId: SessionId): SessionMeta
     dashboardPort: raw["dashboardPort"] ? Number(raw["dashboardPort"]) : undefined,
     terminalWsPort: raw["terminalWsPort"] ? Number(raw["terminalWsPort"]) : undefined,
     directTerminalWsPort: raw["directTerminalWsPort"] ? Number(raw["directTerminalWsPort"]) : undefined,
+    // Agent failure/crash details for resume functionality
+    exitCode: raw["exitCode"] ? Number(raw["exitCode"]) : undefined,
+    signal: raw["signal"],
+    failureReason: raw["failureReason"],
+    previousLogsPath: raw["previousLogsPath"],
   };
 }
 
@@ -164,6 +171,12 @@ export function writeMetadata(
     data["terminalWsPort"] = String(metadata.terminalWsPort);
   if (metadata.directTerminalWsPort !== undefined)
     data["directTerminalWsPort"] = String(metadata.directTerminalWsPort);
+  // Agent failure/crash details for resume functionality
+  if (metadata.exitCode !== undefined)
+    data["exitCode"] = String(metadata.exitCode);
+  if (metadata.signal) data["signal"] = metadata.signal;
+  if (metadata.failureReason) data["failureReason"] = metadata.failureReason;
+  if (metadata.previousLogsPath) data["previousLogsPath"] = metadata.previousLogsPath;
 
   atomicWriteFileSync(path, serializeMetadata(data));
 }
@@ -287,3 +300,6 @@ export function reserveSessionId(dataDir: string, sessionId: SessionId): boolean
     return false;
   }
 }
+
+// Re-export getSessionsDir for convenience (it's defined in paths.ts)
+export { getSessionsDir } from "./paths.js";

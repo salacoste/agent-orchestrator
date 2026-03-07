@@ -34,13 +34,20 @@ const TREND_ICONS: Record<string, string> = {
   declining: "↓",
 };
 
-export function VelocityChart({ projectId }: { projectId: string }) {
+export function VelocityChart({
+  projectId,
+  epicFilter,
+}: {
+  projectId: string;
+  epicFilter?: string | null;
+}) {
   const [data, setData] = useState<VelocityData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/sprint/${encodeURIComponent(projectId)}/velocity-comparison`)
+    const epicParam = epicFilter ? `?epic=${encodeURIComponent(epicFilter)}` : "";
+    fetch(`/api/sprint/${encodeURIComponent(projectId)}/velocity-comparison${epicParam}`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load velocity data");
         return res.json();
@@ -54,7 +61,7 @@ export function VelocityChart({ projectId }: { projectId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, epicFilter]);
 
   if (error) {
     return <div className="text-red-400 text-[11px]">{error}</div>;

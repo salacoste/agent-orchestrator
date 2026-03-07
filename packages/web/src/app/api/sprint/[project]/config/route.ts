@@ -17,6 +17,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
     return NextResponse.json({
       projectId,
       sprintEndDate: project.tracker?.["sprintEndDate"] ?? null,
+      wipLimits: project.tracker?.["wipLimits"] ?? null,
     });
   } catch (err) {
     return NextResponse.json(

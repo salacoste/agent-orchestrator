@@ -40,10 +40,12 @@ import { registerCompare } from "./commands/compare.js";
 import { registerWorkload } from "./commands/workload.js";
 import { registerRework } from "./commands/rework.js";
 import { registerMonteCarlo } from "./commands/monte-carlo.js";
-import { registerStandup } from "./commands/standup.js";
+import { registerNotify } from "./commands/notify.js";
 import { registerDeps } from "./commands/deps.js";
 import { registerGoals } from "./commands/goals.js";
 import { registerSprintPlan } from "./commands/sprint-plan.js";
+import { registerResolveConflicts } from "./commands/resolve-conflicts.js";
+import { registerSync } from "./commands/sync.js";
 
 const program = new Command();
 
@@ -93,9 +95,12 @@ registerCompare(program);
 registerWorkload(program);
 registerRework(program);
 registerMonteCarlo(program);
-registerStandup(program);
+registerNotify(program);
+registerNotifications(program);
 registerDeps(program);
 registerGoals(program);
 registerSprintPlan(program);
+registerResolveConflicts(program);
+registerSync(program);
 
 program.parse();

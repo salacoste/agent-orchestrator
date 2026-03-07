@@ -1,9 +1,12 @@
 import { execFile } from "node:child_process";
 import { platform } from "node:os";
+import nodeNotifier from "node-notifier";
 import {
   escapeAppleScript,
   type PluginModule,
   type Notifier,
+  type NotificationPlugin,
+  type Notification,
   type OrchestratorEvent,
   type NotifyAction,
   type EventPriority,
@@ -109,6 +112,140 @@ export function create(config?: Record<string, unknown>): Notifier {
       const sound = shouldPlaySound(event.priority, soundEnabled);
       const isUrgent = event.priority === "urgent";
       await sendNotification(title, message, { sound, isUrgent });
+    },
+  };
+}
+
+/** Coalescing configuration */
+interface CoalesceConfig {
+  /** Time window in milliseconds for coalescing similar notifications (0 = disabled) */
+  coalesceWindow?: number;
+  /** Respect focus mode (DND) and suppress notifications */
+  respectFocusMode?: boolean;
+  /** Custom focus mode detection function */
+  detectFocusMode?: () => Promise<boolean>;
+}
+
+/** Pending coalesced notification */
+interface PendingCoalescedNotification {
+  notification: Notification;
+  count: number;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+/** Pending coalesced notification */
+interface PendingCoalescedNotification {
+  notification: Notification;
+  count: number;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+/**
+ * Create a NotificationPlugin using node-notifier for cross-platform support.
+ * This implements the NotificationPlugin interface for use with NotificationService.
+ */
+export function createNotificationPlugin(config?: CoalesceConfig): NotificationPlugin {
+  const coalesceWindow = config?.coalesceWindow ?? 60000; // Default 60 seconds
+  const respectFocusMode = config?.respectFocusMode ?? false;
+  const detectFocusMode = config?.detectFocusMode;
+  const pendingNotifications = new Map<string, PendingCoalescedNotification>();
+
+  /**
+   * Send a notification via node-notifier
+   */
+  function sendNotification(notification: Notification, count?: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const options: {
+        title: string;
+        message: string;
+        sound?: boolean;
+        wait?: boolean;
+      } = {
+        title: notification.title,
+        message: count && count > 1 ? `${notification.message} (${count})` : notification.message,
+      };
+
+      // Add sound for critical priority notifications
+      if (notification.priority === "critical") {
+        options.sound = true;
+      }
+
+      nodeNotifier.notify(options, (error, _response) => {
+        if (error) {
+          // Log error but don't reject - notifications are best-effort
+          // eslint-disable-next-line no-console
+          console.error("[notifier-desktop] Failed to send notification:", error);
+        }
+        resolve(); // Always resolve to avoid blocking notification service
+      });
+    });
+  }
+
+  /**
+   * Flush a coalesced notification
+   */
+  function flushCoalesced(key: string): void {
+    const pending = pendingNotifications.get(key);
+    if (!pending) return;
+
+    clearTimeout(pending.timer);
+    pendingNotifications.delete(key);
+
+    void sendNotification(pending.notification, pending.count);
+  }
+
+  return {
+    name: "desktop",
+
+    async send(notification: Notification): Promise<void> {
+      // Check focus mode if enabled
+      if (respectFocusMode && detectFocusMode) {
+        try {
+          const isFocusModeActive = await detectFocusMode();
+          if (isFocusModeActive) {
+            // Suppress notification during focus mode
+            return;
+          }
+        } catch {
+          // Fail open - send notification if detection fails
+          // Error is logged but doesn't block notification
+        }
+      }
+
+      // Coalescing disabled or not applicable
+      if (coalesceWindow <= 0) {
+        return sendNotification(notification);
+      }
+
+      const key = notification.eventType;
+      const pending = pendingNotifications.get(key);
+
+      if (pending) {
+        // Coalesce: increment count and reset timer
+        pending.count++;
+        pending.notification = notification; // Update to latest notification data
+        clearTimeout(pending.timer);
+        pending.timer = setTimeout(() => flushCoalesced(key), coalesceWindow);
+      } else {
+        // First notification of this type
+        if (coalesceWindow > 0) {
+          // Start coalescing window
+          const timer = setTimeout(() => flushCoalesced(key), coalesceWindow);
+          pendingNotifications.set(key, {
+            notification,
+            count: 1,
+            timer,
+          });
+        }
+        // Send immediately regardless (user sees first notification right away)
+        return sendNotification(notification);
+      }
+    },
+
+    async isAvailable(): Promise<boolean> {
+      // node-notifier is always available as it's a dependency
+      // Platform-specific functionality is handled by node-notifier internally
+      return true;
     },
   };
 }

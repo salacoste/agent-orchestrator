@@ -12,9 +12,10 @@ const EMPTY_FORECAST: SprintForecast = {
   remainingStories: 0,
   totalStories: 0,
   completedStories: 0,
+  hasPoints: false,
 };
 
-export async function GET(_request: Request, { params }: { params: Promise<{ project: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ project: string }> }) {
   try {
     const { project: projectId } = await params;
     const { config } = await getServices();
@@ -28,7 +29,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       return NextResponse.json(EMPTY_FORECAST);
     }
 
-    const result = computeForecast(project);
+    const url = new URL(request.url);
+    const epicFilter = url.searchParams.get("epic") || undefined;
+    const result = computeForecast(project, epicFilter);
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json(

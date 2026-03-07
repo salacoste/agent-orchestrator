@@ -1,16 +1,22 @@
 import chalk from "chalk";
 import type { Command } from "commander";
 import { loadConfig } from "@composio/ao-core";
-import { computeSprintPlan } from "@composio/ao-plugin-tracker-bmad";
+import { computeSprintPlan, acceptPlan } from "@composio/ao-plugin-tracker-bmad";
 import { header } from "../lib/format.js";
 import { resolveProject } from "../lib/resolve-project.js";
+
+interface PlanOpts {
+  json?: boolean;
+  accept?: boolean;
+}
 
 export function registerPlan(program: Command): void {
   program
     .command("plan [project]")
     .description("Show sprint planning — recommended stories, capacity, and blockers")
     .option("--json", "Output as JSON")
-    .action(async (projectArg: string | undefined, opts: { json?: boolean }) => {
+    .option("--accept", "Accept plan: move recommended stories to ready-for-dev")
+    .action(async (projectArg: string | undefined, opts: PlanOpts) => {
       let config: ReturnType<typeof loadConfig>;
       try {
         config = loadConfig();
@@ -39,6 +45,28 @@ export function registerPlan(program: Command): void {
           chalk.red(`Failed to compute plan: ${err instanceof Error ? err.message : String(err)}`),
         );
         process.exit(1);
+      }
+
+      // --accept: move recommended stories to ready-for-dev
+      if (opts.accept) {
+        const acceptResult = acceptPlan(project);
+        if (opts.json) {
+          console.log(JSON.stringify(acceptResult, null, 2));
+          return;
+        }
+        if (acceptResult.count === 0) {
+          console.log(chalk.yellow("No recommended stories to accept."));
+          return;
+        }
+        console.log(header("Plan Accepted"));
+        console.log();
+        for (const id of acceptResult.moved) {
+          console.log(`  ${chalk.green("\u2713")} ${id}: backlog \u2192 ready-for-dev`);
+        }
+        console.log();
+        console.log(chalk.dim(`  ${acceptResult.count} stories moved to ready-for-dev.`));
+        console.log();
+        return;
       }
 
       if (opts.json) {

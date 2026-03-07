@@ -4,7 +4,12 @@
  */
 
 import type { ProjectConfig } from "@composio/ao-core";
-import { readSprintStatus } from "./sprint-status-reader.js";
+import {
+  readSprintStatus,
+  hasPointsData,
+  getPoints,
+  getEpicStoryIds,
+} from "./sprint-status-reader.js";
 import { readHistory } from "./history.js";
 
 // ---------------------------------------------------------------------------
@@ -21,6 +26,12 @@ export interface SprintForecast {
   remainingStories: number;
   totalStories: number;
   completedStories: number;
+  totalPoints?: number;
+  completedPoints?: number;
+  remainingPoints?: number;
+  currentVelocityPoints?: number;
+  requiredVelocityPoints?: number;
+  hasPoints: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -37,6 +48,7 @@ const EMPTY_FORECAST: SprintForecast = {
   remainingStories: 0,
   totalStories: 0,
   completedStories: 0,
+  hasPoints: false,
 };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -92,22 +104,35 @@ function linearRegression(points: Array<{ x: number; y: number }>): RegressionRe
 // Main export
 // ---------------------------------------------------------------------------
 
-export function computeForecast(project: ProjectConfig): SprintForecast {
+export function computeForecast(project: ProjectConfig, epicFilter?: string): SprintForecast {
   // Read sprint status — count total and done stories
-  let totalStories = 0;
-  let completedStories = 0;
-
+  let sprint;
   try {
-    const sprint = readSprintStatus(project);
-    for (const [id, entry] of Object.entries(sprint.development_status)) {
-      const status = typeof entry.status === "string" ? entry.status : "backlog";
-      // Skip epic-level entries
-      if (id.startsWith("epic-") || status.startsWith("epic-")) continue;
-      totalStories++;
-      if (status === "done") completedStories++;
-    }
+    sprint = readSprintStatus(project);
   } catch {
     return { ...EMPTY_FORECAST };
+  }
+
+  const pointsPresent = hasPointsData(sprint);
+  const epicStoryIds = epicFilter ? getEpicStoryIds(sprint, epicFilter) : null;
+
+  let totalStories = 0;
+  let completedStories = 0;
+  let totalPoints = 0;
+  let completedPoints = 0;
+
+  for (const [id, entry] of Object.entries(sprint.development_status)) {
+    const status = typeof entry.status === "string" ? entry.status : "backlog";
+    // Skip epic-level entries
+    if (id.startsWith("epic-") || status.startsWith("epic-")) continue;
+    // Skip stories not in the filtered epic
+    if (epicStoryIds && !epicStoryIds.has(id)) continue;
+    totalStories++;
+    if (pointsPresent) totalPoints += getPoints(entry);
+    if (status === "done") {
+      completedStories++;
+      if (pointsPresent) completedPoints += getPoints(entry);
+    }
   }
 
   const remainingStories = totalStories - completedStories;
@@ -115,7 +140,7 @@ export function computeForecast(project: ProjectConfig): SprintForecast {
   // If all done, return immediately
   if (remainingStories === 0 && totalStories > 0) {
     const today = new Date().toISOString().slice(0, 10);
-    return {
+    const result: SprintForecast = {
       projectedCompletionDate: today,
       daysRemaining: 0,
       pace: "ahead",
@@ -125,33 +150,73 @@ export function computeForecast(project: ProjectConfig): SprintForecast {
       remainingStories: 0,
       totalStories,
       completedStories,
+      hasPoints: pointsPresent,
     };
+    if (pointsPresent) {
+      result.totalPoints = totalPoints;
+      result.completedPoints = completedPoints;
+      result.remainingPoints = 0;
+    }
+    return result;
   }
 
   // Read history and build cumulative completions by day
   const history = readHistory(project);
   if (history.length === 0) {
-    return { ...EMPTY_FORECAST, totalStories, completedStories, remainingStories };
+    return {
+      ...EMPTY_FORECAST,
+      totalStories,
+      completedStories,
+      remainingStories,
+      hasPoints: pointsPresent,
+    };
   }
 
-  // Group completions by date
+  // Group completions by date — count stories and points separately
   const completionsByDate = new Map<string, number>();
+  const pointsCompletionsByDate = new Map<string, number>();
+
+  // Build storyId -> points lookup from sprint data
+  const pointsLookup = new Map<string, number>();
+  if (pointsPresent) {
+    for (const [id, entry] of Object.entries(sprint.development_status)) {
+      pointsLookup.set(id, getPoints(entry));
+    }
+  }
+
   for (const entry of history) {
     if (entry.toStatus === "done") {
+      if (epicStoryIds && !epicStoryIds.has(entry.storyId)) continue;
       const date = entry.timestamp.slice(0, 10);
       completionsByDate.set(date, (completionsByDate.get(date) ?? 0) + 1);
+      if (pointsPresent) {
+        const pts = pointsLookup.get(entry.storyId) ?? 1;
+        pointsCompletionsByDate.set(date, (pointsCompletionsByDate.get(date) ?? 0) + pts);
+      }
     }
   }
 
   if (completionsByDate.size === 0) {
-    return { ...EMPTY_FORECAST, totalStories, completedStories, remainingStories };
+    return {
+      ...EMPTY_FORECAST,
+      totalStories,
+      completedStories,
+      remainingStories,
+      hasPoints: pointsPresent,
+    };
   }
 
   // Sort dates and build cumulative data points
   const sortedDates = [...completionsByDate.keys()].sort();
   const firstDateStr = sortedDates[0];
   if (!firstDateStr) {
-    return { ...EMPTY_FORECAST, totalStories, completedStories, remainingStories };
+    return {
+      ...EMPTY_FORECAST,
+      totalStories,
+      completedStories,
+      remainingStories,
+      hasPoints: pointsPresent,
+    };
   }
   const firstDate = new Date(firstDateStr);
 
@@ -171,6 +236,7 @@ export function computeForecast(project: ProjectConfig): SprintForecast {
       completedStories,
       remainingStories,
       currentVelocity: cumulative > 0 ? cumulative : 0,
+      hasPoints: pointsPresent,
     };
   }
 
@@ -186,7 +252,13 @@ export function computeForecast(project: ProjectConfig): SprintForecast {
     const lastPoint = points[points.length - 1];
     const lastDateStr = sortedDates[sortedDates.length - 1];
     if (!lastPoint || !lastDateStr) {
-      return { ...EMPTY_FORECAST, totalStories, completedStories, remainingStories };
+      return {
+        ...EMPTY_FORECAST,
+        totalStories,
+        completedStories,
+        remainingStories,
+        hasPoints: pointsPresent,
+      };
     }
     const storiesLeft = totalStories - lastPoint.y;
     const daysToComplete = storiesLeft / slope;
@@ -226,7 +298,7 @@ export function computeForecast(project: ProjectConfig): SprintForecast {
     }
   }
 
-  return {
+  const result: SprintForecast = {
     projectedCompletionDate,
     daysRemaining,
     pace,
@@ -236,5 +308,39 @@ export function computeForecast(project: ProjectConfig): SprintForecast {
     remainingStories,
     totalStories,
     completedStories,
+    hasPoints: pointsPresent,
   };
+
+  if (pointsPresent) {
+    const remainingPts = totalPoints - completedPoints;
+    result.totalPoints = totalPoints;
+    result.completedPoints = completedPoints;
+    result.remainingPoints = remainingPts;
+
+    // Build points-weighted regression for accurate points velocity
+    const pointsDataPoints: Array<{ x: number; y: number }> = [];
+    let cumPoints = 0;
+    for (const date of sortedDates) {
+      cumPoints += pointsCompletionsByDate.get(date) ?? 0;
+      const dayIndex = Math.round((new Date(date).getTime() - firstDate.getTime()) / MS_PER_DAY);
+      pointsDataPoints.push({ x: dayIndex, y: cumPoints });
+    }
+
+    if (pointsDataPoints.length >= 2) {
+      const pointsRegression = linearRegression(pointsDataPoints);
+      result.currentVelocityPoints = Math.max(0, pointsRegression.slope);
+    } else {
+      result.currentVelocityPoints = cumPoints > 0 ? cumPoints : 0;
+    }
+
+    if (typeof sprintEndDate === "string" && sprintEndDate) {
+      const targetDate = new Date(sprintEndDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const daysUntilTarget = Math.max(1, (targetDate.getTime() - today.getTime()) / MS_PER_DAY);
+      result.requiredVelocityPoints = remainingPts / daysUntilTarget;
+    }
+  }
+
+  return result;
 }

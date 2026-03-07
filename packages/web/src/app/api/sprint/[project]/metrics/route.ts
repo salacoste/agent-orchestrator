@@ -13,7 +13,7 @@ const EMPTY_STATS: CycleTimeStats = {
   completedCount: 0,
 };
 
-export async function GET(_request: Request, { params }: { params: Promise<{ project: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ project: string }> }) {
   try {
     const { project: projectId } = await params;
     const { config } = await getServices();
@@ -27,7 +27,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       return NextResponse.json(EMPTY_STATS);
     }
 
-    const stats = computeCycleTime(project);
+    const url = new URL(request.url);
+    const epicFilter = url.searchParams.get("epic") || undefined;
+    const stats = computeCycleTime(project, epicFilter);
     return NextResponse.json(stats);
   } catch (err) {
     return NextResponse.json(

@@ -247,4 +247,100 @@ describe("computeVelocityComparison", () => {
     // s2 and s3 are remaining (not done)
     expect(result.remainingStories).toBe(2);
   });
+
+  it("hasPoints is false when no stories have points", () => {
+    const ts = mondayWeeksAgo(1);
+    setFiles({
+      statusYaml: ["development_status:", "  s1:", "    status: done"].join("\n"),
+      historyLines: [makeHistoryEntry("s1", "in-progress", "done", ts)],
+    });
+
+    const result = computeVelocityComparison(PROJECT);
+    expect(result.hasPoints).toBe(false);
+    expect(result.averageVelocityPoints).toBeUndefined();
+  });
+
+  it("computes points-based velocity when stories have points", () => {
+    const ts = mondayWeeksAgo(1);
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: done",
+        "    points: 3",
+        "  s2:",
+        "    status: done",
+        "    points: 5",
+        "  s3:",
+        "    status: backlog",
+        "    points: 8",
+      ].join("\n"),
+      historyLines: [
+        makeHistoryEntry("s1", "in-progress", "done", ts),
+        makeHistoryEntry("s2", "in-progress", "done", ts),
+      ],
+    });
+
+    const result = computeVelocityComparison(PROJECT);
+
+    expect(result.hasPoints).toBe(true);
+    expect(result.weeks[0]!.completedPoints).toBe(8); // 3 + 5
+    expect(result.averageVelocityPoints).toBe(8);
+    expect(result.remainingPoints).toBe(8); // s3 has 8 points
+  });
+
+  it("defaults to 1 point for stories without points when hasPoints is true", () => {
+    const ts = mondayWeeksAgo(1);
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: done",
+        "    points: 3",
+        "  s2:",
+        "    status: done",
+        "  s3:",
+        "    status: backlog",
+      ].join("\n"),
+      historyLines: [
+        makeHistoryEntry("s1", "in-progress", "done", ts),
+        makeHistoryEntry("s2", "in-progress", "done", ts),
+      ],
+    });
+
+    const result = computeVelocityComparison(PROJECT);
+
+    expect(result.hasPoints).toBe(true);
+    // s1=3pts, s2=1pt (default)
+    expect(result.weeks[0]!.completedPoints).toBe(4);
+    // s3 remaining: 1pt (default)
+    expect(result.remainingPoints).toBe(1);
+  });
+
+  it("filters by epic when epicFilter is provided", () => {
+    const ts = mondayWeeksAgo(1);
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: done",
+        "    epic: epic-auth",
+        "  s2:",
+        "    status: done",
+        "    epic: epic-ui",
+        "  s3:",
+        "    status: backlog",
+        "    epic: epic-auth",
+      ].join("\n"),
+      historyLines: [
+        makeHistoryEntry("s1", "in-progress", "done", ts),
+        makeHistoryEntry("s2", "in-progress", "done", ts),
+      ],
+    });
+
+    const result = computeVelocityComparison(PROJECT, "epic-auth");
+
+    expect(result.weeks[0]!.completedCount).toBe(1); // Only s1
+    expect(result.remainingStories).toBe(1); // Only s3
+  });
 });

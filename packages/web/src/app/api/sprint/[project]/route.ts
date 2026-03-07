@@ -3,9 +3,12 @@ import { getServices } from "@/lib/services";
 import type { Tracker } from "@composio/ao-core";
 import {
   getBmadStatus,
-  readEpicTitle,
-  BMAD_COLUMNS,
   categorizeStatus,
+  readSprintStatus,
+  hasPointsData,
+  getPoints,
+  getColumns,
+  getWorkflowColumns,
 } from "@composio/ao-plugin-tracker-bmad";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ project: string }> }) {
@@ -50,8 +53,27 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       // Session lookup not critical — continue without session info
     }
 
-    // Sprint columns — sourced from tracker-bmad for consistency
-    const columnOrder: string[] = [...BMAD_COLUMNS];
+    // Sprint columns — sourced from tracker-bmad workflow config
+    const wf = getWorkflowColumns(project);
+    const columnOrder: string[] = [...getColumns(project)];
+    const columnMeta = wf.definitions.map((d) => ({
+      id: d.id,
+      label: d.label,
+      category: d.category,
+      color: d.color,
+    }));
+
+    // Read sprint status for points data (non-fatal)
+    let sprintStatus: ReturnType<typeof readSprintStatus> | null = null;
+    let showPoints = false;
+    if (project.tracker?.plugin === "bmad") {
+      try {
+        sprintStatus = readSprintStatus(project);
+        showPoints = hasPointsData(sprintStatus);
+      } catch {
+        // Non-fatal — continue without points
+      }
+    }
 
     // Group stories by BMad status (last label)
     const columns: Record<
@@ -62,6 +84,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
         state: string;
         bmadStatus: string;
         epic: string | null;
+        points?: number;
+        assignedSession?: string;
         session: { id: string; activity: string | null } | null;
       }>
     > = {};
@@ -99,6 +123,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
         epicMap.set(epic, epicStats);
       }
 
+      // Look up points and assignment from sprint status
+      const sprintEntry = sprintStatus?.development_status[issue.id];
+      const storyPoints = sprintEntry ? getPoints(sprintEntry) : undefined;
+      const assignedSession = sprintEntry?.assignedSession;
+
       const storyData = {
         id: issue.id,
         title: issue.title,
@@ -106,6 +135,8 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
         state: issue.state,
         bmadStatus,
         epic,
+        ...(showPoints && storyPoints !== undefined ? { points: storyPoints } : {}),
+        ...(assignedSession ? { assignedSession } : {}),
         session: sessionsByIssue.get(issue.id.toLowerCase()) ?? null,
       };
 
@@ -119,7 +150,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
     const epics = Array.from(epicMap.entries())
       .map(([epicId, s]) => ({
         epicId,
-        title: project.tracker?.plugin === "bmad" ? readEpicTitle(epicId, project) : epicId,
+        title: tracker?.getEpicTitle?.(epicId, project) ?? epicId,
         total: s.total,
         done: s.done,
         inProgress: s.inProgress,
@@ -133,7 +164,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       projectName: project.name || projectId,
       columns,
       columnOrder,
+      columnMeta,
       epics,
+      hasPoints: showPoints,
       stats: {
         total,
         done,

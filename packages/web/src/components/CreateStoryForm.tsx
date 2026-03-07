@@ -11,6 +11,7 @@ export function CreateStoryForm({ projectId, onCreated }: CreateStoryFormProps) 
   const [title, setTitle] = useState("");
   const [epic, setEpic] = useState("");
   const [description, setDescription] = useState("");
+  const [points, setPoints] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -34,6 +35,7 @@ export function CreateStoryForm({ projectId, onCreated }: CreateStoryFormProps) 
           title: title.trim(),
           description: description.trim() || undefined,
           epic: epic.trim() || undefined,
+          points: points.trim() ? parseInt(points.trim(), 10) : undefined,
         }),
       });
 
@@ -47,6 +49,7 @@ export function CreateStoryForm({ projectId, onCreated }: CreateStoryFormProps) 
       setTitle("");
       setEpic("");
       setDescription("");
+      setPoints("");
       onCreated?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create story");
@@ -88,6 +91,25 @@ export function CreateStoryForm({ projectId, onCreated }: CreateStoryFormProps) 
           value={epic}
           onChange={(e) => setEpic(e.target.value)}
           placeholder="e.g. epic-auth"
+          className="w-full rounded-[5px] border border-[var(--color-border-muted)] bg-[var(--color-bg-base)] text-[12px] text-[var(--color-text-primary)] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent placeholder:text-[var(--color-text-muted)]"
+        />
+      </div>
+
+      <div>
+        <label
+          htmlFor="story-points"
+          className="block text-[11px] font-semibold text-[var(--color-text-secondary)] mb-1"
+        >
+          Points
+        </label>
+        <input
+          id="story-points"
+          type="number"
+          min="0"
+          step="1"
+          value={points}
+          onChange={(e) => setPoints(e.target.value)}
+          placeholder="e.g. 3"
           className="w-full rounded-[5px] border border-[var(--color-border-muted)] bg-[var(--color-bg-base)] text-[12px] text-[var(--color-text-primary)] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-accent)] focus:border-transparent placeholder:text-[var(--color-text-muted)]"
         />
       </div>

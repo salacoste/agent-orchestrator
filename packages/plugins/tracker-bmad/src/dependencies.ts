@@ -228,3 +228,62 @@ export function getStoryDependencies(
   const graph = computeDependencyGraph(project);
   return graph.nodes[storyId] ?? null;
 }
+
+// ---------------------------------------------------------------------------
+// Public types for cycle detection
+// ---------------------------------------------------------------------------
+
+export interface CycleInfo {
+  cycle: string[];
+  length: number;
+  statuses: Record<string, string>;
+}
+
+export interface DependencyCycleResult {
+  cycles: CycleInfo[];
+  totalCycles: number;
+  affectedStories: string[];
+}
+
+// ---------------------------------------------------------------------------
+// Public: cycle detection
+// ---------------------------------------------------------------------------
+
+export function detectDependencyCycles(project: ProjectConfig): DependencyCycleResult {
+  const graph = computeDependencyGraph(project);
+
+  if (graph.circularWarnings.length === 0) {
+    return { cycles: [], totalCycles: 0, affectedStories: [] };
+  }
+
+  // Read sprint status to get story statuses
+  let entries: Record<string, Record<string, unknown>> = {};
+  try {
+    const sprint = readSprintStatus(project);
+    entries = sprint.development_status;
+  } catch {
+    // Non-fatal
+  }
+
+  const affectedSet = new Set<string>();
+  const cycles: CycleInfo[] = graph.circularWarnings.map((cycle) => {
+    const statuses: Record<string, string> = {};
+    for (const id of cycle) {
+      affectedSet.add(id);
+      const entry = entries[id];
+      statuses[id] =
+        entry && typeof entry["status"] === "string" ? (entry["status"] as string) : "unknown";
+    }
+    return {
+      cycle,
+      length: cycle.length,
+      statuses,
+    };
+  });
+
+  return {
+    cycles,
+    totalCycles: cycles.length,
+    affectedStories: [...affectedSet],
+  };
+}

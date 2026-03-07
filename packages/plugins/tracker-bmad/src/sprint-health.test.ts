@@ -361,6 +361,36 @@ describe("computeSprintHealth", () => {
     expect(result.wipColumns).toEqual([]);
     expect(result.indicators.find((i) => i.id === "wip-alert")).toBeUndefined();
   });
+
+  it("filters stuck stories by epic when epicFilter is provided", () => {
+    const sixtyHoursAgo = new Date(Date.now() - 60 * 60 * 60 * 1000).toISOString();
+
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: in-progress",
+        "    epic: epic-auth",
+        "  s2:",
+        "    status: in-progress",
+        "    epic: epic-ui",
+      ].join("\n"),
+      historyLines: [
+        makeHistoryEntry("s1", "backlog", "in-progress", sixtyHoursAgo),
+        makeHistoryEntry("s2", "backlog", "in-progress", sixtyHoursAgo),
+      ],
+    });
+
+    // Without filter, both are stuck
+    const all = computeSprintHealth(PROJECT);
+    expect(all.stuckStories).toContain("s1");
+    expect(all.stuckStories).toContain("s2");
+
+    // With epic filter, only s1 (epic-auth) is reported
+    const filtered = computeSprintHealth(PROJECT, "epic-auth");
+    expect(filtered.stuckStories).toContain("s1");
+    expect(filtered.stuckStories).not.toContain("s2");
+  });
 });
 
 // ---------------------------------------------------------------------------

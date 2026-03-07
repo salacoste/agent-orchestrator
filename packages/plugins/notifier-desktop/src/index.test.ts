@@ -1,5 +1,10 @@
-import { describe, it, expect, vi, beforeEach, type Mock } from "vitest";
-import type { OrchestratorEvent, NotifyAction } from "@composio/ao-core";
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
+import type {
+  OrchestratorEvent,
+  NotifyAction,
+  Notification,
+  NotificationPlugin,
+} from "@composio/ao-core";
 
 // Mock node:child_process
 vi.mock("node:child_process", () => ({
@@ -11,12 +16,21 @@ vi.mock("node:os", () => ({
   platform: vi.fn(() => "darwin"),
 }));
 
+// Mock node-notifier - use factory to avoid hoisting issues
+vi.mock("node-notifier", () => ({
+  default: {
+    notify: vi.fn(),
+  },
+}));
+
 import { execFile } from "node:child_process";
 import { platform } from "node:os";
+import nodeNotifier from "node-notifier";
 import { manifest, create, escapeAppleScript } from "./index.js";
 
 const mockExecFile = execFile as unknown as Mock;
 const mockPlatform = platform as unknown as Mock;
+const mockNotify = nodeNotifier.notify as unknown as Mock;
 
 function makeEvent(overrides: Partial<OrchestratorEvent> = {}): OrchestratorEvent {
   return {
@@ -265,6 +279,393 @@ describe("notifier-desktop", () => {
       );
       const notifier = create();
       await expect(notifier.notify(makeEvent())).rejects.toThrow("osascript not found");
+    });
+  });
+
+  // =============================================================================
+  // NOTIFICATION PLUGIN INTERFACE (Story 3.2)
+  // =============================================================================
+
+  describe("NotificationPlugin interface (Story 3.2)", () => {
+    let plugin: NotificationPlugin;
+
+    beforeEach(async () => {
+      vi.clearAllMocks();
+      mockPlatform.mockReturnValue("darwin");
+      mockExecFile.mockImplementation(
+        (_cmd: string, _args: string[], cb: (err: Error | null) => void) => {
+          cb(null);
+        },
+      );
+      mockNotify.mockImplementation(
+        (_options: unknown, callback: (error: Error | null, response?: unknown) => void) => {
+          callback(null, {}); // Success - no error
+        },
+      );
+
+      // Import dynamically to use mocked node-notifier
+      const { createNotificationPlugin } = await import("./index.js");
+      plugin = createNotificationPlugin();
+    });
+
+    describe("createNotificationPlugin", () => {
+      it("returns a NotificationPlugin with name 'desktop'", () => {
+        expect(plugin.name).toBe("desktop");
+      });
+
+      it("has send and isAvailable methods", () => {
+        expect(typeof plugin.send).toBe("function");
+        expect(typeof plugin.isAvailable).toBe("function");
+      });
+    });
+
+    describe("isAvailable", () => {
+      it("returns true when node-notifier is available", async () => {
+        const available = await plugin.isAvailable();
+        expect(available).toBe(true);
+      });
+
+      it("returns true even on platforms without native notifications", async () => {
+        mockPlatform.mockReturnValue("win32");
+        const { createNotificationPlugin } = await import("./index.js");
+        const winPlugin = createNotificationPlugin();
+
+        const available = await winPlugin.isAvailable();
+        expect(available).toBe(true); // node-notifier works on Windows
+      });
+    });
+
+    describe("send", () => {
+      function makeNotification(overrides: Partial<Notification> = {}): Notification {
+        return {
+          eventId: "evt-1",
+          eventType: "agent.blocked",
+          priority: "critical",
+          title: "Agent Blocked",
+          message: "Story 3.2 agent is blocked",
+          timestamp: new Date("2025-01-01T00:00:00Z").toISOString(),
+          ...overrides,
+        };
+      }
+
+      it("calls node-notifier.notify with correct options", async () => {
+        const notification = makeNotification();
+        await plugin.send(notification);
+
+        expect(mockNotify).toHaveBeenCalledOnce();
+        const callArgs = mockNotify.mock.calls[0][0];
+        expect(callArgs).toHaveProperty("title", "Agent Blocked");
+        expect(callArgs).toHaveProperty("message", "Story 3.2 agent is blocked");
+      });
+
+      it("maps priority critical to urgency level", async () => {
+        const notification = makeNotification({ priority: "critical" });
+        await plugin.send(notification);
+
+        const callArgs = mockNotify.mock.calls[0][0];
+        expect(callArgs).toHaveProperty("sound", true); // Critical has sound
+      });
+
+      it("maps priority warning to appropriate notification", async () => {
+        const notification = makeNotification({
+          priority: "warning",
+          title: "Warning",
+          message: "Test warning",
+        });
+        await plugin.send(notification);
+
+        expect(mockNotify).toHaveBeenCalledOnce();
+        const callArgs = mockNotify.mock.calls[0][0];
+        expect(callArgs.title).toBe("Warning");
+        expect(callArgs.message).toBe("Test warning");
+      });
+
+      it("maps priority info to appropriate notification", async () => {
+        const notification = makeNotification({
+          priority: "info",
+          title: "Info",
+          message: "Test info",
+        });
+        await plugin.send(notification);
+
+        expect(mockNotify).toHaveBeenCalledOnce();
+        const callArgs = mockNotify.mock.calls[0][0];
+        expect(callArgs.title).toBe("Info");
+        expect(callArgs.message).toBe("Test info");
+      });
+
+      it("includes actionUrl when present", async () => {
+        const notification = makeNotification({
+          actionUrl: "https://github.com/pr/1",
+        });
+        await plugin.send(notification);
+
+        const callArgs = mockNotify.mock.calls[0][0];
+        expect(callArgs).toHaveProperty("message");
+      });
+
+      it("handles notification errors gracefully", async () => {
+        mockNotify.mockImplementation(
+          (_options: unknown, callback: (error: Error | null, response?: unknown) => void) => {
+            callback(new Error("Notification failed"), {});
+          },
+        );
+
+        const notification = makeNotification();
+        // Should not throw, errors are logged but not propagated
+        await expect(plugin.send(notification)).resolves.toBeUndefined();
+      });
+
+      it("works on Windows", async () => {
+        mockPlatform.mockReturnValue("win32");
+        const { createNotificationPlugin } = await import("./index.js");
+        const winPlugin = createNotificationPlugin();
+
+        const notification = makeNotification();
+        await winPlugin.send(notification);
+
+        expect(mockNotify).toHaveBeenCalledOnce();
+      });
+
+      it("works on Linux", async () => {
+        mockPlatform.mockReturnValue("linux");
+        const { createNotificationPlugin } = await import("./index.js");
+        const linuxPlugin = createNotificationPlugin();
+
+        const notification = makeNotification();
+        await linuxPlugin.send(notification);
+
+        expect(mockNotify).toHaveBeenCalledOnce();
+      });
+    });
+  });
+
+  // =============================================================================
+  // NOTIFICATION COALESCING (Story 3.2)
+  // =============================================================================
+
+  describe("Notification Coalescing (Story 3.2)", () => {
+    let plugin: NotificationPlugin;
+
+    beforeEach(async () => {
+      vi.clearAllMocks();
+      mockNotify.mockImplementation(
+        (_options: unknown, callback: (error: Error | null, response?: unknown) => void) => {
+          callback(null, {}); // Success
+        },
+      );
+      vi.useFakeTimers();
+
+      const { createNotificationPlugin } = await import("./index.js");
+      // Create plugin with coalescing enabled
+      plugin = createNotificationPlugin({ coalesceWindow: 60000 }); // 60 seconds
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function makeNotification(overrides: Partial<Notification> = {}): Notification {
+      return {
+        eventId: "evt-1",
+        eventType: "agent.blocked",
+        priority: "critical",
+        title: "Agent Blocked",
+        message: "Story 3.2 agent is blocked",
+        timestamp: new Date("2025-01-01T00:00:00Z").toISOString(),
+        ...overrides,
+      };
+    }
+
+    describe("coalescing similar notifications", () => {
+      it("sends first notification immediately", async () => {
+        const notification = makeNotification();
+        await plugin.send(notification);
+
+        expect(mockNotify).toHaveBeenCalledOnce();
+      });
+
+      it("coalesces second notification of same type within window", async () => {
+        const notification1 = makeNotification({ eventId: "evt-1" });
+        const notification2 = makeNotification({ eventId: "evt-2" });
+
+        await plugin.send(notification1);
+        await plugin.send(notification2);
+
+        // Only one notification sent so far (coalesced)
+        expect(mockNotify).toHaveBeenCalledTimes(1);
+
+        // Advance timer past coalesce window
+        vi.advanceTimersByTime(61000);
+        await vi.runAllTimersAsync();
+
+        // Second notification should be sent with count
+        expect(mockNotify).toHaveBeenCalledTimes(2);
+        const lastCall = mockNotify.mock.calls[1][0];
+        expect(lastCall.message).toContain("(2)"); // Count indicator
+      });
+
+      it("sends different event types immediately", async () => {
+        const notification1 = makeNotification({
+          eventType: "agent.blocked",
+          title: "Agent Blocked",
+        });
+        const notification2 = makeNotification({
+          eventType: "conflict.detected",
+          title: "Conflict Detected",
+        });
+
+        await plugin.send(notification1);
+        await plugin.send(notification2);
+
+        // Both notifications sent immediately (different types)
+        expect(mockNotify).toHaveBeenCalledTimes(2);
+      });
+
+      it("resets coalesce window after flush", async () => {
+        const notification1 = makeNotification({ eventId: "evt-1" });
+        const notification2 = makeNotification({ eventId: "evt-2" });
+        const notification3 = makeNotification({ eventId: "evt-3" });
+
+        await plugin.send(notification1);
+        await plugin.send(notification2);
+
+        // Flush coalesced notification
+        vi.advanceTimersByTime(61000);
+        await vi.runAllTimersAsync();
+
+        await plugin.send(notification3);
+
+        // Third notification starts a new coalesce window and is sent immediately
+        expect(mockNotify).toHaveBeenCalledTimes(3); // First (immediate) + Flush (coalesced) + Third (immediate)
+      });
+    });
+
+    describe("coalescing configuration", () => {
+      it("allows custom coalesce window", async () => {
+        const { createNotificationPlugin } = await import("./index.js");
+        const customPlugin = createNotificationPlugin({ coalesceWindow: 5000 }); // 5 seconds
+
+        const notification1 = makeNotification({ eventId: "evt-1" });
+        const notification2 = makeNotification({ eventId: "evt-2" });
+
+        await customPlugin.send(notification1);
+        await customPlugin.send(notification2);
+
+        expect(mockNotify).toHaveBeenCalledTimes(1);
+
+        // Advance past shorter window
+        vi.advanceTimersByTime(5100);
+        await vi.runAllTimersAsync();
+
+        expect(mockNotify).toHaveBeenCalledTimes(2);
+      });
+
+      it("disables coalescing when window is 0", async () => {
+        const { createNotificationPlugin } = await import("./index.js");
+        const noCoalescePlugin = createNotificationPlugin({ coalesceWindow: 0 });
+
+        const notification1 = makeNotification({ eventId: "evt-1" });
+        const notification2 = makeNotification({ eventId: "evt-2" });
+
+        await noCoalescePlugin.send(notification1);
+        await noCoalescePlugin.send(notification2);
+
+        // Both sent immediately (no coalescing)
+        expect(mockNotify).toHaveBeenCalledTimes(2);
+      });
+    });
+  });
+
+  // =============================================================================
+  // FOCUS MODE DETECTION (Story 3.2)
+  // =============================================================================
+
+  describe("Focus Mode Detection (Story 3.2)", () => {
+    function makeNotification(overrides: Partial<Notification> = {}): Notification {
+      return {
+        eventId: "evt-1",
+        eventType: "agent.blocked",
+        priority: "critical",
+        title: "Agent Blocked",
+        message: "Story 3.2 agent is blocked",
+        timestamp: new Date("2025-01-01T00:00:00Z").toISOString(),
+        ...overrides,
+      };
+    }
+
+    describe("with focus mode detection enabled", () => {
+      let plugin: NotificationPlugin;
+
+      beforeEach(async () => {
+        vi.clearAllMocks();
+        mockNotify.mockImplementation(
+          (_options: unknown, callback: (error: Error | null, response?: unknown) => void) => {
+            callback(null, {});
+          },
+        );
+
+        const { createNotificationPlugin } = await import("./index.js");
+        // Mock focus mode detection to return true
+        plugin = createNotificationPlugin({
+          respectFocusMode: true,
+          detectFocusMode: async () => true,
+        });
+      });
+
+      it("suppresses notification when focus mode is active", async () => {
+        const notification = makeNotification();
+        await plugin.send(notification);
+
+        // Notification suppressed
+        expect(mockNotify).not.toHaveBeenCalled();
+      });
+
+      it("allows notification when focus mode is inactive", async () => {
+        const { createNotificationPlugin } = await import("./index.js");
+        const plugin = createNotificationPlugin({
+          respectFocusMode: true,
+          detectFocusMode: async () => false, // Focus mode inactive
+        });
+
+        const notification = makeNotification();
+        await plugin.send(notification);
+
+        expect(mockNotify).toHaveBeenCalledOnce();
+      });
+    });
+
+    describe("with focus mode detection disabled", () => {
+      it("sends notifications regardless of focus mode", async () => {
+        const { createNotificationPlugin } = await import("./index.js");
+        const plugin = createNotificationPlugin({
+          respectFocusMode: false, // Don't respect focus mode
+          detectFocusMode: async () => true, // Even if focus mode is active
+        });
+
+        const notification = makeNotification();
+        await plugin.send(notification);
+
+        expect(mockNotify).toHaveBeenCalledOnce();
+      });
+    });
+
+    describe("focus mode detection failure", () => {
+      it("fails open - sends notification when detection fails", async () => {
+        const { createNotificationPlugin } = await import("./index.js");
+        const plugin = createNotificationPlugin({
+          respectFocusMode: true,
+          detectFocusMode: async () => {
+            throw new Error("Detection failed");
+          },
+        });
+
+        const notification = makeNotification();
+        await plugin.send(notification);
+
+        // Should still send notification (fail open)
+        expect(mockNotify).toHaveBeenCalledOnce();
+      });
     });
   });
 });

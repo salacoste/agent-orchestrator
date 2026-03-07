@@ -5,7 +5,12 @@
 
 import type { ProjectConfig } from "@composio/ao-core";
 import { readHistory } from "./history.js";
-import { readSprintStatus } from "./sprint-status-reader.js";
+import {
+  readSprintStatus,
+  hasPointsData,
+  getPoints,
+  getEpicStoryIds,
+} from "./sprint-status-reader.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -15,20 +20,26 @@ export interface WeeklyVelocity {
   weekStart: string;
   weekEnd: string;
   completedCount: number;
+  completedPoints?: number;
   storyIds: string[];
 }
 
 export interface VelocityComparisonResult {
   weeks: WeeklyVelocity[];
   averageVelocity: number;
+  averageVelocityPoints?: number;
   stdDeviation: number;
   trend: "improving" | "stable" | "declining";
   trendSlope: number;
   trendConfidence: number;
   nextWeekEstimate: number;
+  nextWeekEstimatePoints?: number;
   currentWeekSoFar: number;
   completionWeeks: number | null;
+  completionWeeksPoints?: number | null;
   remainingStories: number;
+  remainingPoints?: number;
+  hasPoints: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -105,13 +116,43 @@ function linearRegression(points: Array<{ x: number; y: number }>): {
 // Main export
 // ---------------------------------------------------------------------------
 
-export function computeVelocityComparison(project: ProjectConfig): VelocityComparisonResult {
+export function computeVelocityComparison(
+  project: ProjectConfig,
+  epicFilter?: string,
+): VelocityComparisonResult {
   const history = readHistory(project);
+
+  // Build epic filter set if needed
+  let epicStoryIds: Set<string> | null = null;
+  if (epicFilter) {
+    try {
+      const sprint = readSprintStatus(project);
+      epicStoryIds = getEpicStoryIds(sprint, epicFilter);
+    } catch {
+      epicStoryIds = new Set();
+    }
+  }
+
+  // Build storyId → points map from sprint status
+  let pointsMap = new Map<string, number>();
+  let pointsPresent = false;
+  try {
+    const sprint = readSprintStatus(project);
+    pointsPresent = hasPointsData(sprint);
+    if (pointsPresent) {
+      for (const [id, entry] of Object.entries(sprint.development_status)) {
+        pointsMap.set(id, getPoints(entry));
+      }
+    }
+  } catch {
+    pointsMap = new Map();
+  }
 
   // Collect done-transitions with timestamps
   const completions: Array<{ storyId: string; date: Date }> = [];
   for (const entry of history) {
     if (entry.toStatus === "done") {
+      if (epicStoryIds && !epicStoryIds.has(entry.storyId)) continue;
       const d = new Date(entry.timestamp);
       if (!isNaN(d.getTime())) {
         completions.push({ storyId: entry.storyId, date: d });
@@ -137,17 +178,25 @@ export function computeVelocityComparison(project: ProjectConfig): VelocityCompa
   // Sort weeks chronologically
   const sortedKeys = [...weekMap.keys()].sort();
   const weeks: WeeklyVelocity[] = sortedKeys.map((key) => {
-    const w = weekMap.get(key)!;
-    return {
+    const w = weekMap.get(key);
+    if (!w) return { weekStart: key, weekEnd: key, completedCount: 0, storyIds: [] };
+    const weekResult: WeeklyVelocity = {
       weekStart: isoDate(w.start),
       weekEnd: isoDate(w.end),
       completedCount: w.storyIds.length,
       storyIds: w.storyIds,
     };
+    if (pointsPresent) {
+      weekResult.completedPoints = w.storyIds.reduce(
+        (sum, id) => sum + (pointsMap.get(id) ?? 1),
+        0,
+      );
+    }
+    return weekResult;
   });
 
   if (weeks.length === 0) {
-    const remaining = countRemaining(project);
+    const remaining = countRemaining(project, epicStoryIds);
     return {
       weeks: [],
       averageVelocity: 0,
@@ -159,6 +208,7 @@ export function computeVelocityComparison(project: ProjectConfig): VelocityCompa
       currentWeekSoFar: 0,
       completionWeeks: null,
       remainingStories: remaining,
+      hasPoints: pointsPresent,
     };
   }
 
@@ -172,8 +222,8 @@ export function computeVelocityComparison(project: ProjectConfig): VelocityCompa
   const stdDev = Math.sqrt(variance);
 
   // Linear regression
-  const points = counts.map((y, i) => ({ x: i, y }));
-  const { slope, intercept, rSquared } = linearRegression(points);
+  const regPoints = counts.map((y, i) => ({ x: i, y }));
+  const { slope, intercept, rSquared } = linearRegression(regPoints);
 
   // Trend classification
   let trend: "improving" | "stable" | "declining" = "stable";
@@ -191,10 +241,11 @@ export function computeVelocityComparison(project: ProjectConfig): VelocityCompa
   const currentWeekSoFar = currentWeekData ? currentWeekData.storyIds.length : 0;
 
   // Remaining stories / completion estimate
-  const remaining = countRemaining(project);
+  const remaining = countRemaining(project, epicStoryIds);
   const completionWeeks = avg > 0 ? remaining / avg : null;
 
-  return {
+  // Points-based stats
+  const result: VelocityComparisonResult = {
     weeks,
     averageVelocity: avg,
     stdDeviation: stdDev,
@@ -205,16 +256,58 @@ export function computeVelocityComparison(project: ProjectConfig): VelocityCompa
     currentWeekSoFar,
     completionWeeks,
     remainingStories: remaining,
+    hasPoints: pointsPresent,
   };
+
+  if (pointsPresent) {
+    const pointsCounts = weeks.map((w) => w.completedPoints ?? 0);
+    const pointsSum = pointsCounts.reduce((a, b) => a + b, 0);
+    const pointsAvg = pointsCounts.length > 0 ? pointsSum / pointsCounts.length : 0;
+    result.averageVelocityPoints = pointsAvg;
+
+    const pointsRegPoints = pointsCounts.map((y, i) => ({ x: i, y }));
+    const pointsReg = linearRegression(pointsRegPoints);
+    result.nextWeekEstimatePoints = Math.max(
+      0,
+      pointsReg.slope * pointsCounts.length + pointsReg.intercept,
+    );
+
+    const remainingPts = countRemainingPoints(project, epicStoryIds);
+    result.remainingPoints = remainingPts;
+    result.completionWeeksPoints = pointsAvg > 0 ? remainingPts / pointsAvg : null;
+  }
+
+  return result;
 }
 
-function countRemaining(project: ProjectConfig): number {
+function countRemaining(project: ProjectConfig, epicStoryIds: Set<string> | null = null): number {
   try {
     const sprint = readSprintStatus(project);
-    return Object.values(sprint.development_status).filter((e) => {
+    return Object.entries(sprint.development_status).filter(([id, e]) => {
       const s = typeof e.status === "string" ? e.status : "backlog";
-      return s !== "done" && !s.startsWith("epic-");
+      if (s === "done" || s.startsWith("epic-")) return false;
+      if (epicStoryIds && !epicStoryIds.has(id)) return false;
+      return true;
     }).length;
+  } catch {
+    return 0;
+  }
+}
+
+function countRemainingPoints(
+  project: ProjectConfig,
+  epicStoryIds: Set<string> | null = null,
+): number {
+  try {
+    const sprint = readSprintStatus(project);
+    let total = 0;
+    for (const [id, entry] of Object.entries(sprint.development_status)) {
+      const s = typeof entry.status === "string" ? entry.status : "backlog";
+      if (s === "done" || s.startsWith("epic-")) continue;
+      if (epicStoryIds && !epicStoryIds.has(id)) continue;
+      total += getPoints(entry);
+    }
+    return total;
   } catch {
     return 0;
   }

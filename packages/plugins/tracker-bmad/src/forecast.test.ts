@@ -382,4 +382,76 @@ describe("computeForecast", () => {
     expect(result.totalStories).toBe(2);
     expect(result.completedStories).toBe(1);
   });
+
+  it("hasPoints is false when no stories have points", () => {
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: done",
+        "  s2:",
+        "    status: backlog",
+      ].join("\n"),
+      historyLines: [makeHistoryEntry("s1", "in-progress", "done", "2026-01-01T12:00:00.000Z")],
+    });
+
+    const result = computeForecast(PROJECT);
+    expect(result.hasPoints).toBe(false);
+    expect(result.totalPoints).toBeUndefined();
+  });
+
+  it("computes points when stories have points", () => {
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: done",
+        "    points: 3",
+        "  s2:",
+        "    status: done",
+        "    points: 5",
+        "  s3:",
+        "    status: backlog",
+        "    points: 8",
+      ].join("\n"),
+      historyLines: [
+        makeHistoryEntry("s1", "in-progress", "done", "2026-01-01T12:00:00.000Z"),
+        makeHistoryEntry("s2", "in-progress", "done", "2026-01-02T12:00:00.000Z"),
+      ],
+    });
+
+    const result = computeForecast(PROJECT);
+
+    expect(result.hasPoints).toBe(true);
+    expect(result.totalPoints).toBe(16); // 3 + 5 + 8
+    expect(result.completedPoints).toBe(8); // 3 + 5
+    expect(result.remainingPoints).toBe(8);
+  });
+
+  it("filters by epic when epicFilter is provided", () => {
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: done",
+        "    epic: epic-auth",
+        "  s2:",
+        "    status: done",
+        "    epic: epic-ui",
+        "  s3:",
+        "    status: backlog",
+        "    epic: epic-auth",
+      ].join("\n"),
+      historyLines: [
+        makeHistoryEntry("s1", "in-progress", "done", "2026-01-01T12:00:00.000Z"),
+        makeHistoryEntry("s2", "in-progress", "done", "2026-01-02T12:00:00.000Z"),
+      ],
+    });
+
+    const result = computeForecast(PROJECT, "epic-auth");
+
+    expect(result.totalStories).toBe(2); // s1 + s3
+    expect(result.completedStories).toBe(1); // s1 only
+    expect(result.remainingStories).toBe(1); // s3 only
+  });
 });

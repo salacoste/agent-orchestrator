@@ -1438,6 +1438,134 @@ export interface AgentResumedEvent {
 }
 
 // =============================================================================
+// NOTIFICATION SERVICE
+// =============================================================================
+
+/** Notification priority levels */
+export type NotificationPriority = "critical" | "warning" | "info";
+
+/** Notification sent to plugins */
+export interface Notification {
+  /** Unique event identifier from source event */
+  eventId: string;
+  /** Event type from source event */
+  eventType: string;
+  /** Notification priority */
+  priority: NotificationPriority;
+  /** Human-readable title */
+  title: string;
+  /** Detailed message */
+  message: string;
+  /** Optional action URL */
+  actionUrl?: string;
+  /** Additional metadata */
+  metadata?: Record<string, unknown>;
+  /** ISO 8601 timestamp */
+  timestamp: string;
+}
+
+/** Result of sending a notification */
+export interface NotificationResult {
+  /** Whether all plugin deliveries succeeded */
+  success: boolean;
+  /** Plugins that successfully delivered */
+  deliveredPlugins: string[];
+  /** Plugins that failed to deliver */
+  failedPlugins: Array<{ plugin: string; error: string }>;
+  /** Whether this was a duplicate (deduped) */
+  duplicate?: boolean;
+}
+
+/** Notification service status */
+export interface NotificationStatus {
+  /** Current queue depth */
+  queueDepth: number;
+  /** Number of duplicates deduplicated */
+  dedupCount: number;
+  /** Dead letter queue size */
+  dlqSize: number;
+  /** Last processed notification timestamp */
+  lastProcessedTime?: string;
+}
+
+/** Dead letter notification (failed delivery) */
+export interface DeadLetterNotification {
+  /** Notification that failed */
+  notification: Notification;
+  /** Target plugin that failed */
+  targetPlugin: string;
+  /** Number of retry attempts */
+  retryCount: number;
+  /** Error that caused failure */
+  error: string;
+  /** Last attempt timestamp */
+  lastAttempt: string;
+}
+
+/** Notification plugin interface */
+export interface NotificationPlugin {
+  /** Plugin name (e.g., "desktop", "slack", "webhook") */
+  name: string;
+
+  /** Send notification to plugin */
+  send(notification: Notification): Promise<void>;
+
+  /** Check if plugin is available */
+  isAvailable(): Promise<boolean>;
+}
+
+/** Notification service interface */
+export interface NotificationService {
+  /** Send notification immediately */
+  send(notification: Notification): Promise<NotificationResult>;
+
+  /** Get notification queue status */
+  getStatus(): NotificationStatus;
+
+  /** Get dead letter queue */
+  getDLQ(): DeadLetterNotification[];
+
+  /** Retry failed notification from DLQ */
+  retryDLQ(notificationId: string): Promise<void>;
+
+  /** Close service */
+  close(): Promise<void>;
+}
+
+/** Notification service configuration */
+export interface NotificationServiceConfig {
+  /** Event bus for subscribing to events */
+  eventBus: EventBus;
+  /** Notification plugins to use */
+  plugins: NotificationPlugin[];
+  /** Dead letter queue file path (optional) */
+  dlqPath?: string;
+  /** Queue depth threshold for backlog alert */
+  backlogThreshold?: number;
+  /** Deduplication window in milliseconds */
+  dedupWindowMs?: number;
+  /** Notification preferences per event type pattern */
+  preferences?: NotificationPreferences;
+}
+
+/** Notification preferences for routing by event type */
+export interface NotificationPreferences {
+  /** Map of event type pattern to plugin names
+   *
+   * Pattern format: "eventType" or "eventType:subType"
+   * Examples:
+   *   - "blocked" → matches any event type containing "blocked"
+   *   - "agent.blocked" → matches exact event type
+   *   - "conflict" → matches any event type containing "conflict"
+   *
+   * Value: comma-separated list of plugin names to route to
+   *   - "desktop,slack" → route to desktop and slack plugins only
+   *   - "all" → route to all available plugins (default)
+   */
+  [eventTypePattern: string]: string | undefined;
+}
+
+// =============================================================================
 // AUDIT TRAIL
 // =============================================================================
 
@@ -1582,5 +1710,265 @@ export interface StateManager {
   getVersion(storyId: string): string | null;
 
   // Close state manager
+  close(): Promise<void>;
+}
+
+// =============================================================================
+// CONFLICT RESOLVER
+// =============================================================================
+
+/** Conflict resolution strategies */
+export type Resolution = "overwrite" | "retry" | "merge";
+
+/** Field-level conflict information */
+export interface FieldConflict {
+  field: string;
+  currentValue: unknown;
+  proposedValue: unknown;
+}
+
+/** Conflict details with current and proposed states */
+export interface Conflict {
+  storyId: string;
+  expectedVersion: string;
+  actualVersion: string;
+  conflicts: FieldConflict[];
+  current: StoryState;
+  proposed: StoryState;
+}
+
+/** Result of a conflict resolution operation */
+export interface ResolveResult {
+  success: boolean;
+  newVersion?: string;
+  error?: string;
+}
+
+/** Field selections for merge resolution */
+export interface MergeSelections {
+  [field: string]: "current" | "proposed";
+}
+
+/** Conflict resolver service interface */
+export interface ConflictResolver {
+  /**
+   * Detect and report conflicts
+   * @param storyId - Story identifier
+   * @param expectedVersion - Version expected by the caller
+   * @param updates - Proposed updates
+   * @returns Conflict details if version mismatch, null otherwise
+   */
+  detect(storyId: string, expectedVersion: string, updates: Partial<StoryState>): Conflict | null;
+
+  /**
+   * Resolve a conflict using the specified strategy
+   * @param conflict - Conflict details
+   * @param resolution - Resolution strategy to apply
+   * @returns Resolution result with new version or error
+   */
+  resolve(conflict: Conflict, resolution: Resolution): Promise<ResolveResult>;
+
+  /**
+   * Merge two states according to field selections
+   * @param current - Current story state
+   * @param proposed - Proposed story state
+   * @param selections - Field-level selections (current or proposed)
+   * @returns Merged story state
+   */
+  merge(current: StoryState, proposed: StoryState, selections: MergeSelections): StoryState;
+}
+
+/** Error thrown when a version conflict is detected */
+export class ConflictError extends Error {
+  constructor(
+    public conflict: Conflict,
+    message?: string,
+  ) {
+    super(
+      message ||
+        `Conflict: ${conflict.storyId} has version ${conflict.actualVersion}, expected ${conflict.expectedVersion}`,
+    );
+    this.name = "ConflictError";
+  }
+}
+
+// =============================================================================
+// FILE WATCHER
+// =============================================================================
+
+/** File watch event types */
+export type FileWatchEventType = "modify" | "delete" | "rename";
+
+/** File watch event with change details */
+export interface FileWatchEvent {
+  type: FileWatchEventType;
+  path: string;
+  timestamp: string;
+  previousState?: Record<string, unknown>;
+  newState?: Record<string, unknown>;
+  changedStories?: string[];
+}
+
+/** File watcher configuration */
+export interface FileWatcherConfig {
+  stateManager: StateManager;
+  eventBus?: EventBus;
+  enabled?: boolean; // Default: true - set to false to disable file watching (AC 7)
+  debounceMs?: number; // Default: 500ms
+  retryInterval?: number; // Default: 5000ms
+  backupDir?: string; // Default: .backups/
+  maxBackups?: number; // Default: 10
+  debounceOverflowThreshold?: number; // Default: 10
+  interactive?: boolean; // Default: false
+}
+
+/** File watcher service interface */
+export interface FileWatcher {
+  /**
+   * Start watching a file for changes
+   * @param path - Absolute path to the file to watch
+   * @throws Error if file doesn't exist or cannot be watched
+   */
+  watch(path: string): Promise<void>;
+
+  /**
+   * Stop watching a file
+   * @param path - Path to the file to stop watching
+   */
+  unwatch(path: string): Promise<void>;
+
+  /**
+   * Stop watching all files and clean up resources
+   */
+  close(): Promise<void>;
+
+  /**
+   * Check if a file is currently being watched
+   * @param path - Path to check
+   * @returns true if the file is being watched, false otherwise
+   */
+  isWatching(path: string): boolean;
+}
+
+// =============================================================================
+// SYNC SERVICE
+// =============================================================================
+
+/** Sync direction options */
+export type SyncDirection = "to-bmad" | "from-bmad" | "bidirectional";
+
+/** Result of a single sync operation */
+export interface SyncResult {
+  storyId: string;
+  success: boolean;
+  error?: string;
+  conflict?: ConflictInfo;
+}
+
+/** Result of syncing all stories */
+export interface SyncAllResult {
+  succeeded: string[];
+  failed: Array<{ storyId: string; error: string }>;
+  conflicts: Array<{ storyId: string; info: ConflictInfo }>;
+  duration: number; // milliseconds
+}
+
+/** Current sync service status */
+export interface SyncStatus {
+  lastSyncTime: string | null;
+  queueSize: number;
+  failedCount: number;
+  bmadConnected: boolean;
+  degradedMode: boolean;
+}
+
+/** Conflict information for sync operations */
+export interface ConflictInfo {
+  type: string;
+  localTimestamp: string;
+  bmadTimestamp: string;
+  winner?: "local" | "bmad";
+  resolvedState?: StoryState;
+}
+
+/** BMAD Tracker plugin interface */
+export interface BMADTracker {
+  name: string;
+
+  /**
+   * Get story state from BMAD
+   * @param storyId - Story identifier
+   * @returns Story state or null if not found
+   */
+  getStory(storyId: string): Promise<StoryState | null>;
+
+  /**
+   * Update story state in BMAD
+   * @param storyId - Story identifier
+   * @param state - Story state to update
+   */
+  updateStory(storyId: string, state: StoryState): Promise<void>;
+
+  /**
+   * List all stories in BMAD
+   * @returns Map of story IDs to story states
+   */
+  listStories(): Promise<Map<string, StoryState>>;
+
+  /**
+   * Check if tracker is available
+   * @returns true if available, false otherwise
+   */
+  isAvailable(): Promise<boolean>;
+}
+
+/** Sync service configuration */
+export interface SyncServiceConfig {
+  eventBus: EventBus;
+  stateManager: StateManager;
+  bmadTracker: BMADTracker;
+  pollInterval?: number; // Default: 10000ms (10 seconds)
+  retryDelays?: number[]; // Default: [1000, 2000, 4000, 8000, 16000]
+  maxRetries?: number; // Default: 5
+}
+
+/** Sync service interface */
+export interface SyncService {
+  /**
+   * Sync story state to BMAD
+   * @param storyId - Story identifier
+   * @param state - Story state to sync
+   * @returns Sync result with success status
+   */
+  syncToBMAD(storyId: string, state: StoryState): Promise<SyncResult>;
+
+  /**
+   * Sync story state from BMAD
+   * @param storyId - Story identifier
+   * @returns Sync result with success status
+   */
+  syncFromBMAD(storyId: string): Promise<SyncResult>;
+
+  /**
+   * Sync all stories bidirectional
+   * @param direction - Sync direction (default: bidirectional)
+   * @returns Sync all result with succeeded, failed, and conflicts
+   */
+  syncAll(direction?: SyncDirection): Promise<SyncAllResult>;
+
+  /**
+   * Get current sync status
+   * @returns Current sync status
+   */
+  getStatus(): SyncStatus;
+
+  /**
+   * Retry failed syncs
+   */
+  retryFailed(): Promise<void>;
+
+  /**
+   * Close sync service and cleanup resources
+   */
   close(): Promise<void>;
 }

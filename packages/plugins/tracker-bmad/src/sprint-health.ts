@@ -4,9 +4,10 @@
  */
 
 import type { ProjectConfig } from "@composio/ao-core";
-import { readSprintStatus } from "./sprint-status-reader.js";
+import { readSprintStatus, getEpicStoryIds } from "./sprint-status-reader.js";
 import { readHistory } from "./history.js";
 import { computeCycleTime } from "./cycle-time.js";
+import { getActiveColumns, getColumnLabel } from "./workflow-columns.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -38,8 +39,6 @@ const DEFAULT_WIP_LIMIT = 3;
 const THROUGHPUT_WARNING_RATIO = 0.7;
 const THROUGHPUT_CRITICAL_RATIO = 0.4;
 const BOTTLENECK_RATIO = 2;
-
-const ACTIVE_COLUMNS = new Set(["in-progress", "review"]);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -138,19 +137,76 @@ export function getWipStatus(
 }
 
 // ---------------------------------------------------------------------------
+// Public: WIP dashboard status (used by web widget)
+// ---------------------------------------------------------------------------
+
+export interface WipColumnStatus {
+  column: string;
+  label: string;
+  current: number;
+  limit: number | null;
+  ratio: number;
+  severity: "ok" | "warning" | "exceeded";
+}
+
+export function getWipDashboardStatus(project: ProjectConfig): WipColumnStatus[] {
+  const wipLimits = getWipLimits(project);
+  const activeColumns = getActiveColumns(project);
+
+  let entries: Record<string, { status: string; [key: string]: unknown }>;
+  try {
+    const sprint = readSprintStatus(project);
+    entries = sprint.development_status;
+  } catch {
+    return [];
+  }
+
+  const result: WipColumnStatus[] = [];
+
+  for (const col of activeColumns) {
+    const current = countStoriesInColumn(entries, col);
+    const limit = wipLimits[col] ?? null;
+    const ratio = limit !== null && limit > 0 ? current / limit : 0;
+    let severity: WipColumnStatus["severity"] = "ok";
+    if (limit !== null) {
+      if (ratio >= 1) severity = "exceeded";
+      else if (ratio >= 0.8) severity = "warning";
+    }
+
+    result.push({
+      column: col,
+      label: getColumnLabel(project, col),
+      current,
+      limit,
+      ratio,
+      severity,
+    });
+  }
+
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
 
-export function computeSprintHealth(project: ProjectConfig): SprintHealthResult {
+export function computeSprintHealth(
+  project: ProjectConfig,
+  epicFilter?: string,
+): SprintHealthResult {
   const indicators: HealthIndicator[] = [];
   const stuckStories: string[] = [];
   const wipColumns: string[] = [];
 
   // Read sprint status — if missing, return all-ok
   let sprintEntries: Record<string, { status: string; [key: string]: unknown }>;
+  let epicStoryIds: Set<string> | null = null;
   try {
     const sprint = readSprintStatus(project);
     sprintEntries = sprint.development_status;
+    if (epicFilter) {
+      epicStoryIds = getEpicStoryIds(sprint, epicFilter);
+    }
   } catch {
     return { overall: "ok", indicators: [], stuckStories: [], wipColumns: [] };
   }
@@ -158,6 +214,7 @@ export function computeSprintHealth(project: ProjectConfig): SprintHealthResult 
   const history = readHistory(project);
   const now = Date.now();
   const wipLimits = getWipLimits(project);
+  const activeColumns = getActiveColumns(project);
 
   // -------------------------------------------------------------------------
   // 1. Stuck stories — stories in active columns with no recent transition
@@ -167,7 +224,8 @@ export function computeSprintHealth(project: ProjectConfig): SprintHealthResult 
 
   for (const [storyId, entry] of Object.entries(sprintEntries)) {
     const status = typeof entry.status === "string" ? entry.status : "backlog";
-    if (!ACTIVE_COLUMNS.has(status)) continue;
+    if (!activeColumns.has(status)) continue;
+    if (epicStoryIds && !epicStoryIds.has(storyId)) continue;
 
     // Find the most recent transition for this story
     let lastTransitionTime = 0;
@@ -210,7 +268,7 @@ export function computeSprintHealth(project: ProjectConfig): SprintHealthResult 
   // -------------------------------------------------------------------------
   // 2. WIP alerts — too many stories in active columns
   // -------------------------------------------------------------------------
-  for (const col of ACTIVE_COLUMNS) {
+  for (const col of activeColumns) {
     const count = countStoriesInColumn(sprintEntries, col);
     // Use per-column config, falling back to default thresholds
     const configuredLimit = wipLimits[col];

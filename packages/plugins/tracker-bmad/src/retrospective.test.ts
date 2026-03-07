@@ -261,4 +261,80 @@ describe("computeRetrospective", () => {
     // Cycle time from first entry (Jan 5) to done (Jan 7) = 2 days
     expect(result.periods[0]!.averageCycleTimeMs).toBe(2 * DAY);
   });
+
+  it("hasPoints is false when sprint status has no points", () => {
+    setHistory([makeEntry("s1", "in-progress", "done", "2026-01-05T10:00:00.000Z")]);
+
+    const result = computeRetrospective(PROJECT);
+
+    expect(result.hasPoints).toBe(false);
+    expect(result.velocityTrendPoints).toBeUndefined();
+  });
+
+  it("computes points per period when stories have points", () => {
+    // Set up sprint status with points
+    mockExistsSync.mockImplementation((p: string) => {
+      if (p === HISTORY_PATH) return true;
+      if (p === STATUS_PATH) return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: string) => {
+      if (p === HISTORY_PATH)
+        return (
+          [
+            makeEntry("s1", "in-progress", "done", "2026-01-05T10:00:00.000Z"),
+            makeEntry("s2", "in-progress", "done", "2026-01-06T10:00:00.000Z"),
+          ].join("\n") + "\n"
+        );
+      if (p === STATUS_PATH)
+        return [
+          "development_status:",
+          "  s1:",
+          "    status: done",
+          "    points: 3",
+          "  s2:",
+          "    status: done",
+          "    points: 5",
+        ].join("\n");
+      throw new Error(`Unexpected read: ${p}`);
+    });
+
+    const result = computeRetrospective(PROJECT);
+
+    expect(result.hasPoints).toBe(true);
+    expect(result.totalCompletedPoints).toBe(8); // 3 + 5
+    expect(result.periods[0]!.completedPoints).toBe(8);
+  });
+
+  it("filters by epic when epicFilter is provided", () => {
+    mockExistsSync.mockImplementation((p: string) => {
+      if (p === HISTORY_PATH) return true;
+      if (p === STATUS_PATH) return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: string) => {
+      if (p === HISTORY_PATH)
+        return (
+          [
+            makeEntry("s1", "in-progress", "done", "2026-01-05T10:00:00.000Z"),
+            makeEntry("s2", "in-progress", "done", "2026-01-06T10:00:00.000Z"),
+          ].join("\n") + "\n"
+        );
+      if (p === STATUS_PATH)
+        return [
+          "development_status:",
+          "  s1:",
+          "    status: done",
+          "    epic: epic-auth",
+          "  s2:",
+          "    status: done",
+          "    epic: epic-ui",
+        ].join("\n");
+      throw new Error(`Unexpected read: ${p}`);
+    });
+
+    const result = computeRetrospective(PROJECT, "epic-auth");
+
+    expect(result.totalCompleted).toBe(1); // Only s1
+  });
 });

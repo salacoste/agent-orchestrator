@@ -16,7 +16,12 @@ vi.mock("./history.js", () => ({
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { appendHistory } from "./history.js";
-import { transitionOnMerge, writeStoryStatus, findStoryForPR } from "./auto-transition.js";
+import {
+  transitionOnMerge,
+  writeStoryStatus,
+  writeStoryPoints,
+  findStoryForPR,
+} from "./auto-transition.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -242,5 +247,171 @@ describe("history integration", () => {
     transitionOnMerge(PROJECT, "nonexistent");
 
     expect(mockAppendHistory).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// writeStoryPoints
+// ---------------------------------------------------------------------------
+
+describe("writeStoryPoints", () => {
+  it("writes updated YAML with the points value", () => {
+    writeStoryPoints(PROJECT, "story-1", 5);
+
+    expect(mockWriteFileSync).toHaveBeenCalledOnce();
+    const [calledPath, calledContent, calledEncoding] = mockWriteFileSync.mock.calls[0] as [
+      string,
+      string,
+      string,
+    ];
+
+    expect(calledPath).toBe(SPRINT_STATUS_PATH);
+    expect(calledEncoding).toBe("utf-8");
+    expect(calledContent).toContain("story-1");
+  });
+
+  it("throws on missing story", () => {
+    expect(() => writeStoryPoints(PROJECT, "nonexistent", 3)).toThrow("not found");
+  });
+
+  it("throws on negative points", () => {
+    expect(() => writeStoryPoints(PROJECT, "story-1", -1)).toThrow("non-negative integer");
+  });
+
+  it("throws on non-integer points", () => {
+    expect(() => writeStoryPoints(PROJECT, "story-1", 2.5)).toThrow("non-negative integer");
+  });
+
+  it("allows zero points", () => {
+    writeStoryPoints(PROJECT, "story-1", 0);
+
+    expect(mockWriteFileSync).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// writeStoryAssignment
+// ---------------------------------------------------------------------------
+
+// Import separately to add tests without triggering unused-import lint
+// on the main import block (lint hook runs per-edit).
+const { writeStoryAssignment, batchWriteStoryStatus } = await import("./auto-transition.js");
+
+describe("writeStoryAssignment", () => {
+  it("sets assignedSession on a story", () => {
+    writeStoryAssignment(PROJECT, "story-1", "session-abc");
+
+    expect(mockWriteFileSync).toHaveBeenCalledOnce();
+    const [, calledContent] = mockWriteFileSync.mock.calls[0] as [string, string, string];
+    expect(calledContent).toContain("session-abc");
+    expect(calledContent).toContain("story-1");
+  });
+
+  it("clears assignedSession when null is passed", () => {
+    // Use YAML that has an assignedSession
+    mockReadFileSync.mockReturnValue(`
+development_status:
+  story-1:
+    status: in-progress
+    assignedSession: session-old
+`);
+
+    writeStoryAssignment(PROJECT, "story-1", null);
+
+    expect(mockWriteFileSync).toHaveBeenCalledOnce();
+    const [, calledContent] = mockWriteFileSync.mock.calls[0] as [string, string, string];
+    expect(calledContent).not.toContain("session-old");
+    expect(calledContent).not.toContain("assignedSession");
+  });
+
+  it("throws on missing story", () => {
+    expect(() => writeStoryAssignment(PROJECT, "nonexistent", "s1")).toThrow("not found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// writeStoryStatus clears assignment on done
+// ---------------------------------------------------------------------------
+
+describe("writeStoryStatus assignment clearing", () => {
+  it("clears assignedSession when transitioning to done", () => {
+    mockReadFileSync.mockReturnValue(`
+development_status:
+  story-1:
+    status: in-progress
+    assignedSession: session-abc
+`);
+
+    writeStoryStatus(PROJECT, "story-1", "done");
+
+    expect(mockWriteFileSync).toHaveBeenCalledOnce();
+    const [, calledContent] = mockWriteFileSync.mock.calls[0] as [string, string, string];
+    expect(calledContent).not.toContain("assignedSession");
+    expect(calledContent).not.toContain("session-abc");
+  });
+
+  it("preserves assignedSession when transitioning to non-done status", () => {
+    mockReadFileSync.mockReturnValue(`
+development_status:
+  story-1:
+    status: in-progress
+    assignedSession: session-abc
+`);
+
+    writeStoryStatus(PROJECT, "story-1", "review");
+
+    expect(mockWriteFileSync).toHaveBeenCalledOnce();
+    const [, calledContent] = mockWriteFileSync.mock.calls[0] as [string, string, string];
+    expect(calledContent).toContain("session-abc");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// batchWriteStoryStatus
+// ---------------------------------------------------------------------------
+
+describe("batchWriteStoryStatus", () => {
+  it("updates multiple stories in one write", () => {
+    const updated = batchWriteStoryStatus(PROJECT, [
+      { storyId: "story-1", newStatus: "done" },
+      { storyId: "story-4", newStatus: "in-progress" },
+    ]);
+
+    expect(updated).toEqual(["story-1", "story-4"]);
+    // Only one write call for the batch
+    expect(mockWriteFileSync).toHaveBeenCalledOnce();
+    // History appended for each
+    expect(mockAppendHistory).toHaveBeenCalledTimes(2);
+  });
+
+  it("skips missing stories without throwing", () => {
+    const updated = batchWriteStoryStatus(PROJECT, [
+      { storyId: "story-1", newStatus: "done" },
+      { storyId: "nonexistent", newStatus: "in-progress" },
+    ]);
+
+    expect(updated).toEqual(["story-1"]);
+    expect(mockAppendHistory).toHaveBeenCalledOnce();
+  });
+
+  it("returns empty array for empty input", () => {
+    const updated = batchWriteStoryStatus(PROJECT, []);
+
+    expect(updated).toEqual([]);
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+  });
+
+  it("clears assignedSession when batch-transitioning to done", () => {
+    mockReadFileSync.mockReturnValue(`
+development_status:
+  story-1:
+    status: in-progress
+    assignedSession: session-abc
+`);
+
+    batchWriteStoryStatus(PROJECT, [{ storyId: "story-1", newStatus: "done" }]);
+
+    const [, calledContent] = mockWriteFileSync.mock.calls[0] as [string, string, string];
+    expect(calledContent).not.toContain("assignedSession");
   });
 });

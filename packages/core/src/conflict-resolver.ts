@@ -134,17 +134,19 @@ class ConflictResolverImpl implements ConflictResolver {
     };
   }
 
-  private async mergeInteractive(conflict: Conflict): Promise<ResolveResult> {
-    // In a real implementation, this would use readline for interactive prompts
-    // For now, default to keeping current values
-    const selections: MergeSelections = {};
+  async mergeInteractive(conflict: Conflict, selections?: MergeSelections): Promise<ResolveResult> {
+    // If selections provided, use them directly (from CLI interactive prompts)
+    // Otherwise, default to keeping current values
+    const finalSelections: MergeSelections = selections || {};
 
-    // Default: keep current values for all fields
-    for (const fieldConflict of conflict.conflicts) {
-      selections[fieldConflict.field] = "current";
+    if (!selections) {
+      // Default: keep current values for all fields when called without selections
+      for (const fieldConflict of conflict.conflicts) {
+        finalSelections[fieldConflict.field] = "current";
+      }
     }
 
-    const merged = this.merge(conflict.current, conflict.proposed, selections);
+    const merged = this.merge(conflict.current, conflict.proposed, finalSelections);
     const result = await this.stateManager.set(conflict.storyId, merged, conflict.actualVersion);
 
     if (result.success) {

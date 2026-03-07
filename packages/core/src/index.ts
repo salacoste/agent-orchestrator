@@ -97,6 +97,45 @@ export type {
 export { createStateManager } from "./state-manager.js";
 export type { StateManager, StoryState, SetResult, BatchResult } from "./types.js";
 
+// Conflict Resolver — detect and resolve version conflicts
+export { createConflictResolver } from "./conflict-resolver.js";
+export { ConflictError } from "./types.js";
+export type {
+  ConflictResolver,
+  Conflict,
+  FieldConflict,
+  Resolution,
+  ResolveResult,
+  MergeSelections,
+} from "./types.js";
+
+// Sync Service — bidirectional state synchronization with BMAD tracker
+export { createSyncService } from "./sync-service.js";
+export type {
+  SyncService,
+  SyncServiceConfig,
+  SyncDirection,
+  SyncResult,
+  SyncAllResult,
+  SyncStatus,
+  BMADTracker,
+  ConflictInfo,
+} from "./types.js";
+
+// Notification Service — queue, deduplicate, and route notifications
+export { createNotificationService } from "./notification-service.js";
+export type { NotificationServiceConfig } from "./notification-service.js";
+export type {
+  NotificationService,
+  Notification,
+  NotificationResult,
+  NotificationStatus,
+  DeadLetterNotification,
+  NotificationPlugin,
+  NotificationPriority,
+  NotificationPreferences,
+} from "./types.js";
+
 // Agent Completion Detection — monitor and detect agent completion
 export { createAgentCompletionDetector } from "./agent-completion-detector.js";
 export type { AgentCompletionDetectorDeps } from "./agent-completion-detector.js";

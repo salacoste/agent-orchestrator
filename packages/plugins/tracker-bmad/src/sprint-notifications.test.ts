@@ -43,6 +43,7 @@ const HEALTHY_FORECAST: SprintForecast = {
   remainingStories: 5,
   totalStories: 10,
   completedStories: 5,
+  hasPoints: false,
 };
 
 const mockComputeSprintHealth = computeSprintHealth as ReturnType<typeof vi.fn>;

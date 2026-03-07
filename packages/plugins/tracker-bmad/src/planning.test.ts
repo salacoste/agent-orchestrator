@@ -230,4 +230,119 @@ describe("computeSprintPlan", () => {
     expect(result.sprintConfig.goal).toBe("Complete auth epic");
     expect(result.sprintConfig.targetVelocity).toBe(8);
   });
+
+  it("hasPoints is false when no stories have points", () => {
+    setFiles({
+      statusYaml: ["development_status:", "  s1:", "    status: backlog"].join("\n"),
+      historyLines: [],
+    });
+
+    const result = computeSprintPlan(PROJECT);
+    expect(result.hasPoints).toBe(false);
+  });
+
+  it("includes points on stories when present", () => {
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: backlog",
+        "    points: 5",
+        "  s2:",
+        "    status: in-progress",
+        "    points: 3",
+      ].join("\n"),
+      historyLines: [],
+    });
+
+    const result = computeSprintPlan(PROJECT);
+
+    expect(result.hasPoints).toBe(true);
+    expect(result.backlogStories[0]!.points).toBe(5);
+    expect(result.capacity.inProgressPoints).toBe(3);
+  });
+
+  it("filters by epic when epicFilter is provided", () => {
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: backlog",
+        "    epic: epic-auth",
+        "  s2:",
+        "    status: backlog",
+        "    epic: epic-ui",
+        "  s3:",
+        "    status: in-progress",
+        "    epic: epic-auth",
+      ].join("\n"),
+      historyLines: [],
+    });
+
+    const result = computeSprintPlan(PROJECT, "epic-auth");
+
+    expect(result.backlogStories).toHaveLength(1); // Only s1
+    expect(result.backlogStories[0]!.id).toBe("s1");
+    expect(result.capacity.inProgressCount).toBe(1); // Only s3
+  });
+});
+
+describe("acceptPlan", () => {
+  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
+  let acceptPlanFn: typeof import("./planning.js").acceptPlan;
+
+  beforeEach(async () => {
+    const mod = await import("./planning.js");
+    acceptPlanFn = mod.acceptPlan;
+  });
+
+  it("moves recommended stories to ready-for-dev", () => {
+    const projectWithTarget: ProjectConfig = {
+      ...PROJECT,
+      tracker: {
+        ...PROJECT.tracker,
+        plugin: "bmad" as const,
+        targetVelocity: 5,
+      },
+    };
+
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: backlog",
+        "  s2:",
+        "    status: backlog",
+        "  s3:",
+        "    status: in-progress",
+      ].join("\n"),
+      historyLines: [],
+    });
+
+    const result = acceptPlanFn(projectWithTarget);
+
+    expect(result.count).toBe(2);
+    expect(result.moved).toContain("s1");
+    expect(result.moved).toContain("s2");
+  });
+
+  it("returns empty when no recommended stories", () => {
+    setFiles({
+      statusYaml: ["development_status:", "  s1:", "    status: done"].join("\n"),
+      historyLines: [],
+    });
+
+    const result = acceptPlanFn(PROJECT);
+
+    expect(result.count).toBe(0);
+    expect(result.moved).toEqual([]);
+  });
+
+  it("returns empty when sprint status is missing", () => {
+    // No files set — readSprintStatus will throw
+    const result = acceptPlanFn(PROJECT);
+
+    expect(result.count).toBe(0);
+    expect(result.moved).toEqual([]);
+  });
 });

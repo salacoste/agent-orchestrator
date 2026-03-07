@@ -1,4 +1,11 @@
-import { appendFileSync, readFileSync, existsSync, mkdirSync } from "node:fs";
+import {
+  appendFileSync,
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  mkdirSync,
+  renameSync,
+} from "node:fs";
 import { join, dirname } from "node:path";
 import type { ProjectConfig } from "@composio/ao-core";
 
@@ -9,9 +16,11 @@ export interface HistoryEntry {
   toStatus: string;
   /** Optional comment attached to this entry (audit trail). */
   comment?: string;
+  /** Sprint number this entry belongs to (set during archival). */
+  sprintNumber?: number;
 }
 
-function historyPath(project: ProjectConfig): string {
+export function historyPath(project: ProjectConfig): string {
   const raw = project.tracker?.["outputDir"];
   const outputDir = typeof raw === "string" ? raw : "_bmad-output";
   return join(project.path, outputDir, "sprint-history.jsonl");
@@ -92,4 +101,29 @@ export function readHistory(project: ProjectConfig): HistoryEntry[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * Archive the current sprint history to a dated file and clear the main history.
+ *
+ * Renames sprint-history.jsonl to sprint-history-{suffix}.jsonl.
+ * Returns the archive file path, or null if there was nothing to archive.
+ */
+export function archiveHistory(project: ProjectConfig, suffix: string): string | null {
+  const filePath = historyPath(project);
+  if (!existsSync(filePath)) return null;
+
+  const dir = dirname(filePath);
+  const archivePath = join(dir, `sprint-history-${suffix}.jsonl`);
+  renameSync(filePath, archivePath);
+  return archivePath;
+}
+
+/**
+ * Clear the current sprint history file (write empty).
+ */
+export function clearHistory(project: ProjectConfig): void {
+  const filePath = historyPath(project);
+  if (!existsSync(filePath)) return;
+  writeFileSync(filePath, "", "utf-8");
 }

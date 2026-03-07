@@ -42,6 +42,8 @@ export interface AutoTransitionResult {
  *
  * Reads the current YAML, updates the story's status field, and writes
  * the full document back. Uses the `yaml` package for round-trip parsing.
+ *
+ * When transitioning to "done", the assignedSession is automatically cleared.
  */
 export function writeStoryStatus(project: ProjectConfig, storyId: string, newStatus: string): void {
   const filePath = sprintStatusPath(project);
@@ -59,6 +61,72 @@ export function writeStoryStatus(project: ProjectConfig, storyId: string, newSta
   }
 
   entry.status = newStatus;
+  // Clear assignment when story is completed
+  if (newStatus === "done") {
+    delete entry.assignedSession;
+  }
+  writeFileSync(filePath, stringifyYaml(typed), "utf-8");
+}
+
+/**
+ * Write or clear the assigned session for a story in sprint-status.yaml.
+ *
+ * Used to track which agent session is working on a story.
+ * Pass `null` to clear the assignment.
+ */
+export function writeStoryAssignment(
+  project: ProjectConfig,
+  storyId: string,
+  sessionId: string | null,
+): void {
+  const filePath = sprintStatusPath(project);
+  const content = readFileSync(filePath, "utf-8");
+  const sprint: unknown = parseYaml(content);
+
+  if (!sprint || typeof sprint !== "object" || !("development_status" in sprint)) {
+    throw new Error("sprint-status.yaml missing 'development_status' key");
+  }
+
+  const typed = sprint as SprintStatus;
+  const entry = typed.development_status[storyId];
+  if (!entry) {
+    throw new Error(`Story '${storyId}' not found in sprint-status.yaml`);
+  }
+
+  if (sessionId === null) {
+    delete entry.assignedSession;
+  } else {
+    entry.assignedSession = sessionId;
+  }
+  writeFileSync(filePath, stringifyYaml(typed), "utf-8");
+}
+
+/**
+ * Write story points for a story in sprint-status.yaml.
+ *
+ * Reads the current YAML, sets the story's points field, and writes
+ * the full document back. Validates that points is a positive integer.
+ */
+export function writeStoryPoints(project: ProjectConfig, storyId: string, points: number): void {
+  if (!Number.isInteger(points) || points < 0) {
+    throw new Error("Points must be a non-negative integer");
+  }
+
+  const filePath = sprintStatusPath(project);
+  const content = readFileSync(filePath, "utf-8");
+  const sprint: unknown = parseYaml(content);
+
+  if (!sprint || typeof sprint !== "object" || !("development_status" in sprint)) {
+    throw new Error("sprint-status.yaml missing 'development_status' key");
+  }
+
+  const typed = sprint as SprintStatus;
+  const entry = typed.development_status[storyId];
+  if (!entry) {
+    throw new Error(`Story '${storyId}' not found in sprint-status.yaml`);
+  }
+
+  entry.points = points;
   writeFileSync(filePath, stringifyYaml(typed), "utf-8");
 }
 
@@ -120,6 +188,50 @@ export function transitionOnMerge(
     event,
     reason: "transitioned",
   };
+}
+
+/**
+ * Batch-update statuses for multiple stories in a single YAML read/write cycle.
+ *
+ * Returns the list of story IDs that were successfully updated.
+ * Throws if sprint-status.yaml is missing or malformed.
+ * Skips stories that don't exist (does not throw).
+ */
+export function batchWriteStoryStatus(
+  project: ProjectConfig,
+  updates: Array<{ storyId: string; newStatus: string }>,
+): string[] {
+  if (updates.length === 0) return [];
+
+  const filePath = sprintStatusPath(project);
+  const content = readFileSync(filePath, "utf-8");
+  const sprint: unknown = parseYaml(content);
+
+  if (!sprint || typeof sprint !== "object" || !("development_status" in sprint)) {
+    throw new Error("sprint-status.yaml missing 'development_status' key");
+  }
+
+  const typed = sprint as SprintStatus;
+  const updated: string[] = [];
+
+  for (const { storyId, newStatus } of updates) {
+    const entry = typed.development_status[storyId];
+    if (!entry) continue;
+
+    const oldStatus = typeof entry.status === "string" ? entry.status : "backlog";
+    entry.status = newStatus;
+    if (newStatus === "done") {
+      delete entry.assignedSession;
+    }
+    updated.push(storyId);
+    appendHistory(project, storyId, oldStatus, newStatus);
+  }
+
+  if (updated.length > 0) {
+    writeFileSync(filePath, stringifyYaml(typed), "utf-8");
+  }
+
+  return updated;
 }
 
 /**

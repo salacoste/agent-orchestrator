@@ -319,7 +319,7 @@ export function createFailureHandler(
 
     // Store crash details in agent's session metadata for resume functionality
     updateMetadata(sessionsDir, event.agentId as SessionId, {
-      exitCode: event.exitCode,
+      exitCode: event.exitCode?.toString() ?? "",
       signal: event.signal ?? "",
       failureReason: event.reason,
     });

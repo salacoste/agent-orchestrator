@@ -8,6 +8,9 @@ interface PlannableStory {
   epic: string | null;
   isBlocked: boolean;
   blockers: string[];
+  priority?: "critical" | "high" | "medium" | "low";
+  score?: number;
+  unblockCount?: number;
 }
 
 interface PlanningData {
@@ -36,13 +39,27 @@ const LOAD_COLORS: Record<string, string> = {
   "no-data": "text-[var(--color-text-muted)]",
 };
 
-export function PlanningView({ projectId }: { projectId: string }) {
+const PRIORITY_COLORS: Record<string, string> = {
+  critical: "bg-red-900 text-red-300",
+  high: "bg-orange-900 text-orange-300",
+  medium: "bg-yellow-900 text-yellow-300",
+  low: "bg-zinc-800 text-zinc-400",
+};
+
+export function PlanningView({
+  projectId,
+  epicFilter,
+}: {
+  projectId: string;
+  epicFilter?: string | null;
+}) {
   const [data, setData] = useState<PlanningData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetch(`/api/sprint/${encodeURIComponent(projectId)}/plan`)
+    const epicParam = epicFilter ? `?epic=${encodeURIComponent(epicFilter)}` : "";
+    fetch(`/api/sprint/${encodeURIComponent(projectId)}/plan${epicParam}`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load planning data");
         return res.json();
@@ -56,7 +73,7 @@ export function PlanningView({ projectId }: { projectId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [projectId]);
+  }, [projectId, epicFilter]);
 
   if (error) {
     return <div className="text-red-400 text-[11px]">{error}</div>;
@@ -132,7 +149,24 @@ export function PlanningView({ projectId }: { projectId: string }) {
                 <span className="font-mono text-[var(--color-text-muted)] w-16 shrink-0">
                   {story.id}
                 </span>
+                {story.priority && (
+                  <span
+                    className={`text-[9px] px-1.5 py-0.5 rounded font-semibold shrink-0 ${PRIORITY_COLORS[story.priority] ?? "bg-zinc-800 text-zinc-400"}`}
+                  >
+                    {story.priority}
+                  </span>
+                )}
                 <span className="text-[var(--color-text-primary)] truncate">{story.title}</span>
+                {story.score !== undefined && (
+                  <span className="text-[9px] text-[var(--color-text-muted)] shrink-0">
+                    score: {story.score}
+                  </span>
+                )}
+                {(story.unblockCount ?? 0) > 0 && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-green-950 text-green-400 shrink-0">
+                    unblocks {story.unblockCount}
+                  </span>
+                )}
                 {story.epic && (
                   <span className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--color-bg-surface)] text-[var(--color-text-muted)] shrink-0">
                     {story.epic}

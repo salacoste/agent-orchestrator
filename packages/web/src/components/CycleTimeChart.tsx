@@ -34,7 +34,13 @@ function formatDuration(ms: number): string {
   return `${totalMinutes}m`;
 }
 
-export function CycleTimeChart({ projectId }: { projectId: string }) {
+export function CycleTimeChart({
+  projectId,
+  epicFilter,
+}: {
+  projectId: string;
+  epicFilter?: string | null;
+}) {
   const [data, setData] = useState<CycleTimeData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -42,9 +48,10 @@ export function CycleTimeChart({ projectId }: { projectId: string }) {
   useEffect(() => {
     let cancelled = false;
     let initialLoad = true;
+    const epicParam = epicFilter ? `?epic=${encodeURIComponent(epicFilter)}` : "";
 
     const fetchData = () => {
-      fetch(`/api/sprint/${encodeURIComponent(projectId)}/metrics`)
+      fetch(`/api/sprint/${encodeURIComponent(projectId)}/metrics${epicParam}`)
         .then((res) => {
           if (!res.ok) throw new Error("Failed to load metrics data");
           return res.json();
@@ -73,7 +80,7 @@ export function CycleTimeChart({ projectId }: { projectId: string }) {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [projectId]);
+  }, [projectId, epicFilter]);
 
   if (loading)
     return <div className="text-[var(--color-text-muted)] text-sm p-4">Loading metrics...</div>;

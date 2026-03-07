@@ -237,4 +237,38 @@ describe("computeCycleTime", () => {
     expect(stats.averageCycleTimeMs).toBe(0);
     expect(stats.bottleneckColumn).toBeNull();
   });
+
+  it("filters by epic when epicFilter is provided", () => {
+    const statusPath = "/home/user/test-project/custom-output/sprint-status.yaml";
+    mockExistsSync.mockImplementation((p: string) => {
+      if (p === HISTORY_PATH) return true;
+      if (p === statusPath) return true;
+      return false;
+    });
+    mockReadFileSync.mockImplementation((p: string) => {
+      if (p === HISTORY_PATH)
+        return (
+          [
+            makeEntry("s1", "backlog", "done", "2026-01-05T00:00:00.000Z"),
+            makeEntry("s2", "backlog", "done", "2026-01-06T00:00:00.000Z"),
+          ].join("\n") + "\n"
+        );
+      if (p === statusPath)
+        return [
+          "development_status:",
+          "  s1:",
+          "    status: done",
+          "    epic: epic-auth",
+          "  s2:",
+          "    status: done",
+          "    epic: epic-ui",
+        ].join("\n");
+      throw new Error(`Unexpected read: ${p}`);
+    });
+
+    const stats = computeCycleTime(PROJECT, "epic-auth");
+
+    expect(stats.completedCount).toBe(1);
+    expect(stats.stories[0]!.storyId).toBe("s1");
+  });
 });

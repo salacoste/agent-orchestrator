@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getServices } from "@/lib/services";
 import { computeSprintPlan } from "@composio/ao-plugin-tracker-bmad";
 
-export async function GET(_request: Request, { params }: { params: Promise<{ project: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ project: string }> }) {
   try {
     const { project: projectId } = await params;
     const { config } = await getServices();
@@ -28,7 +28,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       });
     }
 
-    const result = computeSprintPlan(project);
+    const url = new URL(request.url);
+    const epicFilter = url.searchParams.get("epic") || undefined;
+    const result = computeSprintPlan(project, epicFilter);
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json(

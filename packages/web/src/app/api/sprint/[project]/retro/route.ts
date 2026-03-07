@@ -9,9 +9,10 @@ const EMPTY_RETRO: RetrospectiveResult = {
   velocityChange: 0,
   totalCompleted: 0,
   overallAverageCycleTimeMs: 0,
+  hasPoints: false,
 };
 
-export async function GET(_request: Request, { params }: { params: Promise<{ project: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ project: string }> }) {
   try {
     const { project: projectId } = await params;
     const { config } = await getServices();
@@ -25,7 +26,9 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       return NextResponse.json(EMPTY_RETRO);
     }
 
-    const result = computeRetrospective(project);
+    const url = new URL(request.url);
+    const epicFilter = url.searchParams.get("epic") || undefined;
+    const result = computeRetrospective(project, epicFilter);
     return NextResponse.json(result);
   } catch (err) {
     return NextResponse.json(

@@ -4,10 +4,25 @@
  */
 
 import type { ProjectConfig } from "@composio/ao-core";
-import { readSprintStatus } from "./sprint-status-reader.js";
-import { validateDependencies } from "./dependencies.js";
+import {
+  readSprintStatus,
+  hasPointsData,
+  getPoints,
+  getEpicStoryIds,
+} from "./sprint-status-reader.js";
+import { validateDependencies, computeDependencyGraph } from "./dependencies.js";
 import { computeVelocityComparison } from "./velocity-comparison.js";
+import { batchWriteStoryStatus } from "./auto-transition.js";
+import { appendHistory } from "./history.js";
 
+// ---------------------------------------------------------------------------
+// Accept plan result type
+// ---------------------------------------------------------------------------
+
+export interface AcceptPlanResult {
+  moved: string[];
+  count: number;
+}
 // ---------------------------------------------------------------------------
 // Public types
 // ---------------------------------------------------------------------------
@@ -18,6 +33,10 @@ export interface PlannableStory {
   epic: string | null;
   isBlocked: boolean;
   blockers: string[];
+  points?: number;
+  priority?: "critical" | "high" | "medium" | "low";
+  score?: number;
+  unblockCount?: number;
 }
 
 export interface SprintPlanningResult {
@@ -31,12 +50,16 @@ export interface SprintPlanningResult {
   };
   capacity: {
     historicalVelocity: number;
+    historicalVelocityPoints?: number;
     targetVelocity: number | null;
     effectiveTarget: number;
     inProgressCount: number;
+    inProgressPoints?: number;
     remainingCapacity: number;
+    remainingCapacityPoints?: number;
   };
   loadStatus: "under" | "at-capacity" | "over" | "no-data";
+  hasPoints: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -53,32 +76,58 @@ function readConfigNumber(project: ProjectConfig, key: string): number | null {
   return typeof v === "number" ? v : null;
 }
 
+const PRIORITY_WEIGHTS: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1 };
+
+function computePlanningScore(story: PlannableStory): number {
+  const priorityScore = PRIORITY_WEIGHTS[story.priority ?? "low"] ?? 1;
+  const unblockScore = (story.unblockCount ?? 0) * 2;
+  const sizeScore = story.points ? Math.max(0, 5 - story.points) : 2; // smaller first
+  return priorityScore * 3 + unblockScore + sizeScore;
+}
+
 // ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
 
-export function computeSprintPlan(project: ProjectConfig): SprintPlanningResult {
+export function computeSprintPlan(
+  project: ProjectConfig,
+  epicFilter?: string,
+): SprintPlanningResult {
   // Read sprint status
-  let entries: Record<string, { status: string; epic?: string; [key: string]: unknown }>;
+  let sprint;
   try {
-    const sprint = readSprintStatus(project);
-    entries = sprint.development_status;
+    sprint = readSprintStatus(project);
   } catch {
     return emptyResult(project);
+  }
+
+  const entries = sprint.development_status;
+  const pointsPresent = hasPointsData(sprint);
+  const epicStoryIds = epicFilter ? getEpicStoryIds(sprint, epicFilter) : null;
+
+  // Build dependency graph to count how many stories each story unblocks
+  const depGraph = computeDependencyGraph(project);
+  const unblockCounts: Record<string, number> = {};
+  for (const node of Object.values(depGraph.nodes)) {
+    unblockCounts[node.storyId] = node.blocks.length;
   }
 
   // Collect backlog + ready-for-dev stories
   const backlogStories: PlannableStory[] = [];
   let inProgressCount = 0;
+  let inProgressPoints = 0;
 
   for (const [id, entry] of Object.entries(entries)) {
     const status = typeof entry.status === "string" ? entry.status : "backlog";
 
     // Skip epic-level entries
     if (id.startsWith("epic-") || status.startsWith("epic-")) continue;
+    // Skip stories not in the filtered epic
+    if (epicStoryIds && !epicStoryIds.has(id)) continue;
 
     if (status === "in-progress" || status === "review") {
       inProgressCount++;
+      if (pointsPresent) inProgressPoints += getPoints(entry);
       continue;
     }
 
@@ -88,23 +137,32 @@ export function computeSprintPlan(project: ProjectConfig): SprintPlanningResult 
     const depResult = validateDependencies(id, project);
     const epic = typeof entry.epic === "string" ? entry.epic : null;
 
-    backlogStories.push({
+    // Read priority from sprint-status entry
+    const rawPriority = entry["priority"];
+    const priority =
+      typeof rawPriority === "string" && ["critical", "high", "medium", "low"].includes(rawPriority)
+        ? (rawPriority as PlannableStory["priority"])
+        : undefined;
+
+    const story: PlannableStory = {
       id,
       title: id, // We use ID as title since story files aren't always available
       epic,
       isBlocked: depResult.blocked,
       blockers: depResult.blockers.map((b) => b.id),
-    });
+      priority,
+      unblockCount: unblockCounts[id] ?? 0,
+    };
+    if (pointsPresent) story.points = getPoints(entry);
+    story.score = computePlanningScore(story);
+
+    backlogStories.push(story);
   }
 
-  // Sort: unblocked first, then by epic grouping
+  // Sort: unblocked first, then by score descending
   backlogStories.sort((a, b) => {
     if (a.isBlocked !== b.isBlocked) return a.isBlocked ? 1 : -1;
-    // Group by epic
-    const epicA = a.epic ?? "";
-    const epicB = b.epic ?? "";
-    if (epicA !== epicB) return epicA.localeCompare(epicB);
-    return a.id.localeCompare(b.id);
+    return (b.score ?? 0) - (a.score ?? 0);
   });
 
   // Config
@@ -115,9 +173,13 @@ export function computeSprintPlan(project: ProjectConfig): SprintPlanningResult 
 
   // Historical velocity
   let historicalVelocity = 0;
+  let historicalVelocityPoints: number | undefined;
   try {
     const velResult = computeVelocityComparison(project);
     historicalVelocity = velResult.averageVelocity;
+    if (pointsPresent && velResult.averageVelocityPoints !== undefined) {
+      historicalVelocityPoints = velResult.averageVelocityPoints;
+    }
   } catch {
     // Non-fatal
   }
@@ -142,6 +204,20 @@ export function computeSprintPlan(project: ProjectConfig): SprintPlanningResult 
     }
   }
 
+  const capacity: SprintPlanningResult["capacity"] = {
+    historicalVelocity,
+    targetVelocity,
+    effectiveTarget,
+    inProgressCount,
+    remainingCapacity,
+  };
+
+  if (pointsPresent) {
+    capacity.historicalVelocityPoints = historicalVelocityPoints;
+    capacity.inProgressPoints = inProgressPoints;
+    capacity.remainingCapacityPoints = Math.max(0, effectiveTarget - inProgressPoints);
+  }
+
   return {
     backlogStories,
     recommended,
@@ -151,14 +227,9 @@ export function computeSprintPlan(project: ProjectConfig): SprintPlanningResult 
       goal,
       targetVelocity,
     },
-    capacity: {
-      historicalVelocity,
-      targetVelocity,
-      effectiveTarget,
-      inProgressCount,
-      remainingCapacity,
-    },
+    capacity,
     loadStatus,
+    hasPoints: pointsPresent,
   };
 }
 
@@ -180,5 +251,31 @@ function emptyResult(project: ProjectConfig): SprintPlanningResult {
       remainingCapacity: readConfigNumber(project, "targetVelocity") ?? 0,
     },
     loadStatus: "no-data",
+    hasPoints: false,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Accept plan — move recommended stories to ready-for-dev
+// ---------------------------------------------------------------------------
+
+export function acceptPlan(project: ProjectConfig, epicFilter?: string): AcceptPlanResult {
+  const plan = computeSprintPlan(project, epicFilter);
+
+  if (plan.recommended.length === 0) {
+    return { moved: [], count: 0 };
+  }
+
+  const updates = plan.recommended.map((s) => ({
+    storyId: s.id,
+    newStatus: "ready-for-dev",
+  }));
+
+  const moved = batchWriteStoryStatus(project, updates);
+
+  for (const id of moved) {
+    appendHistory(project, id, "backlog", "ready-for-dev");
+  }
+
+  return { moved, count: moved.length };
 }

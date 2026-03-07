@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServices } from "@/lib/services";
 import type { Tracker } from "@composio/ao-core";
+import { writeStoryPoints } from "@composio/ao-plugin-tracker-bmad";
 
 export async function POST(request: Request, { params }: { params: Promise<{ project: string }> }) {
   try {
@@ -32,7 +33,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
       return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
     }
 
-    const { title, description, epic } = body as Record<string, unknown>;
+    const { title, description, epic, points } = body as Record<string, unknown>;
 
     if (!title || typeof title !== "string" || !title.trim()) {
       return NextResponse.json({ error: "Title is required" }, { status: 400 });
@@ -51,6 +52,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ pro
       },
       project,
     );
+
+    // Set points if provided
+    if (typeof points === "number" && points >= 0 && Number.isInteger(points)) {
+      try {
+        writeStoryPoints(project, issue.id, points);
+      } catch {
+        // Non-fatal — story was created, points just weren't set
+      }
+    }
 
     return NextResponse.json(issue, { status: 201 });
   } catch (err) {

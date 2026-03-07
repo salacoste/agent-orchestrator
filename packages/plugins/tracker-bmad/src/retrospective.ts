@@ -5,7 +5,12 @@
 
 import type { ProjectConfig } from "@composio/ao-core";
 import { readHistory, type HistoryEntry } from "./history.js";
-import { readSprintStatus } from "./sprint-status-reader.js";
+import {
+  readSprintStatus,
+  hasPointsData,
+  getPoints,
+  getEpicStoryIds,
+} from "./sprint-status-reader.js";
 
 // Local constants — avoid importing from ./index.js to prevent circular deps
 const DONE = "done";
@@ -19,6 +24,7 @@ export interface SprintPeriod {
   startDate: string; // ISO date (Monday of the week)
   endDate: string; // ISO date (Sunday of the week)
   completedCount: number;
+  completedPoints?: number;
   averageCycleTimeMs: number;
   carryOverCount: number; // stories in-progress at period end but not done
   storyIds: string[]; // completed story IDs in this period
@@ -27,10 +33,14 @@ export interface SprintPeriod {
 export interface RetrospectiveResult {
   periods: SprintPeriod[];
   velocityTrend: number[]; // completedCount per period
+  velocityTrendPoints?: number[];
   averageVelocity: number; // mean of velocityTrend
+  averageVelocityPoints?: number;
   velocityChange: number; // % change: last period vs average (-100 to +inf)
   totalCompleted: number;
+  totalCompletedPoints?: number;
   overallAverageCycleTimeMs: number;
+  hasPoints: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -44,6 +54,7 @@ const EMPTY_RESULT: RetrospectiveResult = {
   velocityChange: 0,
   totalCompleted: 0,
   overallAverageCycleTimeMs: 0,
+  hasPoints: false,
 };
 
 /**
@@ -79,7 +90,10 @@ function getSunday(monday: Date): Date {
 // Main export
 // ---------------------------------------------------------------------------
 
-export function computeRetrospective(project: ProjectConfig): RetrospectiveResult {
+export function computeRetrospective(
+  project: ProjectConfig,
+  epicFilter?: string,
+): RetrospectiveResult {
   let history: HistoryEntry[];
   try {
     history = readHistory(project);
@@ -89,12 +103,29 @@ export function computeRetrospective(project: ProjectConfig): RetrospectiveResul
 
   if (history.length === 0) return { ...EMPTY_RESULT };
 
-  // Also read sprint status for carry-over detection (best-effort)
-  let _sprintStatus: ReturnType<typeof readSprintStatus> | null = null;
+  // Read sprint status for carry-over detection and points (best-effort)
+  let sprintStatus: ReturnType<typeof readSprintStatus> | null = null;
   try {
-    _sprintStatus = readSprintStatus(project);
+    sprintStatus = readSprintStatus(project);
   } catch {
     // Sprint status may not exist; carry-over detection degrades gracefully
+  }
+
+  const pointsPresent = sprintStatus ? hasPointsData(sprintStatus) : false;
+  const epicStoryIds =
+    epicFilter && sprintStatus ? getEpicStoryIds(sprintStatus, epicFilter) : null;
+
+  // Build storyId → points map
+  const pointsMap = new Map<string, number>();
+  if (pointsPresent && sprintStatus) {
+    for (const [id, entry] of Object.entries(sprintStatus.development_status)) {
+      pointsMap.set(id, getPoints(entry));
+    }
+  }
+
+  // Filter history by epic if needed
+  if (epicStoryIds) {
+    history = history.filter((e) => epicStoryIds.has(e.storyId));
   }
 
   // Group entries by storyId
@@ -194,14 +225,18 @@ export function computeRetrospective(project: ProjectConfig): RetrospectiveResul
       }
     }
 
-    periods.push({
+    const period: SprintPeriod = {
       startDate: toISODate(monday),
       endDate: toISODate(sunday),
       completedCount,
       averageCycleTimeMs: avgCycleTimeMs,
       carryOverCount,
       storyIds: completedIds,
-    });
+    };
+    if (pointsPresent) {
+      period.completedPoints = completedIds.reduce((sum, id) => sum + (pointsMap.get(id) ?? 1), 0);
+    }
+    periods.push(period);
   }
 
   // Velocity trend
@@ -216,8 +251,10 @@ export function computeRetrospective(project: ProjectConfig): RetrospectiveResul
   // Velocity change: last period vs average
   let velocityChange = 0;
   if (velocityTrend.length >= 2 && averageVelocity > 0) {
-    const lastVelocity = velocityTrend[velocityTrend.length - 1]!;
-    velocityChange = ((lastVelocity - averageVelocity) / averageVelocity) * 100;
+    const lastVelocity = velocityTrend[velocityTrend.length - 1];
+    if (lastVelocity !== undefined) {
+      velocityChange = ((lastVelocity - averageVelocity) / averageVelocity) * 100;
+    }
   }
 
   // Total completed
@@ -232,12 +269,23 @@ export function computeRetrospective(project: ProjectConfig): RetrospectiveResul
   }
   const overallAverageCycleTimeMs = totalStories > 0 ? totalCycleTimeMs / totalStories : 0;
 
-  return {
+  const result: RetrospectiveResult = {
     periods,
     velocityTrend,
     averageVelocity,
     velocityChange,
     totalCompleted,
     overallAverageCycleTimeMs,
+    hasPoints: pointsPresent,
   };
+
+  if (pointsPresent) {
+    const ptsTrend = periods.map((p) => p.completedPoints ?? 0);
+    const ptsSum = ptsTrend.reduce((a, b) => a + b, 0);
+    result.velocityTrendPoints = ptsTrend;
+    result.averageVelocityPoints = ptsTrend.length > 0 ? ptsSum / ptsTrend.length : 0;
+    result.totalCompletedPoints = ptsSum;
+  }
+
+  return result;
 }

@@ -19,7 +19,12 @@ import type {
   ProjectConfig,
   OrchestratorEvent,
 } from "@composio/ao-core";
-import { transitionOnMerge, findStoryForPR, writeStoryStatus } from "./auto-transition.js";
+import {
+  transitionOnMerge,
+  findStoryForPR,
+  writeStoryStatus,
+  writeStoryAssignment,
+} from "./auto-transition.js";
 import { checkSprintNotifications, formatNotificationEvent } from "./sprint-notifications.js";
 import { appendHistory, appendComment } from "./history.js";
 import { validateDependencies } from "./dependencies.js";
@@ -30,16 +35,31 @@ import {
   type SprintStatus,
 } from "./sprint-status-reader.js";
 
-export { readHistory, appendHistory, appendComment } from "./history.js";
+export {
+  readHistory,
+  appendHistory,
+  appendComment,
+  archiveHistory,
+  clearHistory,
+  historyPath,
+} from "./history.js";
 export type { HistoryEntry } from "./history.js";
+export { archiveSprint, getUnfinishedStories } from "./sprint-archive.js";
+export type { ArchiveResult } from "./sprint-archive.js";
 export { computeCycleTime } from "./cycle-time.js";
 export type { CycleTimeStats, StoryCycleTime, ColumnDwell } from "./cycle-time.js";
-export { computeSprintHealth, checkWipLimit, getWipStatus } from "./sprint-health.js";
+export {
+  computeSprintHealth,
+  checkWipLimit,
+  getWipStatus,
+  getWipDashboardStatus,
+} from "./sprint-health.js";
 export type {
   SprintHealthResult,
   HealthIndicator,
   HealthSeverity,
   WipLimitResult,
+  WipColumnStatus,
 } from "./sprint-health.js";
 export { computeForecast } from "./forecast.js";
 export type { SprintForecast } from "./forecast.js";
@@ -47,19 +67,52 @@ export { computeRetrospective } from "./retrospective.js";
 export type { RetrospectiveResult, SprintPeriod } from "./retrospective.js";
 export { getStoryDetail } from "./story-detail.js";
 export type { StoryDetail, StoryTransition } from "./story-detail.js";
-export { readSprintStatus } from "./sprint-status-reader.js";
+export {
+  readSprintStatus,
+  hasPointsData,
+  getPoints,
+  getEpicStoryIds,
+} from "./sprint-status-reader.js";
 export type { SprintStatus, SprintStatusEntry } from "./sprint-status-reader.js";
-export { transitionOnMerge, writeStoryStatus, findStoryForPR } from "./auto-transition.js";
+export {
+  transitionOnMerge,
+  writeStoryStatus,
+  writeStoryPoints,
+  writeStoryAssignment,
+  batchWriteStoryStatus,
+  findStoryForPR,
+} from "./auto-transition.js";
 export {
   computeDependencyGraph,
   validateDependencies,
   getStoryDependencies,
+  detectDependencyCycles,
 } from "./dependencies.js";
-export type { DependencyNode, DependencyGraph, DependencyValidation } from "./dependencies.js";
+export type {
+  DependencyNode,
+  DependencyGraph,
+  DependencyValidation,
+  CycleInfo,
+  DependencyCycleResult,
+} from "./dependencies.js";
 export { computeVelocityComparison } from "./velocity-comparison.js";
 export type { VelocityComparisonResult, WeeklyVelocity } from "./velocity-comparison.js";
-export { computeSprintPlan } from "./planning.js";
-export type { SprintPlanningResult, PlannableStory } from "./planning.js";
+export { computeSprintPlan, acceptPlan } from "./planning.js";
+export type { SprintPlanningResult, PlannableStory, AcceptPlanResult } from "./planning.js";
+export { listEpics, createEpic, renameEpic, deleteEpic } from "./epic-management.js";
+export type { EpicInfo } from "./epic-management.js";
+export { queryHistory } from "./history-query.js";
+export type { HistoryFilter, HistoryQueryResult } from "./history-query.js";
+export { computeThroughput } from "./throughput.js";
+export type { DailyThroughput, LeadTimeStat, ColumnTrend, ThroughputResult } from "./throughput.js";
+export { computeCfd } from "./cfd.js";
+export type { CfdDataPoint, CfdResult } from "./cfd.js";
+export { computeStoryAging } from "./story-aging.js";
+export type { AgingStory, ColumnAgingStats, StoryAgingResult } from "./story-aging.js";
+export { computeSprintComparison } from "./sprint-comparison.js";
+export type { MetricTrend, PeriodMetrics, SprintComparisonResult } from "./sprint-comparison.js";
+export { computeTeamWorkload } from "./team-workload.js";
+export type { StoryRef, TeamMember, TeamWorkloadResult } from "./team-workload.js";
 export type { AutoTransitionEvent, AutoTransitionResult } from "./auto-transition.js";
 export {
   checkSprintNotifications,
@@ -67,12 +120,40 @@ export {
   formatNotificationEvent,
 } from "./sprint-notifications.js";
 export type { SprintNotification, NotificationThresholds } from "./sprint-notifications.js";
+export {
+  getWorkflowColumns,
+  getColumns,
+  getActiveColumns,
+  getDoneColumn,
+  getColumnLabel,
+  getColumnColor,
+  isValidColumn,
+  isBackwardTransition,
+  categorizeStatusFromConfig,
+} from "./workflow-columns.js";
+export type { WorkflowColumnDef, WorkflowColumns } from "./workflow-columns.js";
+export { computeRework } from "./rework.js";
+export type { ReworkEvent, StoryRework, TransitionReworkStat, ReworkResult } from "./rework.js";
+export { computeMonteCarloForecast } from "./monte-carlo.js";
+export type {
+  MonteCarloConfig,
+  PercentileResult,
+  HistogramBucket,
+  MonteCarloResult,
+} from "./monte-carlo.js";
+export { generateStandup } from "./standup.js";
+export type { StandupReport } from "./standup.js";
+export { computeSprintGoals } from "./sprint-goals.js";
+export type { SprintGoal, SprintGoalsResult } from "./sprint-goals.js";
 
 // ---------------------------------------------------------------------------
 // Public helpers (shared between CLI and web API)
 // ---------------------------------------------------------------------------
 
-/** Ordered BMad sprint columns — shared between CLI and web dashboard. */
+/**
+ * Ordered BMad sprint columns — shared between CLI and web dashboard.
+ * @deprecated Use `getColumns(project)` from workflow-columns for config-aware columns.
+ */
 export const BMAD_COLUMNS = ["backlog", "ready-for-dev", "in-progress", "review", "done"] as const;
 
 /** A valid BMad sprint column name. */
@@ -498,7 +579,7 @@ function createBmadTracker(): Tracker {
       update: IssueUpdate,
       project: ProjectConfig,
     ): Promise<void> {
-      if (!update.state && !update.comment) return;
+      if (!update.state && !update.comment && !update.assignee) return;
 
       const filePath = sprintStatusPath(project);
       if (!existsSync(filePath)) {
@@ -528,6 +609,11 @@ function createBmadTracker(): Tracker {
 
         // Record history after successful write so retried transitions aren't missing
         appendHistory(project, identifier, oldStatus, newStatus);
+      }
+
+      // Write session assignment
+      if (update.assignee !== undefined) {
+        writeStoryAssignment(project, identifier, update.assignee || null);
       }
 
       // Append comment as audit trail entry in history
@@ -695,7 +781,11 @@ function createBmadTracker(): Tracker {
       transitionOnMerge(project, issueId, prUrl);
     },
 
-    async onSessionDeath(issueId: string, project: ProjectConfig): Promise<void> {
+    async onSessionDeath(
+      issueId: string,
+      project: ProjectConfig,
+      sessionId?: string,
+    ): Promise<void> {
       // Only reset if story is currently in-progress (not review/done)
       const sprint = readSprintStatus(project);
       const entry = sprint.development_status[issueId];
@@ -708,8 +798,18 @@ function createBmadTracker(): Tracker {
       const autoReset = project.tracker?.["autoResetOnDeath"];
       if (autoReset === false) return;
 
+      // Only reset if the dying session matches the assigned session
+      if (sessionId && entry.assignedSession && entry.assignedSession !== sessionId) {
+        return;
+      }
+
       writeStoryStatus(project, issueId, "ready-for-dev");
+      writeStoryAssignment(project, issueId, null);
       appendHistory(project, issueId, status, "ready-for-dev");
+    },
+
+    getEpicTitle(epicId: string, project: ProjectConfig): string {
+      return readEpicTitle(epicId, project);
     },
 
     async getNotifications(project: ProjectConfig): Promise<OrchestratorEvent[]> {
@@ -722,6 +822,15 @@ function createBmadTracker(): Tracker {
         thresholds["throughputDropPct"] = cfg["throughputDropPct"];
       if (cfg?.["forecastBehind"] !== undefined)
         thresholds["forecastBehind"] = cfg["forecastBehind"];
+      if (cfg?.["reworkRatePct"] !== undefined) thresholds["reworkRatePct"] = cfg["reworkRatePct"];
+      if (cfg?.["reworkCountPerStory"] !== undefined)
+        thresholds["reworkCountPerStory"] = cfg["reworkCountPerStory"];
+      if (cfg?.["columnAgingHours"] !== undefined)
+        thresholds["columnAgingHours"] = cfg["columnAgingHours"];
+      if (cfg?.["circularDepsEnabled"] !== undefined)
+        thresholds["circularDepsEnabled"] = cfg["circularDepsEnabled"];
+      if (cfg?.["blockedStoriesEnabled"] !== undefined)
+        thresholds["blockedStoriesEnabled"] = cfg["blockedStoriesEnabled"];
 
       const notifications = checkSprintNotifications(project, thresholds);
       return notifications.map((n) => formatNotificationEvent(n));

@@ -7,9 +7,9 @@
 
 import type { ProjectConfig } from "@composio/ao-core";
 import { readHistory, type HistoryEntry } from "./history.js";
+import { readSprintStatus, getEpicStoryIds } from "./sprint-status-reader.js";
+import { getDoneColumn } from "./workflow-columns.js";
 
-// Local constants — avoid importing from ./index.js to prevent circular deps
-const DONE = "done";
 const BACKLOG = "backlog";
 
 // ---------------------------------------------------------------------------
@@ -93,8 +93,23 @@ const EMPTY_STATS: CycleTimeStats = {
   completedCount: 0,
 };
 
-export function computeCycleTime(project: ProjectConfig): CycleTimeStats {
-  const history = readHistory(project);
+export function computeCycleTime(project: ProjectConfig, epicFilter?: string): CycleTimeStats {
+  const DONE = getDoneColumn(project);
+
+  let history = readHistory(project);
+  if (history.length === 0) return { ...EMPTY_STATS };
+
+  // Filter by epic if requested
+  if (epicFilter) {
+    try {
+      const sprint = readSprintStatus(project);
+      const epicIds = getEpicStoryIds(sprint, epicFilter);
+      history = history.filter((e) => epicIds.has(e.storyId));
+    } catch {
+      // Sprint status unavailable — skip filtering
+    }
+  }
+
   if (history.length === 0) return { ...EMPTY_STATS };
 
   // Group entries by storyId, preserving chronological order

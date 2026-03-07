@@ -34,10 +34,12 @@
     "clean": "rm -rf dist"
   },
   "dependencies": {
-    "@composio/ao-core": "workspace:*"
+    "@composio/ao-core": "workspace:*",
+    "node-notifier": "^10.0.1"
   },
   "devDependencies": {
     "@types/node": "^25.2.3",
+    "@types/node-notifier": "^8.0.5",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
   }

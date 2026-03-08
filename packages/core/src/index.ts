@@ -170,6 +170,26 @@ export type {
   ErrorRateSummary,
 } from "./error-logger.js";
 
+// Retry Service — retry with exponential backoff
+export { createRetryService } from "./retry-service.js";
+export type { RetryServiceDeps } from "./retry-service.js";
+export type {
+  RetryService,
+  RetryServiceConfig,
+  RetryOptions,
+  RetryHistoryEntry,
+  RetryError,
+} from "./retry-service.js";
+
+// Circuit Breaker — prevent cascading failures
+export { createCircuitBreaker } from "./circuit-breaker.js";
+export type { CircuitBreakerDeps } from "./circuit-breaker.js";
+export type {
+  CircuitBreaker,
+  CircuitBreakerConfig,
+  CircuitBreakerState,
+} from "./circuit-breaker.js";
+
 // Completion Handlers — handle agent completion and failure events
 export {
   createCompletionHandler,

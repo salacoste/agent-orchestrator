@@ -48,6 +48,7 @@ import { registerSprintPlan } from "./commands/sprint-plan.js";
 import { registerResolveConflicts } from "./commands/resolve-conflicts.js";
 import { registerSync } from "./commands/sync.js";
 import { registerErrors } from "./commands/errors.js";
+import { registerRetry } from "./commands/retry.js";
 
 const program = new Command();
 
@@ -107,5 +108,6 @@ registerResolveConflicts(program);
 registerSync(program);
 
 registerErrors(program);
+registerRetry(program);
 
 program.parse();

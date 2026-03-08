@@ -6,6 +6,7 @@ import { registerStoryStatus } from "./commands/story-status.js";
 import { registerSpawn, registerBatchSpawn } from "./commands/spawn.js";
 import { registerSession } from "./commands/session.js";
 import { registerSpawnStory } from "./commands/spawn-story.js";
+import { registerPause } from "./commands/pause.js";
 import { registerResume } from "./commands/resume.js";
 import { registerAgent } from "./commands/agent.js";
 import { registerAssign } from "./commands/assign.js";
@@ -46,6 +47,7 @@ import { registerGoals } from "./commands/goals.js";
 import { registerSprintPlan } from "./commands/sprint-plan.js";
 import { registerResolveConflicts } from "./commands/resolve-conflicts.js";
 import { registerSync } from "./commands/sync.js";
+import { registerErrors } from "./commands/errors.js";
 
 const program = new Command();
 
@@ -61,6 +63,7 @@ registerStoryStatus(program);
 registerSpawn(program);
 registerBatchSpawn(program);
 registerSpawnStory(program);
+registerPause(program);
 registerResume(program);
 registerAgent(program);
 registerAssign(program);
@@ -102,5 +105,7 @@ registerGoals(program);
 registerSprintPlan(program);
 registerResolveConflicts(program);
 registerSync(program);
+
+registerErrors(program);
 
 program.parse();

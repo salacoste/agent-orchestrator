@@ -39,7 +39,9 @@ export type SessionStatus =
   | "errored"
   | "killed"
   | "done"
-  | "terminated";
+  | "terminated"
+  | "blocked"
+  | "paused";
 
 /** Activity state as detected by the agent plugin */
 export type ActivityState =
@@ -88,6 +90,8 @@ export const SESSION_STATUS = {
   KILLED: "killed" as const,
   DONE: "done" as const,
   TERMINATED: "terminated" as const,
+  BLOCKED: "blocked" as const,
+  PAUSED: "paused" as const,
 } satisfies Record<string, SessionStatus>;
 
 /** Statuses that indicate the session is in a terminal (dead) state. */
@@ -769,7 +773,10 @@ export type EventType =
   | "summary.all_complete"
   // Tracker
   | "tracker.story_done"
-  | "tracker.sprint_complete";
+  | "tracker.sprint_complete"
+  // Agent blocked/resumed
+  | "agent.blocked"
+  | "agent.resumed";
 
 /** An event emitted by the orchestrator */
 export interface OrchestratorEvent {
@@ -1292,6 +1299,54 @@ export interface FailureEvent {
   failedAt: Date;
   duration: number; // milliseconds
   errorContext?: string;
+}
+
+/**
+ * Blocked agent detector interfaces
+ */
+
+export interface BlockedAgentDetector {
+  /** Track activity for an agent */
+  trackActivity(agentId: string): Promise<void>;
+
+  /** Check if any agents should be marked as blocked */
+  checkBlocked(): Promise<void>;
+
+  /** Manually mark agent as paused (suppresses blocked detection) */
+  pause(agentId: string): void;
+
+  /** Resume a paused agent */
+  resume(agentId: string): void;
+
+  /** Get agent status (blocked, paused, or active) */
+  getAgentStatus(agentId: string): BlockedAgentStatus | null;
+
+  /** Start automatic blocked detection (periodic check) */
+  startDetection(): void;
+
+  /** Stop automatic blocked detection */
+  stopDetection(): Promise<void>;
+
+  /** Close detector and release resources */
+  close(): Promise<void>;
+}
+
+export interface BlockedAgentDetectorConfig {
+  /** How often to check for blocked agents (default: 60s) */
+  checkInterval?: number;
+  /** Default inactivity timeout before blocking (default: 10m, min: 1m, max: 60m) */
+  defaultTimeout?: number;
+  /** Agent-type specific timeouts (in milliseconds) */
+  agentTypeTimeouts?: Partial<Record<"claude-code" | "codex" | "aider", number>>;
+}
+
+export interface BlockedAgentStatus {
+  agentId: string;
+  lastActivity: Date;
+  isBlocked: boolean;
+  isPaused: boolean;
+  blockedAt?: Date;
+  inactiveDuration?: number;
 }
 
 // =============================================================================

@@ -1,6 +1,6 @@
 # Story 4.1: Blocked Agent Detection
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 

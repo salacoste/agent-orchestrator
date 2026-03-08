@@ -56,6 +56,17 @@ function getStatusEmoji(status: AgentStatus): string {
   }
 }
 
+function getStatusAriaLabel(status: AgentStatus): string {
+  switch (status) {
+    case "active":
+      return "Agent is active and working";
+    case "idle":
+      return "Agent is idle waiting for work";
+    case "blocked":
+      return "Agent is blocked and needs attention";
+  }
+}
+
 function formatTimeAgo(dateStr: string): string {
   const date = new Date(dateStr);
   const now = new Date();
@@ -77,7 +88,7 @@ interface AgentCardProps {
 function AgentCard({ session, status, onCardClick, onResumeClick }: AgentCardProps) {
   const emoji = getStatusEmoji(status);
   const colorClass = getStatusColor(status);
-  // const storyId = session.metadata["storyId"] as string | undefined; // Used for future features
+  const ariaLabel = getStatusAriaLabel(status);
 
   const handleResumeClick = (e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent card click
@@ -86,13 +97,13 @@ function AgentCard({ session, status, onCardClick, onResumeClick }: AgentCardPro
 
   return (
     <div
-      className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-lg p-4 hover:border-[var(--color-border-hover)] transition-colors cursor-pointer"
+      className="bg-[var(--color-bg-surface)] border border-[var(--color-border-default)] rounded-lg p-4 hover:border-[var(--color-border-hover)] transition-all duration-300 cursor-pointer"
       onClick={() => onCardClick(session)}
     >
       <div className="flex items-start justify-between mb-2">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
-            <span className={colorClass} aria-label={status}>
+            <span className={colorClass} aria-label={ariaLabel} role="status">
               {emoji}
             </span>
             <span className="text-xs font-mono text-[var(--color-text-muted)] truncate">
@@ -151,7 +162,7 @@ function AgentColumn({
   return (
     <div className="flex flex-col">
       <div className="flex items-center gap-2 mb-4">
-        <span>{emoji}</span>
+        <span aria-label={`Status: ${title}`}>{emoji}</span>
         <h2 className="text-sm font-semibold text-[var(--color-text-primary)]">{title}</h2>
         <span className="text-xs text-[var(--color-text-muted)]">({sessions.length})</span>
       </div>
@@ -183,6 +194,7 @@ export default function FleetPage() {
   const [resumeAgent, setResumeAgent] = useState<DashboardSession | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isResuming, setIsResuming] = useState(false);
 
   const fetchData = () => {
     setLoading(true);
@@ -238,10 +250,64 @@ export default function FleetPage() {
     setIsModalOpen(true);
   };
 
+  // Handler for executing resume command
+  const handleResumeAgent = async () => {
+    if (!resumeAgent) return;
+
+    setIsResuming(true);
+    try {
+      const storyId =
+        (resumeAgent.metadata["storyId"] as string) || resumeAgent.issueLabel || "unknown";
+
+      // Call the resume API endpoint
+      const response = await fetch("/api/resume", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: resumeAgent.id, storyId }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to resume agent");
+      }
+
+      setIsModalOpen(false);
+      // Refresh data to show updated status
+      fetchData();
+    } catch (err) {
+      console.error("Resume error:", err);
+      alert(
+        "Failed to resume agent. Please try again or use the CLI: ao resume " +
+          resumeAgent.issueLabel,
+      );
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
+  // Handler for spawn button in empty state
+  const handleSpawnClick = () => {
+    // Open the spawn modal or navigate to spawn page
+    // For now, show instructions since spawn UI is a separate feature
+    alert("To spawn a new agent, use the CLI: ao spawn <story-id>");
+  };
+
   // Categorize agents by status
   const activeAgents = sessions.filter((s) => getAgentStatus(s) === "active");
   const idleAgents = sessions.filter((s) => getAgentStatus(s) === "idle");
   const blockedAgents = sessions.filter((s) => getAgentStatus(s) === "blocked");
+
+  // Mock activity log generator (in real implementation, fetch from API)
+  const generateMockActivityLog = (session: DashboardSession) => {
+    return [
+      { time: session.lastActivityAt, event: "Last activity" },
+      { time: session.createdAt, event: "Agent created" },
+    ];
+  };
+
+  // Mock progress data (in real implementation, fetch from story metadata)
+  const getMockProgress = (_session: DashboardSession) => {
+    return { completed: 0, total: 0 }; // Placeholder until progress tracking is implemented
+  };
 
   if (loading) {
     return (
@@ -267,6 +333,12 @@ export default function FleetPage() {
             ao spawn
           </code>
         </p>
+        <button
+          onClick={handleSpawnClick}
+          className="px-4 py-2 text-sm font-medium bg-[var(--color-accent)] text-[var(--color-accent-foreground)] rounded hover:opacity-90 transition-opacity"
+        >
+          Spawn Agent
+        </button>
       </div>
     );
   }
@@ -319,18 +391,26 @@ export default function FleetPage() {
         <div
           className="fixed inset-0 bg-black/50 z-50 flex justify-end"
           onClick={() => setIsDrawerOpen(false)}
+          role="presentation"
         >
           <div
             className="bg-[var(--color-bg-surface)] w-full max-w-md h-full overflow-y-auto p-6"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="drawer-title"
           >
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+              <h2
+                id="drawer-title"
+                className="text-lg font-semibold text-[var(--color-text-primary)]"
+              >
                 Agent Details
               </h2>
               <button
                 onClick={() => setIsDrawerOpen(false)}
                 className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                aria-label="Close drawer"
               >
                 ✕
               </button>
@@ -365,6 +445,42 @@ export default function FleetPage() {
                 <div className="text-[var(--color-text-muted)] mb-1">Last Activity</div>
                 <div>{formatTimeAgo(selectedAgent.lastActivityAt)}</div>
               </div>
+
+              {/* Recent Activity Log */}
+              <div className="pt-4 border-t border-[var(--color-border-default)]">
+                <div className="text-[var(--color-text-muted)] mb-2">Recent Activity</div>
+                <div className="space-y-2">
+                  {generateMockActivityLog(selectedAgent).map((activity, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-xs">
+                      <span className="text-[var(--color-text-muted)]">
+                        {formatTimeAgo(activity.time)}
+                      </span>
+                      <span className="text-[var(--color-text-secondary)]">{activity.event}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Story Progress */}
+              <div className="pt-4 border-t border-[var(--color-border-default)]">
+                <div className="text-[var(--color-text-muted)] mb-2">Story Progress</div>
+                {(() => {
+                  const progress = getMockProgress(selectedAgent);
+                  if (progress.total === 0) {
+                    <div className="text-xs text-[var(--color-text-muted)]">
+                      Progress tracking not available for this story
+                    </div>;
+                  }
+                  return (
+                    <div className="text-xs">
+                      <span className="text-[var(--color-text-secondary)]">
+                        {progress.completed} of {progress.total} tasks completed
+                      </span>
+                    </div>
+                  );
+                })()}
+              </div>
+
               <div className="pt-4 border-t border-[var(--color-border-default)]">
                 <div className="text-[var(--color-text-muted)] mb-2">CLI Commands</div>
                 <div className="space-y-1">
@@ -389,18 +505,26 @@ export default function FleetPage() {
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
           onClick={() => setIsModalOpen(false)}
+          role="presentation"
         >
           <div
             className="bg-[var(--color-bg-surface)] rounded-lg max-w-md w-full p-6"
             onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-title"
           >
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+              <h2
+                id="modal-title"
+                className="text-lg font-semibold text-[var(--color-text-primary)]"
+              >
                 Resume Agent
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
                 className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)]"
+                aria-label="Close modal"
               >
                 ✕
               </button>
@@ -415,18 +539,16 @@ export default function FleetPage() {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => {
-                  setIsModalOpen(false);
-                  // TODO: Implement resume command trigger
-                  console.log("Resume agent:", resumeAgent.id);
-                }}
-                className="flex-1 px-4 py-2 text-sm font-medium bg-[var(--color-accent)] text-[var(--color-accent-foreground)] rounded hover:opacity-90 transition-opacity"
+                onClick={handleResumeAgent}
+                disabled={isResuming}
+                className="flex-1 px-4 py-2 text-sm font-medium bg-[var(--color-accent)] text-[var(--color-accent-foreground)] rounded hover:opacity-90 transition-opacity disabled:opacity-50"
               >
-                Resume
+                {isResuming ? "Resuming..." : "Resume"}
               </button>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 text-sm font-medium border border-[var(--color-border-default)] rounded hover:bg-[var(--color-bg-hover)] transition-colors"
+                disabled={isResuming}
+                className="px-4 py-2 text-sm font-medium border border-[var(--color-border-default)] rounded hover:bg-[var(--color-bg-hover)] transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>

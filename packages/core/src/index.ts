@@ -148,6 +148,28 @@ export type {
   FailureHandler,
 } from "./types.js";
 
+// Blocked Agent Detection — monitor and detect agent inactivity
+export { createBlockedAgentDetector } from "./blocked-agent-detector.js";
+export type { BlockedAgentDetectorDeps } from "./blocked-agent-detector.js";
+export type {
+  BlockedAgentDetector,
+  BlockedAgentDetectorConfig,
+  BlockedAgentStatus,
+} from "./types.js";
+
+// Error Logger — structured error logging with secret redaction
+export { createErrorLogger } from "./error-logger.js";
+export type { ErrorLoggerDeps } from "./error-logger.js";
+export type {
+  ErrorLogger,
+  ErrorLoggerConfig,
+  ErrorLog,
+  ErrorLogEntry,
+  ErrorLogOptions,
+  ErrorFilter,
+  ErrorRateSummary,
+} from "./error-logger.js";
+
 // Completion Handlers — handle agent completion and failure events
 export {
   createCompletionHandler,

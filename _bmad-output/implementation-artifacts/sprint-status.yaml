@@ -68,7 +68,7 @@ development_status:
   epic-2-1: in-progress
   2-1-1-integration-test-framework: done
   2-1-2-interface-validation-checklist: done
-  2-1-3-task-completion-validation: ready-for-dev
+  2-1-3-task-completion-validation: review
   2-1-4-cli-test-infrastructure: ready-for-dev
   2-1-5-persistent-dead-letter-queue: ready-for-dev
   2-1-6-performance-test-suite: ready-for-dev

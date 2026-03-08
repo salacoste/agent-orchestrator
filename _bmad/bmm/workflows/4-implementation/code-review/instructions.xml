@@ -54,6 +54,17 @@
       3. **Code Quality**: Security, performance, maintainability
       4. **Test Quality**: Real tests vs placeholder bullshit
     </action>
+
+    <!-- Load task completion validation checklist -->
+    <action>Load task completion checklist: task-completion-checklist.md</action>
+    <action>Review checklist for task completion validation criteria:
+      - All acceptance criteria met (not just attempted)
+      - Tests are real assertions (not expect(true).toBe(true))
+      - No placeholder tests that always pass
+      - Deferred items explicitly documented
+      - No hidden TODOs in completed tasks
+      - Story status reflects actual completion state
+    </action>
   </step>
 
   <step n="3" goal="Execute adversarial review">

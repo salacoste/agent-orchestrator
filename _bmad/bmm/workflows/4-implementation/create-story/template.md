@@ -21,6 +21,51 @@ so that {{benefit}}.
 - [ ] Task 2 (AC: #)
   - [ ] Subtask 2.1
 
+## Task Completion Validation
+
+**CRITICAL:** Use correct task status notation:
+
+- `[ ]` = Not started
+- `[-]` = Partially complete (MUST document what's missing)
+- `[x]` = 100% complete (all ACs met, all tests passing, no hidden TODOs)
+
+**Task Completion Criteria:**
+- All acceptance criteria met (not just attempted)
+- All tests passing with real assertions (not `expect(true).toBe(true)`)
+- No placeholder tests that always pass
+- Deferred items explicitly documented (see "Deferred Items Tracking" below)
+- No hidden TODOs or FIXMEs in completed tasks
+- Documentation updated (Dev Notes, File List)
+
+**Deferred Items Tracking:**
+
+If your task has deferred items or known limitations:
+
+**In this story's Dev Notes, add:**
+```markdown
+### Limitations (Deferred Items)
+1. Feature name
+   - Status: Deferred - Requires X
+   - Requires: Specific requirement
+   - Epic: Story Y or Epic number
+   - Current: What's currently implemented
+```
+
+**In sprint-status.yaml (if applicable), add:**
+```yaml
+limitations:
+  feature-name: "Epic Y - Description or epic number"
+```
+
+**Reference:** See `_bmad/bmm/docs/task-completion-guidelines.md` for complete task completion best practices.
+
+**Task Completion Validation Checklist:**
+- [ ] All tasks marked [x] are 100% complete (no partial work)
+- [ ] All tests have real assertions (no expect(true).toBe(true))
+- [ ] No hidden TODOs/FIXMEs in completed tasks
+- [ ] Deferred items documented in Dev Notes under "Limitations (Deferred Items)"
+- [ ] File List includes all changed files
+
 ## Interface Validation
 
 - [ ] Validate all interface methods used in this story

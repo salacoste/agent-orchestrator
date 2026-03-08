@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import type { Command } from "commander";
-import { loadConfig } from "@composio/ao-core";
+import { loadConfig, type DegradedModeStatus } from "@composio/ao-core";
 import {
   computeSprintHealth,
   type SprintHealthResult,
@@ -28,6 +28,91 @@ function renderIndicator(indicator: HealthIndicator): void {
       console.log(`    ${chalk.dim("→")} ${chalk.dim(detail)}`);
     }
   }
+}
+
+function formatServiceAvailability(available: boolean, lastError?: string): string {
+  if (available) {
+    return chalk.green("✅ Operational");
+  }
+  const status = chalk.red("❌ Unavailable");
+  return lastError ? `${status} (${chalk.dim(lastError)})` : status;
+}
+
+function renderDegradedModeStatus(status: DegradedModeStatus): void {
+  if (status.mode === "normal") {
+    return; // Don't show anything if not degraded
+  }
+
+  console.log(chalk.bold("  Degraded Mode:"));
+
+  // Show mode
+  let modeLabel: string;
+  let modeColor: typeof chalk.red;
+  switch (status.mode) {
+    case "event-bus-unavailable":
+      modeLabel = "Event Bus Unavailable";
+      modeColor = chalk.yellow;
+      break;
+    case "bmad-unavailable":
+      modeLabel = "BMAD Tracker Unavailable";
+      modeColor = chalk.yellow;
+      break;
+    case "multiple-services-unavailable":
+      modeLabel = "Multiple Services Unavailable";
+      modeColor = chalk.red;
+      break;
+    default:
+      modeLabel = status.mode;
+      modeColor = chalk.dim;
+  }
+
+  console.log(`    Mode: ${modeColor(modeLabel)}`);
+
+  // Show service availability
+  console.log(chalk.dim("    Services:"));
+  const eventBusAvail = status.services["event-bus"];
+  if (eventBusAvail) {
+    console.log(
+      `      ├─ Event bus: ${formatServiceAvailability(
+        eventBusAvail.available,
+        eventBusAvail.lastError,
+      )}`,
+    );
+  }
+  const bmadAvail = status.services["bmad-tracker"];
+  if (bmadAvail) {
+    console.log(
+      `      ├─ BMAD tracker: ${formatServiceAvailability(
+        bmadAvail.available,
+        bmadAvail.lastError,
+      )}`,
+    );
+  }
+  console.log(
+    `      └─ Local state: ${
+      status.localStateOperational ? chalk.green("✅ Operational") : chalk.red("❌ Error")
+    }`,
+  );
+
+  // Show queued operations
+  if (status.queuedEvents > 0 || status.queuedSyncs > 0) {
+    console.log(chalk.dim("    Queued:"));
+    if (status.queuedEvents > 0) {
+      console.log(`      ├─ ${status.queuedEvents} events`);
+    }
+    if (status.queuedSyncs > 0) {
+      console.log(`      └─ ${status.queuedSyncs} sync operations`);
+    }
+  }
+
+  // Show entered time
+  if (status.enteredAt) {
+    const durationMs = Date.now() - new Date(status.enteredAt).getTime();
+    const durationMin = Math.round(durationMs / 60000);
+    console.log(chalk.dim(`    Duration: ${durationMin} minutes`));
+  }
+
+  console.log();
 }
 
 export function registerHealth(program: Command): void {
@@ -58,6 +143,20 @@ export function registerHealth(program: Command): void {
         process.exit(1);
       }
 
+      // Get degraded mode status if available (non-fatal)
+      let degradedModeStatus: DegradedModeStatus | null = null;
+      try {
+        // Try to get degraded mode status from lifecycle manager if available
+        // This is optional - if not available, skip degraded mode display
+        const { getLifecycleManagerIfExists } = await import("../lib/lifecycle.js");
+        const lifecycleManager = await getLifecycleManagerIfExists(config, projectId);
+        if (lifecycleManager && lifecycleManager.getDegradedModeStatus) {
+          degradedModeStatus = lifecycleManager.getDegradedModeStatus() as DegradedModeStatus;
+        }
+      } catch {
+        // Degraded mode not available - continue without it
+      }
+
       let result: SprintHealthResult;
       try {
         result = computeSprintHealth(project);
@@ -72,7 +171,16 @@ export function registerHealth(program: Command): void {
 
       // JSON output
       if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
+        const jsonOutput: {
+          sprintHealth: SprintHealthResult;
+          degradedMode?: DegradedModeStatus;
+        } = { sprintHealth: result };
+
+        if (degradedModeStatus) {
+          jsonOutput.degradedMode = degradedModeStatus;
+        }
+
+        console.log(JSON.stringify(jsonOutput, null, 2));
         return;
       }
 
@@ -80,18 +188,37 @@ export function registerHealth(program: Command): void {
       console.log(header(`Sprint Health: ${project.name || projectId}`));
       console.log();
 
-      if (result.indicators.length === 0) {
+      // Show degraded mode status first if available
+      if (degradedModeStatus && degradedModeStatus.mode !== "normal") {
+        console.log(`  Overall: ${chalk.yellow("⚠ Degraded")}`);
+        console.log();
+        renderDegradedModeStatus(degradedModeStatus);
+      }
+
+      if (result.indicators.length === 0 && !degradedModeStatus) {
         console.log(`  ${chalk.green("✓")} Sprint Health: ${chalk.green("OK")}`);
         console.log(chalk.dim("  No issues detected."));
         return;
       }
 
-      console.log(`  Overall: ${severityBadge(result.overall)}`);
-      console.log();
+      if (result.indicators.length === 0 && degradedModeStatus?.mode === "normal") {
+        console.log(`  ${chalk.green("✓")} Sprint Health: ${chalk.green("OK")}`);
+        console.log(chalk.dim("  No issues detected."));
+        return;
+      }
 
-      for (const indicator of result.indicators) {
-        renderIndicator(indicator);
-        console.log();
+      // Show sprint health indicators if there are any
+      if (result.indicators.length > 0) {
+        // Only show overall status if not already shown by degraded mode
+        if (!degradedModeStatus || degradedModeStatus.mode === "normal") {
+          console.log(`  Overall: ${severityBadge(result.overall)}`);
+          console.log();
+        }
+
+        for (const indicator of result.indicators) {
+          renderIndicator(indicator);
+          console.log();
+        }
       }
     });
 }

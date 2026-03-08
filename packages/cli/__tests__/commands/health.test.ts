@@ -169,9 +169,12 @@ describe("health command", () => {
     await program.parseAsync(["node", "test", "health", "--json"]);
 
     const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("");
-    const parsed = JSON.parse(output) as SprintHealthResult;
-    expect(parsed.overall).toBe("warning");
-    expect(parsed.stuckStories).toEqual(["s1"]);
+    const parsed = JSON.parse(output) as {
+      sprintHealth: SprintHealthResult;
+      degradedMode?: unknown;
+    };
+    expect(parsed.sprintHealth.overall).toBe("warning");
+    expect(parsed.sprintHealth.stuckStories).toEqual(["s1"]);
   });
 
   it("handles non-bmad tracker", async () => {

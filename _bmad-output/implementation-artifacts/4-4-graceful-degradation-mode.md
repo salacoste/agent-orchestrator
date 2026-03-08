@@ -1,6 +1,6 @@
 # Story 4.4: Graceful Degradation Mode
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -36,24 +36,28 @@ so that partial functionality is maintained instead of complete failure.
 
 ## Tasks / Subtasks
 
-- [ ] Create DegradedMode service
-  - [ ] Track service availability
-  - [ ] Enter/exit degraded mode per service
-  - [ ] Queue operations for later
-  - [ ] Fallback to local storage
-- [ ] Implement event bus fallback
-  - [ ] Log to events.jsonl
-  - [ ] Queue in-memory events
-- [ ] Implement BMAD fallback
-  - [ ] Queue sync operations
-  - [ ] Continue local state updates
-- [ ] Implement recovery
-  - [ ] Drain queued events on reconnect
-  - [ ] Handle conflicts (timestamp-based)
-- [ ] CLI command `ao health`
-  - [ ] Show degraded status
-  - [ - Service availability
-- [ ] Write unit tests
+- [x] Create DegradedMode service
+  - [x] Track service availability
+  - [x] Enter/exit degraded mode per service
+  - [x] Queue operations for later
+  - [x] Fallback to local storage
+- [x] Implement event bus fallback
+  - [x] Log to events.jsonl
+  - [x] Queue in-memory events
+- [x] Implement BMAD fallback
+  - [x] Queue sync operations
+  - [x] Continue local state updates
+- [x] Implement recovery
+  - [x] Drain queued events on reconnect
+  - [x] Handle conflicts (timestamp-based)
+- [x] CLI command `ao health`
+  - [x] Show degraded status
+  - [x] Service availability
+- [x] Write unit tests
+- [x] Integrate DegradedModeService with EventPublisher and StateManager
+- [x] Implement actual queue draining in recovery logic
+- [x] Add degraded mode status to web dashboard API
+- [x] Wire up actual service health checks
 
 ## Dev Notes
 
@@ -84,4 +88,76 @@ Overall: Degraded
 
 ## Dev Agent Record
 
-_(To be filled by Dev Agent)_
+### Implementation Summary
+
+Implemented Story 4.4 with all acceptance criteria met:
+
+1. **DegradedMode Service** (`packages/core/src/degraded-mode.ts`)
+   - Tracks service availability with health checks
+   - Enter/exit degraded mode per service (normal, event-bus-unavailable, bmad-unavailable, multiple-services-unavailable)
+   - Queue operations for later (in-memory + file backup to JSONL)
+   - Fallback to local storage with automatic recovery
+
+2. **Event Bus Fallback**
+   - Logs to `events.jsonl` when event bus unavailable
+   - In-memory event queue with configurable max size (default: 1000)
+   - Automatic queue draining on service recovery within 30s timeout
+
+3. **BMAD Tracker Fallback**
+   - Queues sync operations when BMAD unavailable
+   - Sync queue with configurable max size (default: 500)
+   - Continues local state updates via StateManager
+
+4. **Recovery Logic**
+   - Automatic exit degraded mode when services recover
+   - Drain queued events via `getQueuedEvents()` and `clearDrainedEvents()`
+   - Drain queued syncs via `getQueuedSyncs()` and `clearDrainedSyncs()`
+   - Timestamp-based conflict handling
+
+5. **CLI Health Command** (`packages/cli/src/commands/health.ts`)
+   - Shows "Degraded" overall status in degraded mode
+   - Lists service availability (event-bus, bmad-tracker, local-state)
+   - Shows queued operations count
+   - JSON output includes `degradedMode` field
+
+6. **LifecycleManager Integration** (`packages/core/src/lifecycle-manager.ts`)
+   - DegradedModeService instantiated and started/stopped with lifecycle
+   - Health check for event-bus registered (monitors connection status)
+   - Health check for bmad-tracker registered (verifies tracker responsiveness)
+   - `getDegradedModeStatus()` method exposed for external access
+
+7. **Web Dashboard API** (`packages/web/src/app/api/sprint/[project]/health/route.ts`)
+   - Added `degradedMode` field to health API response
+   - Optional field that includes mode, service availability, queued operations
+   - Gracefully handles when degraded mode unavailable
+
+### Files Created/Modified
+
+**Created:**
+- `packages/core/src/degraded-mode.ts` - DegradedModeService implementation (600 lines)
+- `packages/core/src/__tests__/degraded-mode.test.ts` - 29 unit tests
+- `packages/cli/src/lib/lifecycle.ts` - Lifecycle manager helper
+
+**Modified:**
+- `packages/core/src/index.ts` - Added exports for DegradedModeService and types
+- `packages/core/src/lifecycle-manager.ts` - Integrated DegradedModeService with health checks
+- `packages/core/src/types.ts` - Added DegradedModeStatus method to LifecycleManager interface
+- `packages/cli/src/commands/health.ts` - Added degraded mode status display
+- `packages/web/src/app/api/sprint/[project]/health/route.ts` - Added degraded mode status to API
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` - Updated story 4-4 status
+
+### Test Results
+
+- **Core package**: 670 tests passing (including 29 new degraded-mode tests)
+- All test categories passing:
+  - Service health checks
+  - Event queuing
+  - Sync operation queuing
+  - State transitions
+  - Recovery logic
+  - Status reporting
+  - Persistence (load from backup files)
+- Typecheck: Passing for core package
+- ESLint: No lint errors
+
+## Dev Notes

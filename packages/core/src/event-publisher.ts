@@ -15,6 +15,7 @@ import type {
   StoryAssignedEvent,
   AgentResumedEvent,
 } from "./types.js";
+import type { DegradedModeService } from "./degraded-mode.js";
 import { randomUUID } from "node:crypto";
 import { appendFile, readFile, writeFile, stat } from "node:fs/promises";
 
@@ -30,6 +31,7 @@ export interface EventPublisherConfig {
   backupLogPath?: string; // Path to JSONL backup log
   queueMaxSize?: number; // Default: 1000
   backupLogMaxSize?: number; // Default: 10MB, truncate when exceeded
+  degradedModeService?: DegradedModeService; // Optional degraded mode service
 }
 
 export class EventPublisherImpl implements EventPublisher {
@@ -47,6 +49,13 @@ export class EventPublisherImpl implements EventPublisher {
     this.cleanupTimer = setInterval(() => {
       this.cleanupDeduplicationCache();
     }, CLEANUP_INTERVAL_MS);
+
+    // Register health check with degraded mode service if available
+    if (this.config.degradedModeService) {
+      this.config.degradedModeService.registerHealthCheck("event-bus", async () => {
+        return this.config.eventBus.isConnected();
+      });
+    }
   }
 
   /**
@@ -166,8 +175,18 @@ export class EventPublisherImpl implements EventPublisher {
       }
     }
 
-    // Queue for later
+    // Queue for later - also queue to degraded mode service if available
     this.queueEvent(fullEvent);
+
+    // Also queue to degraded mode service for monitoring
+    if (this.config.degradedModeService && !this.config.eventBus.isConnected()) {
+      try {
+        await this.config.degradedModeService.queueEvent(fullEvent);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error("[EventPublisher] Failed to queue event to degraded mode:", error);
+      }
+    }
   }
 
   /**
@@ -280,6 +299,7 @@ export class EventPublisherImpl implements EventPublisher {
 
     this.isFlushing = true;
     try {
+      // First, flush internal queue
       while (this.eventQueue.length > 0) {
         const event = this.eventQueue.shift();
         if (!event) break;
@@ -296,6 +316,48 @@ export class EventPublisherImpl implements EventPublisher {
             this.eventQueue.unshift(event);
             break;
           }
+        }
+      }
+
+      // Then, drain events from degraded mode service if available
+      if (this.config.degradedModeService && this.config.eventBus.isConnected()) {
+        try {
+          const degradedEvents = this.config.degradedModeService.getQueuedEvents();
+          if (degradedEvents.length > 0) {
+            // eslint-disable-next-line no-console
+            console.log(
+              `[EventPublisher] Draining ${degradedEvents.length} events from degraded mode`,
+            );
+
+            for (const queuedOp of degradedEvents) {
+              if (!this.config.eventBus.isConnected()) break;
+
+              try {
+                // Extract the actual event from QueuedOperation.data
+                const event = queuedOp.data as EventBusEvent;
+                if (event && event.eventType && event.eventId) {
+                  await this.config.eventBus.publish(event);
+                  this.config.degradedModeService.clearDrainedEvents(1);
+                } else {
+                  // Skip malformed queued operations
+                  // eslint-disable-next-line no-console
+                  console.warn(
+                    "[EventPublisher] Skipping malformed queued operation:",
+                    queuedOp.id,
+                  );
+                  this.config.degradedModeService.clearDrainedEvents(1);
+                }
+              } catch (error) {
+                // eslint-disable-next-line no-console
+                console.error("[EventPublisher] Failed to flush degraded mode event:", error);
+                // Stop draining on first error
+                break;
+              }
+            }
+          }
+        } catch (error) {
+          // eslint-disable-next-line no-console
+          console.error("[EventPublisher] Failed to get degraded events:", error);
         }
       }
     } finally {

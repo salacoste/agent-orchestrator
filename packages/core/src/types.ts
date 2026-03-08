@@ -16,6 +16,20 @@
  */
 
 // =============================================================================
+// DEGRADED MODE (imported from degraded-mode.ts)
+// =============================================================================
+
+import type {
+  DegradedModeState,
+  MonitoredService,
+  ServiceAvailability,
+  DegradedModeStatus,
+} from "./degraded-mode.js";
+
+// Re-export degraded mode types for external use
+export type { DegradedModeState, MonitoredService, ServiceAvailability, DegradedModeStatus };
+
+// =============================================================================
 // SESSION
 // =============================================================================
 
@@ -1058,6 +1072,9 @@ export interface LifecycleManager {
 
   /** Force-check a specific session now */
   check(sessionId: SessionId): Promise<void>;
+
+  /** Get degraded mode status (if available) */
+  getDegradedModeStatus?(): DegradedModeStatus;
 }
 
 /** Plugin registry — discovery + loading */

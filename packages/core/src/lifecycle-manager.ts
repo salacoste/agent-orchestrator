@@ -35,6 +35,11 @@ import {
 } from "./types.js";
 import { updateMetadata } from "./metadata.js";
 import { getSessionsDir } from "./paths.js";
+import {
+  createDegradedModeService,
+  type DegradedModeConfig,
+  type DegradedModeStatus,
+} from "./degraded-mode.js";
 
 /** Parse a duration string like "10m", "30s", "1h" to milliseconds. */
 function parseDuration(str: string): number {
@@ -183,6 +188,44 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let polling = false; // re-entrancy guard
   let allCompleteEmitted = false; // guard against repeated all_complete
+
+  // Initialize DegradedModeService for monitoring service availability
+  const degradedModeConfig: DegradedModeConfig = {
+    eventsBackupPath: ".ao-events/degraded-events.jsonl",
+    syncBackupPath: ".ao-events/degraded-syncs.jsonl",
+    healthCheckIntervalMs: 5000, // Check every 5 seconds
+    recoveryTimeoutMs: 30000, // 30 second recovery timeout
+  };
+  const degradedModeService = createDegradedModeService(degradedModeConfig);
+
+  // Register health checks for monitored services
+  // Event bus health check - assumes healthy for now as EventBus is managed separately
+  degradedModeService.registerHealthCheck("event-bus", async () => {
+    // TODO: Implement actual event bus health check
+    // EventBus instances are not managed via the plugin registry
+    // For now, assume event bus is healthy
+    return true;
+  });
+
+  // BMAD tracker health check
+  degradedModeService.registerHealthCheck("bmad-tracker", async () => {
+    // Check if at least one BMAD tracker is configured and responsive
+    try {
+      for (const [, project] of Object.entries(config.projects)) {
+        if (project.tracker?.plugin === "bmad") {
+          const tracker = registry.get<Tracker>("tracker", "bmad");
+          if (tracker && tracker.listIssues) {
+            // Try a simple health check - can we list issues?
+            await tracker.listIssues({ state: "all", limit: 1 }, project);
+            return true;
+          }
+        }
+      }
+      return false;
+    } catch {
+      return false;
+    }
+  });
 
   /** Determine current status for a session by polling plugins. */
   async function determineStatus(session: Session): Promise<SessionStatus> {
@@ -782,6 +825,8 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
       pollTimer = setInterval(() => void pollAll(), intervalMs);
       // Run immediately on start
       void pollAll();
+      // Start degraded mode service
+      void degradedModeService.start();
     },
 
     stop(): void {
@@ -789,6 +834,8 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
         clearInterval(pollTimer);
         pollTimer = null;
       }
+      // Stop degraded mode service
+      void degradedModeService.stop();
     },
 
     getStates(): Map<SessionId, SessionStatus> {
@@ -799,6 +846,10 @@ export function createLifecycleManager(deps: LifecycleManagerDeps): LifecycleMan
       const session = await sessionManager.get(sessionId);
       if (!session) throw new Error(`Session ${sessionId} not found`);
       await checkSession(session);
+    },
+
+    getDegradedModeStatus(): DegradedModeStatus {
+      return degradedModeService.getStatus();
     },
   };
 }

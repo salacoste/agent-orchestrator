@@ -80,7 +80,7 @@ development_status:
   epic-4: in-progress
   4-1-blocked-agent-detection: done
   4-2-error-logging-with-context: done
-  4-3-retry-with-exponential-backoff-and-circuit-breaker: ready-for-dev
+  4-3-retry-with-exponential-backoff-and-circuit-breaker: review
   4-4-graceful-degradation-mode: ready-for-dev
   4-5-dead-letter-queue: ready-for-dev
   4-6-event-bus-backlog-recovery: ready-for-dev

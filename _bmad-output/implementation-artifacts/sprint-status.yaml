@@ -82,7 +82,7 @@ development_status:
   4-2-error-logging-with-context: done
   4-3-retry-with-exponential-backoff-and-circuit-breaker: done
   4-4-graceful-degradation-mode: done
-  4-5-dead-letter-queue: ready-for-dev
+  4-5-dead-letter-queue: review
   4-6-event-bus-backlog-recovery: ready-for-dev
   4-7-metadata-corruption-detection-and-recovery: ready-for-dev
   4-8-health-check-configuration: ready-for-dev

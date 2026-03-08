@@ -190,6 +190,29 @@ export type {
   CircuitBreakerState,
 } from "./circuit-breaker.js";
 
+// Degraded Mode — graceful service degradation
+export { createDegradedModeService } from "./degraded-mode.js";
+export type {
+  DegradedModeService,
+  DegradedModeConfig,
+  DegradedModeState,
+  DegradedModeStatus,
+  ServiceAvailability,
+  ServiceHealthCheck,
+  QueuedOperation,
+} from "./degraded-mode.js";
+
+// Dead Letter Queue — persistent storage for failed operations
+export { createDeadLetterQueue } from "./dead-letter-queue.js";
+export type {
+  DeadLetterQueueService,
+  DLQConfig,
+  DLQEntry,
+  DLQStats,
+  ReplayResult,
+  AlertCallback,
+} from "./dead-letter-queue.js";
+
 // Completion Handlers — handle agent completion and failure events
 export {
   createCompletionHandler,

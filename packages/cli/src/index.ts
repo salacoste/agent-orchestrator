@@ -49,6 +49,7 @@ import { registerResolveConflicts } from "./commands/resolve-conflicts.js";
 import { registerSync } from "./commands/sync.js";
 import { registerErrors } from "./commands/errors.js";
 import { registerRetry } from "./commands/retry.js";
+import { registerDLQ } from "./commands/dlq.js";
 
 const program = new Command();
 
@@ -109,5 +110,6 @@ registerSync(program);
 
 registerErrors(program);
 registerRetry(program);
+registerDLQ(program);
 
 program.parse();

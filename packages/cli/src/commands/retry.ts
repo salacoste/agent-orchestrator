@@ -200,30 +200,37 @@ export function registerRetry(program: Command): void {
         process.exit(1);
       }
 
-      // Simulate retry attempt
-      console.log(chalk.cyan(`\n⟳ Retrying operation...`));
-      console.log(chalk.dim("  Circuit breaker: bypassed"));
-      console.log(chalk.dim("  Retry mode: immediate"));
+      // Display retry information
+      console.log(chalk.cyan(`\n⟳ Retry Information:`));
+      console.log(chalk.dim("  Error ID:         " + error.errorId));
+      console.log(
+        chalk.dim(
+          "  Retry Status:     " +
+            (retryable ? "Eligible for retry" : "Not retryable (use --force)"),
+        ),
+      );
+      console.log(chalk.dim("  Recommendation:   "));
 
-      // In a full implementation, this would:
-      // 1. Extract operation context from error log
-      // 2. Re-execute the original operation
-      // 3. Return the actual result
-
-      // For now, simulate retry based on error type
-      const wouldSucceed = retryable && Math.random() > 0.3; // 70% success rate for demo
-
-      if (wouldSucceed) {
-        console.log(chalk.green("  ✓ Retry succeeded"));
-        console.log(chalk.dim(`    Completed at: ${new Date().toLocaleString()}`));
-        console.log(chalk.dim("    Operation completed successfully"));
+      if (retryable) {
+        console.log(chalk.dim("  This error can be retried. To retry the operation:"));
+        console.log(chalk.dim("  1. Check if the original issue is resolved"));
+        console.log(chalk.dim("  2. Re-run the operation that produced this error"));
+        console.log(chalk.dim("  3. Verify the fix with your test suite"));
+        console.log(
+          chalk.yellow(
+            "\n  Note: The error log contains the error details but not the operation context.",
+          ),
+        );
+        console.log(
+          chalk.yellow("        Automatic retry requires storing operation context with errors."),
+        );
       } else {
-        console.log(chalk.red("  ✗ Retry failed"));
-        console.log(chalk.dim(`    Failed at: ${new Date().toLocaleString()}`));
-        console.log(chalk.dim("    Error: Operation still failing after retry"));
-        console.log(chalk.yellow("\n  Suggestion: Check logs for more details: ao errors"));
+        console.log(chalk.dim("  This error requires manual intervention:"));
+        console.log(chalk.dim("  1. Fix the underlying issue (auth, validation, etc.)"));
+        console.log(chalk.dim("  2. Re-run the operation after fixing"));
+        console.log(chalk.yellow("\n  Use --force to bypass this check if needed."));
       }
 
-      process.exit(wouldSucceed ? 0 : 1);
+      console.log(chalk.dim("\n" + "─".repeat(60)));
     });
 }

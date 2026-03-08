@@ -3,6 +3,7 @@
  *
  * Write-through caching with sprint-status.yaml as authoritative storage.
  * Sub-millisecond cache reads, version stamping for conflict detection.
+ * Corruption detection and recovery from backup or rebuild.
  */
 
 import type {
@@ -11,13 +12,25 @@ import type {
   StoryState,
   SetResult,
   BatchResult,
+  VerifyResult,
 } from "./types.js";
-import { readFile, writeFile, rename, unlink } from "node:fs/promises";
+import { readFile, writeFile, rename, unlink, copyFile, mkdir } from "node:fs/promises";
 import { parse, stringify } from "yaml";
 import { randomBytes } from "node:crypto";
+import { dirname } from "node:path";
 
 /** Default maximum time for cache reload (ms) */
 const DEFAULT_CACHE_RELOAD_THRESHOLD_MS = 100;
+
+/** Default YAML template for rebuild */
+const DEFAULT_YAML_TEMPLATE = `generated: {timestamp}
+project: agent-orchestrator
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+`;
 
 /**
  * State Manager Implementation
@@ -28,13 +41,18 @@ export class StateManagerImpl implements StateManager {
   private initialized = false;
   private initializing = false; // Prevent concurrent initialize calls
   private closed = false; // Track if close() was called
+  private backupPath: string; // Computed backup path
+  private createBackup: boolean; // Whether to create backups
 
   constructor(config: StateManagerConfig) {
     this.config = config;
+    this.backupPath = config.backupPath || `${config.yamlPath}.backup`;
+    this.createBackup = config.createBackup ?? false;
   }
 
   /**
    * Initialize state manager by loading YAML into cache
+   * Implements corruption detection and recovery from backup
    */
   async initialize(): Promise<void> {
     // Prevent concurrent initialization
@@ -57,8 +75,68 @@ export class StateManagerImpl implements StateManager {
     this.initializing = true;
 
     try {
-      const content = await readFile(this.config.yamlPath, "utf-8");
-      const yaml = parse(content) as Record<string, unknown>;
+      let content: string;
+
+      try {
+        content = await readFile(this.config.yamlPath, "utf-8");
+      } catch (error) {
+        // File doesn't exist - create default
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          content = DEFAULT_YAML_TEMPLATE.replace(
+            "{timestamp}",
+            new Date().toISOString().split("T")[0],
+          );
+          await this.ensureDirectoryExists();
+          await writeFile(this.config.yamlPath, content, "utf-8");
+        } else {
+          throw error;
+        }
+      }
+
+      // Try to parse YAML
+      let yaml: Record<string, unknown>;
+      try {
+        const parsed = parse(content);
+        // Empty file or file with only comments returns null
+        if (!parsed || typeof parsed !== "object") {
+          throw new Error("YAML content is empty or invalid");
+        }
+        yaml = parsed as Record<string, unknown>;
+      } catch (parseError) {
+        // YAML is corrupted - try to recover from backup
+        // eslint-disable-next-line no-console
+        console.error(
+          `Corrupted YAML detected in ${this.config.yamlPath}: ${(parseError as Error).message}`,
+        );
+
+        // Try backup recovery
+        try {
+          const backupContent = await readFile(this.backupPath, "utf-8");
+          yaml = parse(backupContent) as Record<string, unknown>;
+
+          // Restore the corrupted file from backup
+          await writeFile(this.config.yamlPath, backupContent, "utf-8");
+          // eslint-disable-next-line no-console
+          console.log(`Recovered from backup: ${this.backupPath}`);
+        } catch {
+          // Backup also failed or doesn't exist - rebuild with default
+          // eslint-disable-next-line no-console
+          console.error(`⚠️  DATA LOSS: No valid backup found for ${this.config.yamlPath}`);
+          // eslint-disable-next-line no-console
+          console.warn(`Rebuilding with default template - all previous story data will be LOST`);
+          yaml = parse(
+            DEFAULT_YAML_TEMPLATE.replace("{timestamp}", new Date().toISOString().split("T")[0]),
+          ) as Record<string, unknown>;
+
+          // Write the rebuilt file
+          await this.ensureDirectoryExists();
+          await writeFile(
+            this.config.yamlPath,
+            DEFAULT_YAML_TEMPLATE.replace("{timestamp}", new Date().toISOString().split("T")[0]),
+            "utf-8",
+          );
+        }
+      }
 
       const developmentStatus = (yaml.development_status || {}) as Record<string, unknown>;
 
@@ -292,6 +370,62 @@ export class StateManagerImpl implements StateManager {
   }
 
   /**
+   * Verify metadata integrity
+   * @returns Verification result with valid flag and optional error message
+   */
+  async verify(): Promise<VerifyResult> {
+    try {
+      // Check if file exists and is readable
+      const content = await readFile(this.config.yamlPath, "utf-8");
+
+      // Try to parse YAML
+      let yaml: Record<string, unknown> | null;
+      try {
+        yaml = parse(content) as Record<string, unknown>;
+      } catch (parseError) {
+        return {
+          valid: false,
+          error: `Corrupted YAML: ${(parseError as Error).message}`,
+        };
+      }
+
+      // Validate YAML structure - check for required fields
+      if (!yaml || typeof yaml !== "object") {
+        return {
+          valid: false,
+          error: "YAML content is empty or invalid",
+        };
+      }
+
+      // Check for expected structure - sprint-status.yaml should have development_status
+      if (!yaml.development_status) {
+        return {
+          valid: false,
+          error: "YAML missing required field: development_status",
+        };
+      }
+
+      const developmentStatus = yaml.development_status;
+      if (typeof developmentStatus !== "object" || developmentStatus === null) {
+        return {
+          valid: false,
+          error: "YAML development_status is not an object",
+        };
+      }
+
+      return {
+        valid: true,
+        recovered: false,
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        error: `Cannot read file: ${(error as Error).message}`,
+      };
+    }
+  }
+
+  /**
    * Write story state to YAML file
    * Note: This implementation has known limitations:
    * - No file locking for concurrent writes from multiple processes
@@ -300,6 +434,15 @@ export class StateManagerImpl implements StateManager {
    */
   private async writeToYaml(storyId: string, state: StoryState): Promise<void> {
     const tmpPath = this.config.yamlPath + ".tmp";
+
+    // Create backup before writing if enabled
+    if (this.createBackup) {
+      try {
+        await copyFile(this.config.yamlPath, this.backupPath);
+      } catch {
+        // Ignore backup errors - file might not exist yet
+      }
+    }
 
     // Clean up any existing temp file from previous failed write
     try {
@@ -353,6 +496,18 @@ export class StateManagerImpl implements StateManager {
     const timestamp = Date.now();
     const random = randomBytes(4).toString("hex");
     return `v${timestamp}-${random}`;
+  }
+
+  /**
+   * Ensure directory exists for file path
+   */
+  private async ensureDirectoryExists(): Promise<void> {
+    const dir = dirname(this.config.yamlPath);
+    try {
+      await mkdir(dir, { recursive: true });
+    } catch {
+      // Ignore errors - directory might already exist
+    }
   }
 }
 

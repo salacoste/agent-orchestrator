@@ -162,4 +162,75 @@ describe("RetryService", () => {
       consoleSpy.mockRestore();
     });
   });
+
+  describe("DLQ callback for non-retryable errors", () => {
+    it("calls onNonRetryable callback when error is not retryable", async () => {
+      const operation = vi.fn();
+      operation.mockRejectedValue(new Error("Authentication failed"));
+
+      const dlqCallback = vi.fn();
+
+      try {
+        await retryService.execute(operation, {
+          isRetryable: () => false,
+          onNonRetryable: dlqCallback,
+        });
+      } catch {
+        // Expected to throw
+      }
+
+      expect(dlqCallback).toHaveBeenCalledTimes(1);
+      expect(dlqCallback).toHaveBeenCalledWith(
+        expect.any(Error),
+        expect.arrayContaining([
+          expect.objectContaining({ attempt: 1, error: "Authentication failed" }),
+        ]),
+      );
+    });
+
+    it("does not call onNonRetryable callback for retryable errors", async () => {
+      const operation = vi.fn();
+      operation.mockRejectedValue(new Error("Transient error"));
+
+      const dlqCallback = vi.fn();
+
+      // Mock delay to avoid actual delays
+      vi.spyOn(retryService as any, "delay").mockResolvedValue(undefined);
+
+      try {
+        await retryService.execute(operation, {
+          isRetryable: () => true,
+          maxAttempts: 2,
+          onNonRetryable: dlqCallback,
+        });
+      } catch {
+        // Expected to throw after retries exhausted
+      }
+
+      expect(dlqCallback).not.toHaveBeenCalled();
+    });
+
+    it("awaits async onNonRetryable callback before throwing", async () => {
+      const operation = vi.fn();
+      operation.mockRejectedValue(new Error("Validation failed"));
+
+      let callbackCompleted = false;
+      const dlqCallback = vi.fn(async () => {
+        // Simulate async DLQ operation (e.g., writing to file)
+        await Promise.resolve();
+        callbackCompleted = true;
+      });
+
+      try {
+        await retryService.execute(operation, {
+          isRetryable: () => false,
+          onNonRetryable: dlqCallback,
+        });
+      } catch {
+        // Expected to throw
+      }
+
+      expect(callbackCompleted).toBe(true);
+    });
+  });
 });

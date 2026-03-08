@@ -479,7 +479,7 @@ development_status:
   });
 
   describe("error handling", () => {
-    it("should return error on YAML parse failure", async () => {
+    it("should recover from YAML parse failure", async () => {
       // Create invalid YAML
       await writeFile(testYamlPath, "invalid: yaml: content: [", "utf-8");
 
@@ -487,8 +487,11 @@ development_status:
         yamlPath: testYamlPath,
       });
 
-      // Should not crash, but may fail to initialize
-      await expect(stateManager.initialize()).rejects.toThrow();
+      // Should recover with default template instead of throwing
+      await expect(stateManager.initialize()).resolves.not.toThrow();
+
+      // Manager should be functional after recovery
+      expect(stateManager.getAll().size).toBe(0); // No stories in default template
     });
   });
 

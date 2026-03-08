@@ -7,6 +7,7 @@
  * - Retry logging
  * - Non-retryable error detection
  * - Jitter to prevent thundering herd
+ * - DLQ callback for non-retryable errors
  */
 
 /** Default max retry attempts */
@@ -50,6 +51,8 @@ export interface RetryOptions {
   maxAttempts?: number;
   /** Logger for retry attempts (defaults to console) */
   logger?: Pick<Console, "log" | "error" | "warn" | "info">;
+  /** Optional callback for non-retryable errors (DLQ handling) */
+  onNonRetryable?: (error: Error, retryHistory: RetryHistoryEntry[]) => void | Promise<void>;
 }
 
 /** Retry history entry */
@@ -111,6 +114,7 @@ class RetryServiceImpl implements RetryService {
       operationName = "operation",
       maxAttempts = this.maxAttempts,
       logger = console,
+      onNonRetryable,
     } = options;
 
     let lastError: Error | null = null;
@@ -129,11 +133,15 @@ class RetryServiceImpl implements RetryService {
 
         // Check if this is the last attempt or if error is not retryable
         if (attempt === maxAttempts - 1 || !isRetryable(lastError)) {
-          // Log non-retryable error with DLQ indicator
+          // Handle non-retryable errors - DLQ integration
           if (!isRetryable(lastError)) {
             logger.error(
               `Non-retryable error: ${lastError.constructor.name} - ${lastError.message}`,
             );
+            // Call DLQ callback if provided for persistence/processing
+            if (onNonRetryable) {
+              await onNonRetryable(lastError, retryHistory);
+            }
           }
           // Throw with full retry context
           const retryError = new Error(

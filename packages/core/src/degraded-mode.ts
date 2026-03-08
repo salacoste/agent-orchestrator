@@ -91,6 +91,14 @@ export interface DegradedModeConfig {
 export type HealthCheckFn = () => Promise<boolean>;
 
 /**
+ * Recovery callback function type - called when services recover
+ */
+export type RecoveryCallback = (
+  eventBusAvailable: boolean,
+  bmadAvailable: boolean,
+) => void | Promise<void>;
+
+/**
  * Service health check configuration
  */
 export interface ServiceHealthCheck {
@@ -118,6 +126,7 @@ export class DegradedModeServiceImpl {
   private healthChecks: Map<MonitoredService, HealthCheckFn> = new Map();
   private enteredAt?: Date;
   private localStateOperational = true;
+  private recoveryCallbacks: RecoveryCallback[] = [];
 
   constructor(config: DegradedModeConfig) {
     this.config = config;
@@ -128,6 +137,33 @@ export class DegradedModeServiceImpl {
    */
   registerHealthCheck(service: MonitoredService, check: HealthCheckFn): void {
     this.healthChecks.set(service, check);
+  }
+
+  /**
+   * Register a callback to be invoked when services recover
+   * @param callback - Function to call on recovery (receives availability status)
+   */
+  onRecovery(callback: RecoveryCallback): void {
+    this.recoveryCallbacks.push(callback);
+  }
+
+  /**
+   * Manually trigger recovery callbacks (for use by CLI or manual operations)
+   * This allows external triggering of recovery operations like event drain
+   * @param eventBusAvailable - Whether event bus is currently available
+   * @param bmadAvailable - Whether BMAD tracker is currently available
+   */
+  async triggerRecovery(eventBusAvailable: boolean, bmadAvailable: boolean): Promise<void> {
+    // eslint-disable-next-line no-console
+    console.log("[DegradedMode] Manually triggering recovery callbacks...");
+    for (const callback of this.recoveryCallbacks) {
+      try {
+        await callback(eventBusAvailable, bmadAvailable);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error("[DegradedMode] Recovery callback error:", error);
+      }
+    }
   }
 
   /**
@@ -373,6 +409,18 @@ export class DegradedModeServiceImpl {
       clearTimeout(this.recoveryTimer);
     }
 
+    // Call registered recovery callbacks (e.g., EventPublisher.flush())
+    // eslint-disable-next-line no-console
+    console.log("[DegradedMode] Triggering recovery callbacks...");
+    for (const callback of this.recoveryCallbacks) {
+      try {
+        void callback(eventBusAvailable, bmadAvailable);
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error("[DegradedMode] Recovery callback error:", error);
+      }
+    }
+
     const startTime = Date.now();
 
     const drainQueuedOperations = async (): Promise<void> => {
@@ -387,14 +435,14 @@ export class DegradedModeServiceImpl {
       if (eventBusAvailable && this.eventQueue.length > 0) {
         // eslint-disable-next-line no-console
         console.log(
-          `[DegradedMode] Triggering event recovery: ${this.eventQueue.length} queued events to drain`,
+          `[DegradedMode] Event recovery in progress: ${this.eventQueue.length} queued events`,
         );
       }
 
       if (bmadAvailable && this.syncQueue.length > 0) {
         // eslint-disable-next-line no-console
         console.log(
-          `[DegradedMode] Triggering sync recovery: ${this.syncQueue.length} queued operations to drain`,
+          `[DegradedMode] Sync recovery in progress: ${this.syncQueue.length} queued operations`,
         );
       }
 

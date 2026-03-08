@@ -50,6 +50,8 @@ import { registerSync } from "./commands/sync.js";
 import { registerErrors } from "./commands/errors.js";
 import { registerRetry } from "./commands/retry.js";
 import { registerDLQ } from "./commands/dlq.js";
+import { registerEvents } from "./commands/events.js";
+import { registerMetadata } from "./commands/metadata.js";
 
 const program = new Command();
 
@@ -111,5 +113,7 @@ registerSync(program);
 registerErrors(program);
 registerRetry(program);
 registerDLQ(program);
+registerEvents(program);
+registerMetadata(program);
 
 program.parse();

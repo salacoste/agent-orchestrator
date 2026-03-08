@@ -16,6 +16,7 @@ import type {
   AgentResumedEvent,
 } from "./types.js";
 import type { DegradedModeService } from "./degraded-mode.js";
+import { registerEventPublisher } from "./service-registry.js";
 import { randomUUID } from "node:crypto";
 import { appendFile, readFile, writeFile, stat } from "node:fs/promises";
 
@@ -40,6 +41,7 @@ export class EventPublisherImpl implements EventPublisher {
   private eventQueue: EventBusEvent[] = [];
   private cleanupTimer?: ReturnType<typeof setInterval>;
   private isFlushing: boolean = false;
+  private droppedEventsCount: number = 0; // Track dropped events for monitoring
 
   constructor(config: EventPublisherConfig) {
     this.config = config;
@@ -55,7 +57,54 @@ export class EventPublisherImpl implements EventPublisher {
       this.config.degradedModeService.registerHealthCheck("event-bus", async () => {
         return this.config.eventBus.isConnected();
       });
+
+      // Register recovery callback to automatically flush queued events when event bus reconnects
+      // Includes retry logic with exponential backoff
+      this.config.degradedModeService.onRecovery(async (eventBusAvailable: boolean) => {
+        if (eventBusAvailable) {
+          // eslint-disable-next-line no-console
+          console.log("[EventPublisher] Event bus reconnected, flushing queued events...");
+
+          // Retry with exponential backoff (max 3 retries: 0s, 1s, 4s, 9s delays)
+          const maxRetries = 3;
+          let attempt = 0;
+          let success = false;
+
+          while (!success && attempt <= maxRetries) {
+            try {
+              await this.flush();
+              success = true;
+              // eslint-disable-next-line no-console
+              console.log("[EventPublisher] Flush completed successfully on recovery");
+            } catch (error) {
+              attempt++;
+              if (attempt <= maxRetries) {
+                const delayMs = attempt * attempt * 1000; // 1s, 4s, 9s exponential backoff
+                // eslint-disable-next-line no-console
+                console.warn(
+                  `[EventPublisher] Flush attempt ${attempt} failed, retrying in ${delayMs}ms...`,
+                );
+                // eslint-disable-next-line no-await-in-loop
+                await new Promise((resolve) => setTimeout(resolve, delayMs));
+              } else {
+                // eslint-disable-next-line no-console
+                console.error(
+                  `[EventPublisher] Failed to flush events after ${maxRetries} retries:`,
+                  error,
+                );
+                // eslint-disable-next-line no-console
+                console.error(
+                  "[EventPublisher] Events remain queued and will be retried on next recovery",
+                );
+              }
+            }
+          }
+        }
+      });
     }
+
+    // Register this EventPublisher instance in the service registry for CLI access
+    registerEventPublisher(this);
   }
 
   /**
@@ -222,8 +271,11 @@ export class EventPublisherImpl implements EventPublisher {
     if (this.eventQueue.length >= maxSize) {
       // Drop oldest event
       this.eventQueue.shift();
+      this.droppedEventsCount++;
       // eslint-disable-next-line no-console
-      console.warn("[EventPublisher] Event queue full, dropped oldest event");
+      console.warn(
+        `[EventPublisher] Event queue full, dropped oldest event (total dropped: ${this.droppedEventsCount})`,
+      );
     }
 
     this.eventQueue.push(event);
@@ -290,87 +342,173 @@ export class EventPublisherImpl implements EventPublisher {
   /**
    * Flush all queued events to the EventBus
    * Prevents concurrent flush operations with isFlushing flag
+   * Has a 30-second timeout to prevent indefinite blocking (NFR-SC6)
+   * Displays progress during flush operation
    */
-  async flush(): Promise<void> {
+  async flush(timeoutMs = 30000): Promise<void> {
     // Prevent concurrent flush operations
     if (this.isFlushing) {
       return;
     }
 
     this.isFlushing = true;
-    try {
-      // First, flush internal queue
-      while (this.eventQueue.length > 0) {
-        const event = this.eventQueue.shift();
-        if (!event) break;
 
-        if (this.config.eventBus.isConnected()) {
-          try {
-            await this.config.eventBus.publish(event);
-            const storyId = event.metadata.storyId as string | undefined;
-            this.markPublished(`${event.eventType}:${storyId ?? "global"}`);
-          } catch (error) {
-            // eslint-disable-next-line no-console
-            console.error("[EventPublisher] Failed to flush queued event:", error);
-            // Re-queue and stop flushing
-            this.eventQueue.unshift(event);
-            break;
-          }
-        }
-      }
+    // Track initial state for progress reporting
+    const initialQueueSize = this.eventQueue.length;
+    let degradedModeQueueSize = 0;
+    if (this.config.degradedModeService) {
+      degradedModeQueueSize = this.config.degradedModeService.getQueuedEvents().length;
+    }
+    const totalEventsToFlush = initialQueueSize + degradedModeQueueSize;
 
-      // Then, drain events from degraded mode service if available
-      if (this.config.degradedModeService && this.config.eventBus.isConnected()) {
-        try {
-          const degradedEvents = this.config.degradedModeService.getQueuedEvents();
-          if (degradedEvents.length > 0) {
-            // eslint-disable-next-line no-console
-            console.log(
-              `[EventPublisher] Draining ${degradedEvents.length} events from degraded mode`,
-            );
+    if (totalEventsToFlush > 0) {
+      // eslint-disable-next-line no-console
+      console.log(`[EventPublisher] Starting flush: ${totalEventsToFlush} events queued`);
+    }
 
-            for (const queuedOp of degradedEvents) {
-              if (!this.config.eventBus.isConnected()) break;
+    // Create a timeout promise
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Flush timeout after ${timeoutMs}ms`));
+      }, timeoutMs);
+    });
 
-              try {
-                // Extract the actual event from QueuedOperation.data
-                const event = queuedOp.data as EventBusEvent;
-                if (event && event.eventType && event.eventId) {
-                  await this.config.eventBus.publish(event);
-                  this.config.degradedModeService.clearDrainedEvents(1);
-                } else {
-                  // Skip malformed queued operations
-                  // eslint-disable-next-line no-console
-                  console.warn(
-                    "[EventPublisher] Skipping malformed queued operation:",
-                    queuedOp.id,
-                  );
-                  this.config.degradedModeService.clearDrainedEvents(1);
-                }
-              } catch (error) {
+    // Create the flush operation promise
+    const flushOperation = async (): Promise<void> => {
+      let eventsFlushed = 0;
+
+      try {
+        // First, flush internal queue
+        while (this.eventQueue.length > 0) {
+          const event = this.eventQueue.shift();
+          if (!event) break;
+
+          if (this.config.eventBus.isConnected()) {
+            try {
+              await this.config.eventBus.publish(event);
+              const storyId = event.metadata.storyId as string | undefined;
+              this.markPublished(`${event.eventType}:${storyId ?? "global"}`);
+
+              // Display progress
+              eventsFlushed++;
+              if (totalEventsToFlush > 10) {
+                // Only show progress for larger batches to avoid noise
+                const progress = Math.round((eventsFlushed / totalEventsToFlush) * 100);
                 // eslint-disable-next-line no-console
-                console.error("[EventPublisher] Failed to flush degraded mode event:", error);
-                // Stop draining on first error
-                break;
+                console.log(
+                  `[EventPublisher] Progress: ${eventsFlushed}/${totalEventsToFlush} (${progress}%)`,
+                );
               }
+            } catch (error) {
+              // eslint-disable-next-line no-console
+              console.error("[EventPublisher] Failed to flush queued event:", error);
+              // Re-queue and stop flushing
+              this.eventQueue.unshift(event);
+              break;
             }
           }
-        } catch (error) {
-          // eslint-disable-next-line no-console
-          console.error("[EventPublisher] Failed to get degraded events:", error);
         }
+
+        // Then, drain events from degraded mode service if available
+        if (this.config.degradedModeService && this.config.eventBus.isConnected()) {
+          try {
+            const degradedEvents = this.config.degradedModeService.getQueuedEvents();
+            if (degradedEvents.length > 0) {
+              // eslint-disable-next-line no-console
+              console.log(
+                `[EventPublisher] Draining ${degradedEvents.length} events from degraded mode`,
+              );
+
+              for (const queuedOp of degradedEvents) {
+                if (!this.config.eventBus.isConnected()) break;
+
+                try {
+                  // Extract the actual event from QueuedOperation.data
+                  const event = queuedOp.data as EventBusEvent;
+                  if (event && event.eventType && event.eventId) {
+                    await this.config.eventBus.publish(event);
+                    this.config.degradedModeService.clearDrainedEvents(1);
+
+                    // Display progress
+                    eventsFlushed++;
+                    if (totalEventsToFlush > 10) {
+                      const progress = Math.round((eventsFlushed / totalEventsToFlush) * 100);
+                      // eslint-disable-next-line no-console
+                      console.log(
+                        `[EventPublisher] Progress: ${eventsFlushed}/${totalEventsToFlush} (${progress}%)`,
+                      );
+                    }
+                  } else {
+                    // Skip malformed queued operations
+                    // eslint-disable-next-line no-console
+                    console.warn(
+                      "[EventPublisher] Skipping malformed queued operation:",
+                      queuedOp.id,
+                    );
+                    this.config.degradedModeService.clearDrainedEvents(1);
+                  }
+                } catch (error) {
+                  // eslint-disable-next-line no-console
+                  console.error("[EventPublisher] Failed to flush degraded mode event:", error);
+                  // Stop draining on first error
+                  break;
+                }
+              }
+            }
+          } catch (error) {
+            // eslint-disable-next-line no-console
+            console.error("[EventPublisher] Failed to get degraded events:", error);
+          }
+        }
+
+        // Report final status
+        if (eventsFlushed > 0) {
+          const remaining = this.getQueueSize();
+          // eslint-disable-next-line no-console
+          console.log(
+            `[EventPublisher] Flush complete: ${eventsFlushed} flushed, ${remaining} remain queued`,
+          );
+        }
+      } finally {
+        this.isFlushing = false;
       }
-    } finally {
+    };
+
+    try {
+      // Race between flush operation and timeout
+      await Promise.race([flushOperation(), timeoutPromise]);
+    } catch (error) {
+      // Log partial state on timeout/error
+      const remaining = this.getQueueSize();
+      // eslint-disable-next-line no-console
+      console.error(
+        `[EventPublisher] Flush error: ${error}. Events flushed so far: ${totalEventsToFlush - remaining}, remaining: ${remaining}`,
+      );
+      // Ensure isFlushing is reset on error
       this.isFlushing = false;
+      throw error; // Re-throw to allow caller to handle
     }
   }
 
   /**
    * Get the current number of queued events waiting to be flushed
+   * Includes both internal queue and degraded mode service queue
    * @returns Number of events in the queue
    */
   getQueueSize(): number {
-    return this.eventQueue.length;
+    const internalQueueSize = this.eventQueue.length;
+    const degradedModeQueueSize = this.config.degradedModeService
+      ? this.config.degradedModeService.getQueuedEvents().length
+      : 0;
+    return internalQueueSize + degradedModeQueueSize;
+  }
+
+  /**
+   * Get the number of events that have been dropped due to full queue
+   * @returns Number of dropped events
+   */
+  getDroppedEventsCount(): number {
+    return this.droppedEventsCount;
   }
 
   /**

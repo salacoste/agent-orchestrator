@@ -1459,10 +1459,13 @@ export interface EventPublisher {
   publishAgentResumed(params: AgentResumedEvent): Promise<void>;
 
   /** Flush queued events */
-  flush(): Promise<void>;
+  flush(timeoutMs?: number): Promise<void>;
 
   /** Get queue size */
   getQueueSize(): number;
+
+  /** Get number of events dropped due to full queue */
+  getDroppedEventsCount(): number;
 
   /** Close publisher and cleanup resources */
   close(): Promise<void>;
@@ -1745,10 +1748,19 @@ export interface BatchResult {
   failed: Array<{ storyId: string; error: string }>;
 }
 
+/** Result of metadata verification */
+export interface VerifyResult {
+  valid: boolean;
+  error?: string;
+  recovered?: boolean;
+}
+
 /** State manager configuration */
 export interface StateManagerConfig {
   yamlPath: string; // Path to sprint-status.yaml
   eventBus?: EventBus; // Optional: for publishing events
+  createBackup?: boolean; // Create backup before writes (default: false)
+  backupPath?: string; // Custom backup path (default: yamlPath + .backup)
 }
 
 /** State manager service interface */
@@ -1783,6 +1795,9 @@ export interface StateManager {
 
   // Close state manager
   close(): Promise<void>;
+
+  // Verify metadata integrity
+  verify(): Promise<VerifyResult>;
 }
 
 // =============================================================================

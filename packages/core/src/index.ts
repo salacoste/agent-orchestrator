@@ -200,7 +200,17 @@ export type {
   ServiceAvailability,
   ServiceHealthCheck,
   QueuedOperation,
+  RecoveryCallback,
 } from "./degraded-mode.js";
+
+// Service Registry — global service instance access
+export {
+  registerDegradedModeService,
+  registerEventPublisher,
+  getDegradedModeService,
+  getEventPublisher,
+  clearServiceRegistry,
+} from "./service-registry.js";
 
 // Dead Letter Queue — persistent storage for failed operations
 export { createDeadLetterQueue } from "./dead-letter-queue.js";

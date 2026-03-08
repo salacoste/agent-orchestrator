@@ -28,6 +28,8 @@ describe("StateManager Corruption Detection", () => {
     const initialYaml = `generated: 2026-03-07
 project: test-project
 project_key: TEST
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
 
 development_status:
   epic-1: in-progress
@@ -102,9 +104,28 @@ development_status:
       expect(content).toContain("development_status:");
     });
 
+    it("should detect whitespace-only file as corruption and rebuild", async () => {
+      await writeFile(yamlPath, "   \n\n  \t  \n   ", "utf-8");
+
+      const manager = createStateManager({
+        yamlPath,
+      });
+
+      // Should rebuild with default template
+      await expect(manager.initialize()).resolves.not.toThrow();
+
+      // File should now exist with valid content
+      const content = await readFile(yamlPath, "utf-8");
+      expect(content).toContain("generated:");
+      expect(content).toContain("development_status:");
+    });
+
     it("should handle truncated but valid YAML", async () => {
       const truncatedYaml = `generated: 2026-03-07
 project: test-project
+project_key: TEST
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
 development_status:
   epic-1: in-progress
 `;

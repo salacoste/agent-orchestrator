@@ -80,8 +80,16 @@ export class StateManagerImpl implements StateManager {
       try {
         content = await readFile(this.config.yamlPath, "utf-8");
       } catch (error) {
-        // File doesn't exist - create default
+        // File doesn't exist - create default with data loss warning
         if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          // eslint-disable-next-line no-console
+          console.error(
+            `⚠️  DATA LOSS: No existing metadata file found at ${this.config.yamlPath}`,
+          );
+          // eslint-disable-next-line no-console
+          console.warn(
+            `Creating new file with default template - previous data will be LOST if it existed`,
+          );
           content = DEFAULT_YAML_TEMPLATE.replace(
             "{timestamp}",
             new Date().toISOString().split("T")[0],
@@ -112,12 +120,21 @@ export class StateManagerImpl implements StateManager {
         // Try backup recovery
         try {
           const backupContent = await readFile(this.backupPath, "utf-8");
-          yaml = parse(backupContent) as Record<string, unknown>;
+
+          // Validate backup content before using it
+          const backupYaml = parse(backupContent);
+          if (!backupYaml || typeof backupYaml !== "object") {
+            const error = new Error("Backup YAML is invalid or corrupted");
+            error.cause = backupYaml;
+            throw error;
+          }
+
+          yaml = backupYaml as Record<string, unknown>;
 
           // Restore the corrupted file from backup
           await writeFile(this.config.yamlPath, backupContent, "utf-8");
           // eslint-disable-next-line no-console
-          console.log(`Recovered from backup: ${this.backupPath}`);
+          console.log(`✓ Recovered from backup: ${this.backupPath}`);
         } catch {
           // Backup also failed or doesn't exist - rebuild with default
           // eslint-disable-next-line no-console
@@ -397,12 +414,21 @@ export class StateManagerImpl implements StateManager {
         };
       }
 
-      // Check for expected structure - sprint-status.yaml should have development_status
-      if (!yaml.development_status) {
-        return {
-          valid: false,
-          error: "YAML missing required field: development_status",
-        };
+      // Check for expected structure - sprint-status.yaml should have required fields
+      const requiredFields = [
+        "development_status",
+        "project",
+        "project_key",
+        "tracking_system",
+        "story_location",
+      ];
+      for (const field of requiredFields) {
+        if (!yaml[field]) {
+          return {
+            valid: false,
+            error: `YAML missing required field: ${field}`,
+          };
+        }
       }
 
       const developmentStatus = yaml.development_status;
@@ -439,8 +465,14 @@ export class StateManagerImpl implements StateManager {
     if (this.createBackup) {
       try {
         await copyFile(this.config.yamlPath, this.backupPath);
-      } catch {
-        // Ignore backup errors - file might not exist yet
+      } catch (error) {
+        // Warn if backup fails for reasons other than file not existing
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `⚠️  Backup creation failed: ${(error as Error).message}. Continuing without backup.`,
+          );
+        }
       }
     }
 

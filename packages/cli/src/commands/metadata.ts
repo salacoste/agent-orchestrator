@@ -26,9 +26,7 @@ export function registerMetadata(program: Command): void {
 
       const stateManager = createStateManager({
         yamlPath,
-      }) as StateManager & {
-        verify(): Promise<{ valid: boolean; error?: string; recovered?: boolean }>;
-      };
+      }) as StateManager;
 
       try {
         const result = await stateManager.verify();

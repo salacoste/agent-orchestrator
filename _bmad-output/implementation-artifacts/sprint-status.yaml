@@ -84,7 +84,7 @@ development_status:
   4-4-graceful-degradation-mode: done
   4-5-dead-letter-queue: done
   4-6-event-bus-backlog-recovery: done
-  4-7-metadata-corruption-detection-and-recovery: review
+  4-7-metadata-corruption-detection-and-recovery: done
   4-8-health-check-configuration: ready-for-dev
   epic-4-retrospective: optional
 

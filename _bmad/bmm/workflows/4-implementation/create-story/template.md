@@ -21,6 +21,22 @@ so that {{benefit}}.
 - [ ] Task 2 (AC: #)
   - [ ] Subtask 2.1
 
+## Interface Validation
+
+- [ ] Validate all interface methods used in this story
+- [ ] Document any missing capabilities as feature flags
+- [ ] Update sprint-status.yaml with discovered limitations
+
+**Methods Used:**
+- [ ] List each interface method this story will use
+- [ ] Verify each method exists in packages/core/src/types.ts
+
+**Feature Flags:**
+- [ ] List any feature flags for missing capabilities
+- [ ] Use pattern from packages/core/INTERFACE_VALIDATION_CHECKLIST.md
+
+**Reference:** See `packages/core/INTERFACE_VALIDATION_CHECKLIST.md` for complete interface validation guide.
+
 ## Dev Notes
 
 - Relevant architecture patterns and constraints

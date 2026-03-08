@@ -187,6 +187,61 @@
     </check>
   </step>
 
+  <step n="3.5" goal="Validate interface dependencies" optional="true">
+    <critical>Prevent phantom method assumptions before implementation</critical>
+
+    <check if="story file has 'Interface Validation' section">
+      <action>Read Interface Validation section from story file</action>
+      <action>For each method listed in 'Methods Used' subsection:</action>
+      <action>Verify method exists in packages/core/src/types.ts by reading the interface definition</action>
+      <action>Check if method is required or optional (marked with ?)</action>
+      <action>For optional methods or missing methods, note the feature flag pattern</action>
+
+      <check if="any required method is missing">
+        <output>⚠️ **Missing Required Interface Method Detected**
+
+          The following methods are marked as used but don't exist in the interface:
+          {{missing_methods}}
+
+          **Action Required:** Before implementing, either:
+          1. Verify the method exists (check types.ts again)
+          2. Mark as optional in Interface Validation section
+          3. Add feature flag documentation
+        </output>
+        <ask>How would you like to proceed?
+          1. Re-verify interface definitions
+          2. Update Interface Validation section with feature flags
+          3. Continue anyway (may result in runtime errors)
+        Choice:</ask>
+
+        <check if="user chooses '1'">
+          <action>Review packages/core/src/types.ts and verify methods exist</action>
+        </check>
+
+        <check if="user chooses '2'">
+          <action>Add feature flag documentation to Interface Validation section</action>
+          <action>Use pattern from packages/core/INTERFACE_VALIDATION_CHECKLIST.md</action>
+        </check>
+
+        <check if="user chooses '3'">
+          <output>⚠️ Proceeding with missing required methods may cause runtime errors</output>
+        </check>
+      </check>
+
+      <output>✅ **Interface Validation Complete**
+        All methods verified or documented with feature flags
+        Reference: packages/core/INTERFACE_VALIDATION_CHECKLIST.md
+      </output>
+    </check>
+
+    <check if="story file does NOT have 'Interface Validation' section">
+      <output>ℹ️ No Interface Validation section found in story
+        Consider adding interface validation to prevent phantom method assumptions
+        Reference: packages/core/INTERFACE_VALIDATION_CHECKLIST.md
+      </output>
+    </check>
+  </step>
+
   <step n="4" goal="Mark story in-progress" tag="sprint-status">
     <check if="{{sprint_status}} file exists">
       <action>Load the FULL file: {{sprint_status}}</action>

@@ -22,6 +22,16 @@ export {
 // Plugin registry
 export { createPluginRegistry } from "./plugin-registry.js";
 
+// Plugin loader — discovers, validates, and manages plugins from YAML manifests
+export { createPluginLoader, PermissionError } from "./plugin-loader.js";
+export type {
+  PluginPermission,
+  PluginManifestWithMeta,
+  PluginLoadResult,
+  PluginLoaderOptions,
+  PluginLoader,
+} from "./plugin-loader.js";
+
 // Metadata — flat-file session metadata read/write
 export {
   readMetadata,
@@ -96,6 +106,10 @@ export type {
 // State Manager — write-through cache for sprint status
 export { createStateManager } from "./state-manager.js";
 export type { StateManager, StoryState, SetResult, BatchResult } from "./types.js";
+
+// File Watcher — watch files for external changes and trigger cache invalidation
+export { createFileWatcher } from "./file-watcher.js";
+export type { FileWatcher, FileWatcherConfig } from "./types.js";
 
 // Conflict Resolver — detect and resolve version conflicts
 export { createConflictResolver } from "./conflict-resolver.js";
@@ -271,6 +285,39 @@ export {
   validateAndStoreOrigin,
 } from "./paths.js";
 
+// Health Check — system component health monitoring
+export { createHealthCheckService } from "./health-check.js";
+export type {
+  HealthCheckService,
+  HealthCheckConfig,
+  HealthCheckResult,
+  HealthCheckThresholds,
+  ComponentHealth,
+  HealthStatus,
+} from "./health-check.js";
+
+// Conflict Detection — detect and manage agent assignment conflicts
+export { createConflictDetectionService } from "./conflict-detection.js";
+export type {
+  ConflictDetectionService,
+  AgentConflictEvent,
+  AgentConflict,
+  AgentConflictType,
+  AgentConflictSeverity,
+  AgentConflictResolution,
+  PriorityScores,
+} from "./types.js";
+
+// Conflict Resolution — resolve agent assignment conflicts
+export { createConflictResolutionService } from "./conflict-resolution.js";
+export type {
+  ConflictResolutionService,
+  ConflictResolutionConfig,
+  ResolutionResult,
+  ResolutionStrategy,
+  TieBreaker,
+} from "./types.js";
+
 // Config generator — auto-generate config from repo URL
 export {
   isRepoUrl,
@@ -290,3 +337,77 @@ export type {
   DetectedProjectInfo,
   GenerateConfigOptions,
 } from "./config-generator.js";
+
+// Trigger Condition Evaluator — evaluate plugin triggers
+export { createTriggerConditionEvaluator } from "./trigger-condition-evaluator.js";
+export type {
+  TriggerDefinition,
+  TriggerEvaluator,
+  TriggerResult,
+  TriggerStats,
+  TriggerCondition,
+  SimpleCondition,
+  StoryCondition,
+  StringOperator,
+  NumberOperator,
+  TagOperator,
+  EventCondition,
+  TimeCondition,
+  AndCondition,
+  OrCondition,
+  NotCondition,
+  ActionHandler,
+  StoryAttributes,
+  EventAttributes,
+} from "./trigger-condition-evaluator.js";
+
+// Workflow Engine — execute workflows defined in plugins
+export { createWorkflowEngine } from "./workflow-engine.js";
+export type {
+  ActionHandler as WorkflowActionHandler,
+  WorkflowContext,
+  WorkflowStep,
+  ConditionalExpression,
+  TriggerDefinition as WorkflowTriggerDefinition,
+  WorkflowDefinition,
+  WorkflowStatus,
+  WorkflowHistoryEntry,
+  WorkflowExecutionResult,
+  WorkflowEngine,
+} from "./workflow-engine.js";
+
+// Plugin Installer — install, update, uninstall plugins
+export { createPluginInstaller, CURRENT_API_VERSION } from "./plugin-installer.js";
+export type {
+  PluginStatus,
+  InstalledPlugin,
+  PluginInstallResult,
+  PluginSearchResult,
+  PluginInstaller,
+} from "./plugin-installer.js";
+
+// NPM Plugin Registry — discover and publish plugins
+export { createNpmPluginRegistry } from "./plugin-npm-registry.js";
+export type {
+  NpmPluginMetadata,
+  NpmPluginDetails,
+  NpmPublishResult,
+  NpmValidationResult,
+  NpmPluginRegistry,
+} from "./plugin-npm-registry.js";
+
+// Interface Validation — validate interface methods and create feature flags
+export {
+  validateInterfaceMethod,
+  validateMethodSignature,
+  createFeatureFlagCheck,
+  generateFeatureFlagDocumentation,
+  hasInterfaceMethod,
+} from "./interface-validation.js";
+export type {
+  InterfaceValidationResult,
+  MethodSignature,
+  SignatureValidationResult,
+  FeatureFlagConfig,
+  FeatureFlagCheck,
+} from "./interface-validation.js";

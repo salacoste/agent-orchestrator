@@ -29,6 +29,8 @@
     "dev": "tsx src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration:watch": "vitest --config vitest.integration.config.ts",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
@@ -52,6 +54,7 @@
     "@composio/ao-plugin-tracker-linear": "workspace:*",
     "@composio/ao-plugin-workspace-clone": "workspace:*",
     "@composio/ao-plugin-workspace-worktree": "workspace:*",
+    "@inquirer/prompts": "^5.5.0",
     "chalk": "^5.4.0",
     "cli-table3": "^0.6.5",
     "commander": "^13.0.0",

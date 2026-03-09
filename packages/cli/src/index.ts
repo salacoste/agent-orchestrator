@@ -2,6 +2,7 @@
 
 import { Command } from "commander";
 import { registerInit } from "./commands/init.js";
+import { registerStatus } from "./commands/status.js";
 import { registerStoryStatus } from "./commands/story-status.js";
 import { registerSpawn, registerBatchSpawn } from "./commands/spawn.js";
 import { registerSession } from "./commands/session.js";
@@ -46,12 +47,17 @@ import { registerDeps } from "./commands/deps.js";
 import { registerGoals } from "./commands/goals.js";
 import { registerSprintPlan } from "./commands/sprint-plan.js";
 import { registerResolveConflicts } from "./commands/resolve-conflicts.js";
+import { registerResolve } from "./commands/resolve.js";
+import { registerConflicts } from "./commands/conflicts.js";
 import { registerSync } from "./commands/sync.js";
 import { registerErrors } from "./commands/errors.js";
 import { registerRetry } from "./commands/retry.js";
 import { registerDLQ } from "./commands/dlq.js";
 import { registerEvents } from "./commands/events.js";
 import { registerMetadata } from "./commands/metadata.js";
+import { registerPlugins } from "./commands/plugins.js";
+import { registerTriggers } from "./commands/triggers.js";
+import { registerWorkflows } from "./commands/workflows.js";
 
 const program = new Command();
 
@@ -63,6 +69,7 @@ program
 registerInit(program);
 registerStart(program);
 registerStop(program);
+registerStatus(program);
 registerStoryStatus(program);
 registerSpawn(program);
 registerBatchSpawn(program);
@@ -103,11 +110,12 @@ registerWorkload(program);
 registerRework(program);
 registerMonteCarlo(program);
 registerNotify(program);
-registerNotifications(program);
 registerDeps(program);
 registerGoals(program);
 registerSprintPlan(program);
 registerResolveConflicts(program);
+registerResolve(program);
+registerConflicts(program);
 registerSync(program);
 
 registerErrors(program);
@@ -115,5 +123,8 @@ registerRetry(program);
 registerDLQ(program);
 registerEvents(program);
 registerMetadata(program);
+registerPlugins(program);
+registerTriggers(program);
+registerWorkflows(program);
 
 program.parse();

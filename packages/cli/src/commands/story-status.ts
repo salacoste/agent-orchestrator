@@ -380,7 +380,7 @@ function filterAndSortStories(
 
 export function registerStoryStatus(program: Command): void {
   program
-    .command("status [storyId]")
+    .command("story-status [storyId]")
     .description("View story and agent status")
     .option("--agent <id>", "Show status for specific agent")
     .option("--format <format>", "Output format (table, json)", "table")
@@ -411,10 +411,9 @@ export function registerStoryStatus(program: Command): void {
         process.exit(1);
       }
 
-
       // Find the current project by checking which project path contains cwd
       let projectPath: string | null = null;
-      for (const [id, project] of Object.entries(config.projects)) {
+      for (const [_id, project] of Object.entries(config.projects)) {
         if (cwd.startsWith(project.path) || cwd === project.path) {
           projectPath = project.path;
           break;

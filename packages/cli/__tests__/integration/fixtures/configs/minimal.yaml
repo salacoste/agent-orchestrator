@@ -1,0 +1,25 @@
+# Minimal test configuration for CLI integration tests
+# This is the minimal valid agent-orchestrator.yaml for testing
+
+configPath: /tmp/test/agent-orchestrator.yaml
+port: 3000
+readyThresholdMs: 300000
+
+defaults:
+  runtime: tmux
+  agent: claude-code
+  workspace: worktree
+  notifiers:
+    - desktop
+
+projects:
+  test-project:
+    name: Test Project
+    repo: test/repo
+    path: /tmp/test
+    defaultBranch: main
+    sessionPrefix: test
+
+notifiers: {}
+notificationRouting: {}
+reactions: {}

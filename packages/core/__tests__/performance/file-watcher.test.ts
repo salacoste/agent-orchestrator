@@ -54,6 +54,9 @@ function createMockEventBus(): EventBus {
     publish: vi.fn().mockResolvedValue(undefined),
     subscribe: vi.fn().mockResolvedValue(() => {}),
     close: vi.fn().mockResolvedValue(undefined),
+    isConnected: () => true,
+    isDegraded: () => false,
+    getQueueSize: () => 0,
   };
 }
 

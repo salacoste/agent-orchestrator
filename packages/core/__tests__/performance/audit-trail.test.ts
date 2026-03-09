@@ -5,8 +5,8 @@
  * Tests JSONL append operations meet performance requirements
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -39,6 +39,9 @@ describe("Audit Trail Performance (Story 2-4)", () => {
         publish: async (_event: EventBusEvent) => {},
         subscribe: async () => () => {},
         close: async () => {},
+        isConnected: () => true,
+        isDegraded: () => false,
+        getQueueSize: () => 0,
       };
 
       const auditTrail = await createAuditTrail({
@@ -81,6 +84,9 @@ describe("Audit Trail Performance (Story 2-4)", () => {
         publish: async (_event: EventBusEvent) => {},
         subscribe: async () => () => {},
         close: async () => {},
+        isConnected: () => true,
+        isDegraded: () => false,
+        getQueueSize: () => 0,
       };
 
       const burstLogPath = join(tempDir, "audit-burst.jsonl");
@@ -131,6 +137,9 @@ describe("Audit Trail Performance (Story 2-4)", () => {
         publish: async (_event: EventBusEvent) => {},
         subscribe: async () => () => {},
         close: async () => {},
+        isConnected: () => true,
+        isDegraded: () => false,
+        getQueueSize: () => 0,
       };
 
       const largeLogPath = join(tempDir, "audit-large.jsonl");
@@ -182,6 +191,9 @@ describe("Audit Trail Performance (Story 2-4)", () => {
         publish: async (_event: EventBusEvent) => {},
         subscribe: async () => () => {},
         close: async () => {},
+        isConnected: () => true,
+        isDegraded: () => false,
+        getQueueSize: () => 0,
       };
 
       const baselineLogPath = join(tempDir, "audit-baseline.jsonl");

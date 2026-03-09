@@ -1,6 +1,6 @@
 # Story 2.1.6: Performance Test Suite
 
-Status: review
+Status: done
 
 ## Story
 

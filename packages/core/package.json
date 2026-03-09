@@ -36,6 +36,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration:watch": "vitest --config vitest.integration.config.ts",
+    "test:performance": "vitest run --config vitest.performance.config.ts",
+    "test:performance:watch": "vitest --config vitest.performance.config.ts",
     "clean": "rm -rf dist"
   },
   "dependencies": {

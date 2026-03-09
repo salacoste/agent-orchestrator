@@ -1761,6 +1761,8 @@ export interface StateManagerConfig {
   eventBus?: EventBus; // Optional: for publishing events
   createBackup?: boolean; // Create backup before writes (default: false)
   backupPath?: string; // Custom backup path (default: yamlPath + .backup)
+  lockRetries?: number; // File lock retry attempts (default: 10)
+  lockStaleMs?: number; // Stale lock age in ms (default: 10000)
 }
 
 /** State manager service interface */
@@ -2058,4 +2060,290 @@ export interface SyncService {
    * Close sync service and cleanup resources
    */
   close(): Promise<void>;
+}
+
+// =============================================================================
+// HEALTH CHECK
+// =============================================================================
+
+/**
+ * Health status for individual components
+ */
+export type HealthStatus = "healthy" | "degraded" | "unhealthy";
+
+/**
+ * Individual component health check result
+ */
+export interface ComponentHealth {
+  component: string;
+  status: HealthStatus;
+  latencyMs?: number;
+  message: string;
+  details?: string[];
+  timestamp: Date;
+}
+
+/**
+ * Overall system health check result
+ */
+export interface HealthCheckResult {
+  overall: HealthStatus;
+  components: ComponentHealth[];
+  timestamp: Date;
+  exitCode: number;
+}
+
+/**
+ * Health check thresholds for configurable limits
+ */
+export interface HealthCheckThresholds {
+  maxLatencyMs?: number;
+  maxQueueDepth?: number;
+}
+
+/**
+ * Health check configuration
+ */
+export interface HealthCheckConfig {
+  eventBus?: EventBus;
+  stateManager?: StateManager;
+  bmadTracker?: BMADTracker;
+  agentRegistry?: AgentRegistry;
+  thresholds?: HealthCheckThresholds;
+  checkIntervalMs?: number;
+}
+
+/**
+ * Health check service interface
+ */
+export interface HealthCheckService {
+  /**
+   * Run all health checks
+   * @returns Health check result for all components
+   */
+  check(): Promise<HealthCheckResult>;
+
+  /**
+   * Run health check for a specific component
+   * @param component - Component name to check
+   * @returns Component health result
+   */
+  checkComponent(component: string): Promise<ComponentHealth>;
+
+  /**
+   * Get current health status
+   * @returns Current health check result
+   */
+  getStatus(): HealthCheckResult;
+
+  /**
+   * Start periodic health checks
+   */
+  start(): Promise<void>;
+
+  /**
+   * Stop health checks and cleanup
+   */
+  stop(): Promise<void>;
+
+  /**
+   * Close health check service
+   */
+  close(): Promise<void>;
+}
+
+// =============================================================================
+// AGENT CONFLICT DETECTION
+// =============================================================================
+
+/**
+ * Agent conflict type classification
+ */
+export type AgentConflictType = "duplicate-assignment" | "concurrent-spawn" | "context-mismatch";
+
+/**
+ * Agent conflict severity based on impact
+ */
+export type AgentConflictSeverity = "critical" | "high" | "medium" | "low";
+
+/**
+ * Agent conflict event published when agent conflicts are detected
+ */
+export interface AgentConflictEvent {
+  conflictId: string;
+  storyId: string;
+  existingAgent: string;
+  conflictingAgent: string;
+  type: AgentConflictType;
+  detectedAt: Date;
+  priorityScores: PriorityScores;
+  resolution?: AgentConflictResolution;
+}
+
+/**
+ * Priority scores for agent conflict resolution
+ */
+export interface PriorityScores {
+  [agentId: string]: number;
+}
+
+/**
+ * Agent conflict resolution information
+ */
+export interface AgentConflictResolution {
+  resolution: "keep-existing" | "replace-with-new" | "manual";
+  resolvedAt?: Date;
+  resolvedBy?: string;
+}
+
+/**
+ * Agent conflict with calculated severity and recommendations
+ */
+export interface AgentConflict {
+  conflictId: string;
+  storyId: string;
+  existingAgent: string;
+  conflictingAgent: string;
+  type: AgentConflictType;
+  detectedAt: Date;
+  severity: AgentConflictSeverity;
+  priorityScores: PriorityScores;
+  resolution?: AgentConflictResolution;
+  recommendations: string[];
+}
+
+/**
+ * Agent conflict detection service interface
+ */
+export interface ConflictDetectionService {
+  /**
+   * Check if a story can be assigned to an agent without conflict
+   * @param storyId - Story to check
+   * @param agentId - Agent requesting assignment
+   @returns true if no conflict, false otherwise
+   */
+  canAssign(storyId: string, agentId: string): boolean;
+
+  /**
+   * Detect conflicts for a potential story assignment
+   * @param storyId - Story to check
+   * @param agentId - Agent requesting assignment
+   @returns Agent conflict event if conflict detected, null otherwise
+   */
+  detectConflict(storyId: string, agentId: string): AgentConflictEvent | null;
+
+  /**
+   * Record a conflict event
+   * @param conflict - Conflict event to record
+   */
+  recordConflict(conflict: AgentConflictEvent): void;
+
+  /**
+   * Get all active conflicts
+   @returns Array of active conflicts
+   */
+  getConflicts(): AgentConflict[];
+
+  /**
+   * Get conflicts for a specific story
+   * @param storyId - Story to check
+   @returns Conflicts for the story
+   */
+  getConflictsByStory(storyId: string): AgentConflict[];
+
+  /**
+   * Resolve a conflict
+   * @param conflictId - Conflict ID to resolve
+   @param resolution - Resolution action
+   */
+  resolveConflict(conflictId: string, resolution: AgentConflictResolution["resolution"]): void;
+
+  /**
+   * Calculate priority score for conflict resolution
+   * @param conflict - Conflict to score
+   @returns Priority scores for each agent
+   */
+  calculatePriorityScores(conflict: AgentConflictEvent): PriorityScores;
+
+  /**
+   * Attempt auto-resolution if enabled
+   * @param conflict - Conflict to auto-resolve
+   @returns true if auto-resolved, false otherwise
+   */
+  attemptAutoResolution(conflict: AgentConflictEvent): boolean;
+}
+
+/**
+ * Conflict detection configuration
+ */
+export interface ConflictDetectionConfig {
+  enabled: boolean;
+  autoResolve?: {
+    enabled: boolean;
+    threshold?: number; // Priority difference threshold for auto-resolution
+  };
+}
+
+// =============================================================================
+// CONFLICT RESOLUTION
+// =============================================================================
+
+/**
+ * Tie-breaking strategies for equal priority conflicts
+ */
+export type TieBreaker = "recent" | "progress";
+
+/**
+ * Resolution strategy configuration
+ */
+export interface ResolutionStrategy {
+  autoResolve: boolean;
+  tieBreaker: TieBreaker;
+  notifyOnResolution?: boolean;
+}
+
+/**
+ * Resolution result from conflict resolution
+ */
+export interface ResolutionResult {
+  conflictId: string;
+  action: "keep_existing" | "keep_new" | "terminate_both" | "manual";
+  keptAgent: string | null;
+  terminatedAgent: string | null;
+  reason: string;
+  resolvedAt: Date;
+}
+
+/**
+ * Conflict resolution service configuration
+ */
+export interface ConflictResolutionConfig extends ResolutionStrategy {
+  eventPublisher?: {
+    publish(event: unknown): Promise<void>;
+  };
+}
+
+/**
+ * Conflict resolution service interface
+ * Resolves agent assignment conflicts using priority-based rules
+ */
+export interface ConflictResolutionService {
+  /**
+   * Resolve a conflict using configured strategy
+   * @param conflict - Conflict to resolve
+   * @returns Resolution result with action taken
+   */
+  resolve(conflict: AgentConflict): Promise<ResolutionResult>;
+
+  /**
+   * Check if auto-resolution is enabled
+   * @returns true if auto-resolve is enabled
+   */
+  canAutoResolve(): boolean;
+
+  /**
+   * Get the current resolution strategy
+   * @returns Resolution strategy configuration
+   */
+  getResolutionStrategy(): ResolutionStrategy;
 }

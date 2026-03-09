@@ -18,6 +18,7 @@ import { readFile, writeFile, rename, unlink, copyFile, mkdir } from "node:fs/pr
 import { parse, stringify } from "yaml";
 import { randomBytes } from "node:crypto";
 import { dirname } from "node:path";
+import { getFileLock, type FileLockOptions } from "./utils/file-lock.js";
 
 /** Default maximum time for cache reload (ms) */
 const DEFAULT_CACHE_RELOAD_THRESHOLD_MS = 100;
@@ -48,7 +49,12 @@ export class StateManagerImpl implements StateManager {
     this.config = config;
     this.backupPath = config.backupPath || `${config.yamlPath}.backup`;
     this.createBackup = config.createBackup ?? false;
+    this.lockRetries = config.lockRetries ?? 10;
+    this.lockStaleMs = config.lockStaleMs ?? 10000;
   }
+
+  private lockRetries: number;
+  private lockStaleMs: number;
 
   /**
    * Initialize state manager by loading YAML into cache
@@ -452,13 +458,30 @@ export class StateManagerImpl implements StateManager {
   }
 
   /**
-   * Write story state to YAML file
-   * Note: This implementation has known limitations:
-   * - No file locking for concurrent writes from multiple processes
-   * - Last writer wins - earlier concurrent writes may be lost
-   * - For multi-process scenarios, consider using file locks or a mutex service
+   * Write story state to YAML file with file locking
+   * Uses advisory file locking to prevent concurrent writes from multiple processes.
    */
   private async writeToYaml(storyId: string, state: StoryState): Promise<void> {
+    const fileLock = getFileLock();
+    const lockOptions: FileLockOptions = {
+      retries: this.config.lockRetries ?? 10,
+      stale: this.config.lockStaleMs ?? 10000,
+    };
+
+    // Execute write with lock held
+    await fileLock.withLock(
+      this.config.yamlPath,
+      async () => {
+        await this.writeToYamlInternal(storyId, state);
+      },
+      lockOptions,
+    );
+  }
+
+  /**
+   * Internal write implementation (called with lock held)
+   */
+  private async writeToYamlInternal(storyId: string, state: StoryState): Promise<void> {
     const tmpPath = this.config.yamlPath + ".tmp";
 
     // Create backup before writing if enabled

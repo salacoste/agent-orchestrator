@@ -72,7 +72,7 @@ development_status:
   2-1-4-cli-test-infrastructure: done
   2-1-5-persistent-dead-letter-queue: done
   2-1-6-performance-test-suite: done
-  2-1-7-file-locking-mechanism: ready-for-dev
+  2-1-7-file-locking-mechanism: done
   2-1-8-dependency-security-review: ready-for-dev
   2-1-9-enhanced-sync-strategies: ready-for-dev
 

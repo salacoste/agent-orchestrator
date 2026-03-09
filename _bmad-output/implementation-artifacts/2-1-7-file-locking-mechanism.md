@@ -1,6 +1,6 @@
 # Story 2.1.7: File Locking Mechanism
 
-Status: in-progress
+Status: done
 
 ## Story
 
@@ -300,6 +300,12 @@ None required — implementation completed successfully.
 4. **Configuration**: Added `lockRetries` and `lockStaleMs` to StateManagerConfig
 5. **Tests**: Created comprehensive test suite with 22 tests (21 passed, 1 skipped)
 6. **Dependencies**: Added proper-lockfile@^4.1.2 and @types/proper-lockfile@^4.1.4
+7. **Code Review Fixes**:
+   - Fixed story status to "done" (was incorrectly "in-progress")
+   - Removed unused `LockResult` interface (dead code)
+   - Added warning logging to `isLocked()` instead of silent error swallowing
+   - Added ENOENT test for isLocked() behavior
+   - Created docs/file-locking.md with full documentation
 
 ### File List
 
@@ -311,3 +317,5 @@ None required — implementation completed successfully.
 - `packages/core/src/__tests__/conflict-resolution.test.ts` - Fixed TypeScript errors
 - `packages/core/src/__tests__/trigger-condition.test.ts` - Fixed TypeScript errors
 - `packages/core/package.json` - Added proper-lockfile dependency
+- `docs/file-locking.md` - Documentation for file locking behavior, limitations, and troubleshooting
+- `docs/file-locking.md` - Documentation for file locking behavior

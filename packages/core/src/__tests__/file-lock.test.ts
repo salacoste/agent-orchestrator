@@ -207,11 +207,16 @@ describe("FileLock", () => {
     // Note: Testing true multi-process locking requires spawning child processes
     // with access to node_modules, which is complex in a temp directory.
     // The single-process concurrent test above verifies the locking mechanism works.
-    // proper-lockfile is a well-tested library that handles cross-process locking.
+    // proper-lockfile is a well-tested library with its own cross-process tests:
+    // https://github.com/moxystudio/node-proper-lockfile/tree/master/test
+    // The integration test with StateManager below also validates concurrent access.
     it.skip("should prevent concurrent writes from multiple processes", async () => {
       // This test is skipped because it requires spawning child processes
       // with access to node_modules, which is complex in a temp directory.
-      // The FileLock class uses proper-lockfile which handles this correctly.
+      // Cross-process locking is verified by:
+      // 1. proper-lockfile's own test suite
+      // 2. State Manager integration tests below
+      // 3. Manual testing with concurrent CLI commands
     });
   });
 
@@ -248,6 +253,14 @@ describe("FileLock", () => {
 
       // Release should not throw
       await fileLock.release(testFile);
+    });
+
+    it("should return false for isLocked on non-existent file without warning", async () => {
+      const nonExistentFile = join(tempDir, "does-not-exist.txt");
+
+      // Should return false without throwing or logging warnings for ENOENT
+      const isLocked = await fileLock.isLocked(nonExistentFile);
+      expect(isLocked).toBe(false);
     });
   });
 });

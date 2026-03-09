@@ -22,16 +22,6 @@ export interface FileLockOptions {
 }
 
 /**
- * Result of a lock acquisition attempt
- */
-export interface LockResult {
-  /** Whether the lock was acquired successfully */
-  success: boolean;
-  /** Error message if lock failed */
-  error?: string;
-}
-
-/**
  * File Lock wrapper for proper-lockfile
  *
  * Provides advisory file locking to prevent concurrent writes.
@@ -126,7 +116,15 @@ export class FileLock {
   async isLocked(filePath: string): Promise<boolean> {
     try {
       return await lockfile.check(filePath);
-    } catch {
+    } catch (error) {
+      // Log warning for unexpected errors (permissions, etc.)
+      // but don't throw - isLocked is typically used for checking state
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        // eslint-disable-next-line no-console
+        console.warn(
+          `Warning: Could not check lock status for ${filePath}: ${(error as Error).message}`,
+        );
+      }
       return false;
     }
   }

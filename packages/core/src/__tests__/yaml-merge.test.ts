@@ -430,14 +430,18 @@ describe("complex merge scenarios", () => {
     expect((result.merged as Record<string, string>).field).toBe("value");
   });
 
-  it("should handle deleted fields", async () => {
+  it("should handle deleted fields - ours removes, theirs unchanged", async () => {
     const base = { keep: "value", remove: "value" };
-    const ours = { keep: "value" }; // remove field deleted
+    const ours = { keep: "value" } as Record<string, unknown>;
+    delete ours.remove;
     const theirs = { keep: "value", remove: "value" };
 
     const result = await merger.threeWayMerge(base, ours, theirs);
 
     // When we delete a field and theirs doesn't change, deletion should be kept
     expect(result.success).toBe(true);
+    const merged = result.merged as Record<string, unknown>;
+    expect(merged.keep).toBe("value");
+    expect("remove" in merged).toBe(false); // Field was deleted
   });
 });

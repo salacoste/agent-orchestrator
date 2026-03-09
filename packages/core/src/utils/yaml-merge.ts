@@ -252,12 +252,12 @@ ${baseStr}
 
     // Handle non-object types
     if (typeof base !== "object" || currentDepth >= maxDepth) {
-      return this.mergePrimitives(base, ours, theirs, path, conflicts);
+      return this.mergePrimitives(base, ours, theirs, path, conflicts, options);
     }
 
     // Handle arrays
     if (Array.isArray(base)) {
-      return this.mergeArrays(base, ours, theirs, path, conflicts, options);
+      return await this.mergeArrays(base, ours, theirs, path, conflicts, options);
     }
 
     // Handle objects
@@ -278,20 +278,35 @@ ${baseStr}
       const oursValue = oursObj[key];
       const theirsValue = theirsObj[key];
 
+      // Check if key was deleted (not present, not just undefined value)
+      const oursDeleted = !(key in oursObj);
+      const theirsDeleted = !(key in theirsObj);
+
       // Check if only one side modified this key
       const oursModified = !this.deepEqual(baseValue, oursValue);
       const theirsModified = !this.deepEqual(baseValue, theirsValue);
 
       if (oursModified && !theirsModified) {
-        // Only we modified - take our value
-        merged[key] = oursValue;
+        // Only we modified - take our value (or deletion)
+        if (!oursDeleted) {
+          merged[key] = oursValue;
+        }
+        // If ours deleted, don't include the key
       } else if (!oursModified && theirsModified) {
-        // Only they modified - take their value
-        merged[key] = theirsValue;
+        // Only they modified - take their value (or deletion)
+        if (!theirsDeleted) {
+          merged[key] = theirsValue;
+        }
+        // If theirs deleted, don't include the key
       } else if (oursModified && theirsModified) {
         // Both modified - check if same change
-        if (this.deepEqual(oursValue, theirsValue)) {
-          merged[key] = oursValue;
+        if (oursDeleted && theirsDeleted) {
+          // Both deleted - don't include
+        } else if (this.deepEqual(oursValue, theirsValue) && oursDeleted === theirsDeleted) {
+          // Same change (including deletion status)
+          if (!oursDeleted) {
+            merged[key] = oursValue;
+          }
         } else {
           // Both modified differently - recurse or record conflict
           if (
@@ -314,10 +329,10 @@ ${baseStr}
             conflicts.push({
               path: childPath,
               base: baseValue,
-              ours: oursValue,
-              theirs: theirsValue,
+              ours: oursDeleted ? undefined : oursValue,
+              theirs: theirsDeleted ? undefined : theirsValue,
             });
-            merged[key] = oursValue; // Default to ours
+            merged[key] = oursDeleted ? baseValue : oursValue; // Default to ours if not deleted
           }
         }
       } else {
@@ -329,13 +344,14 @@ ${baseStr}
     return merged;
   }
 
-  private mergePrimitives(
+  private async mergePrimitives(
     base: unknown,
     ours: unknown,
     theirs: unknown,
     path: string,
     conflicts: MergeConflict[],
-  ): unknown {
+    options: MergeOptions,
+  ): Promise<unknown> {
     if (this.deepEqual(ours, theirs)) {
       return ours;
     }
@@ -344,25 +360,40 @@ ${baseStr}
     const theirsModified = !this.deepEqual(base, theirs);
 
     if (oursModified && theirsModified) {
-      conflicts.push({
+      const conflict: MergeConflict = {
         path,
         base,
         ours,
         theirs,
-      });
+      };
+
+      // Use onConflict callback if provided
+      if (options.onConflict) {
+        const resolution = await options.onConflict(conflict);
+        conflicts.push(conflict);
+        return resolution === "ours"
+          ? ours
+          : resolution === "theirs"
+            ? theirs
+            : resolution === "base"
+              ? base
+              : ours;
+      }
+
+      conflicts.push(conflict);
     }
 
     return oursModified ? ours : theirs;
   }
 
-  private mergeArrays(
+  private async mergeArrays(
     base: unknown[],
     ours: unknown,
     theirs: unknown,
     path: string,
     conflicts: MergeConflict[],
-    _options: MergeOptions,
-  ): unknown[] {
+    options: MergeOptions,
+  ): Promise<unknown[]> {
     const oursArr = Array.isArray(ours) ? ours : base;
     const theirsArr = Array.isArray(theirs) ? theirs : base;
 
@@ -370,13 +401,16 @@ ${baseStr}
       return oursArr;
     }
 
-    // For arrays, we use a simple strategy:
-    // - If one side didn't change, use the changed side
-    // - If both changed differently, record conflict and use ours
-
     const oursModified = !this.deepEqual(base, oursArr);
     const theirsModified = !this.deepEqual(base, theirsArr);
 
+    // If mergeArrays option is true, attempt element-wise merge
+    if (options.mergeArrays) {
+      return this.mergeArrayElements(base, oursArr, theirsArr, path, conflicts, options);
+    }
+
+    // Default: Simple strategy - if one side didn't change, use the changed side
+    // If both changed differently, record conflict and use ours
     if (oursModified && theirsModified) {
       conflicts.push({
         path,
@@ -387,6 +421,82 @@ ${baseStr}
     }
 
     return oursModified ? oursArr : theirsArr;
+  }
+
+  /**
+   * Merge arrays element by element when mergeArrays option is true
+   */
+  private async mergeArrayElements(
+    base: unknown[],
+    ours: unknown[],
+    theirs: unknown[],
+    path: string,
+    conflicts: MergeConflict[],
+    options: MergeOptions,
+  ): Promise<unknown[]> {
+    const maxLength = Math.max(base.length, ours.length, theirs.length);
+    const merged: unknown[] = [];
+
+    for (let i = 0; i < maxLength; i++) {
+      const basePath = `${path}[${i}]`;
+      const baseElement = base[i];
+      const oursElement = ours[i];
+      const theirsElement = theirs[i];
+
+      // If only one array has this index
+      if (i >= base.length) {
+        if (i < ours.length && i >= theirs.length) {
+          merged.push(oursElement);
+        } else if (i >= ours.length && i < theirs.length) {
+          merged.push(theirsElement);
+        } else if (i < ours.length && i < theirs.length) {
+          // Both added at same index - check if same
+          if (this.deepEqual(oursElement, theirsElement)) {
+            merged.push(oursElement);
+          } else {
+            conflicts.push({
+              path: basePath,
+              base: undefined,
+              ours: oursElement,
+              theirs: theirsElement,
+            });
+            merged.push(oursElement); // Default to ours
+          }
+        }
+        continue;
+      }
+
+      // Both arrays have this index - merge elements
+      if (typeof baseElement === "object" && baseElement !== null) {
+        // Recursively merge objects
+        merged.push(
+          await this.mergeObjects(
+            baseElement,
+            oursElement,
+            theirsElement,
+            basePath,
+            conflicts,
+            options.maxDepth ?? 10,
+            0,
+            options,
+          ),
+        );
+      } else {
+        // Primitive merge
+        merged.push(
+          await this.mergePrimitives(
+            baseElement,
+            oursElement,
+            theirsElement,
+            basePath,
+            conflicts,
+            options,
+          ),
+        );
+      }
+    }
+
+    return merged;
   }
 
   private mergeNonConflicting(
@@ -446,11 +556,95 @@ ${baseStr}
   }
 
   private deepEqual(a: unknown, b: unknown): boolean {
-    return JSON.stringify(a) === JSON.stringify(b);
+    // Fast path for identical references
+    if (a === b) return true;
+
+    // Handle null/undefined
+    if (a === null || a === undefined) return b === null || b === undefined;
+    if (b === null || b === undefined) return false;
+
+    // Handle different types
+    if (typeof a !== typeof b) return false;
+
+    // Handle NaN
+    if (typeof a === "number" && typeof b === "number") {
+      if (Number.isNaN(a) && Number.isNaN(b)) return true;
+      if (Number.isNaN(a) || Number.isNaN(b)) return false;
+    }
+
+    // Handle special objects that JSON.stringify doesn't handle well
+    if (a instanceof Date && b instanceof Date) {
+      return a.getTime() === b.getTime();
+    }
+    if (a instanceof Map && b instanceof Map) {
+      if (a.size !== b.size) return false;
+      for (const [key, value] of a) {
+        if (!b.has(key) || !this.deepEqual(value, b.get(key))) return false;
+      }
+      return true;
+    }
+    if (a instanceof Set && b instanceof Set) {
+      if (a.size !== b.size) return false;
+      const arrA = [...a];
+      const arrB = [...b];
+      return this.deepEqual(arrA.sort(), arrB.sort());
+    }
+
+    // For plain objects and arrays, use JSON comparison
+    // (Note: property order doesn't matter for equality in our use case)
+    try {
+      return JSON.stringify(a) === JSON.stringify(b);
+    } catch {
+      // Circular reference or other issue
+      return false;
+    }
   }
 
   private deepClone<T>(value: T): T {
-    return JSON.parse(JSON.stringify(value)) as T;
+    // Handle null/undefined
+    if (value === null || value === undefined) {
+      return value;
+    }
+
+    // Handle primitives
+    if (typeof value !== "object") {
+      return value;
+    }
+
+    // Handle Date
+    if (value instanceof Date) {
+      return new Date(value.getTime()) as T;
+    }
+
+    // Handle Map
+    if (value instanceof Map) {
+      const cloned = new Map();
+      for (const [key, val] of value) {
+        cloned.set(key, this.deepClone(val));
+      }
+      return cloned as T;
+    }
+
+    // Handle Set
+    if (value instanceof Set) {
+      const cloned = new Set();
+      for (const val of value) {
+        cloned.add(this.deepClone(val));
+      }
+      return cloned as T;
+    }
+
+    // Handle Array
+    if (Array.isArray(value)) {
+      return value.map((item) => this.deepClone(item)) as T;
+    }
+
+    // Handle plain objects
+    const cloned: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      cloned[key] = this.deepClone(val);
+    }
+    return cloned as T;
   }
 
   private setValueAtPath(obj: unknown, path: string, value: unknown): void {

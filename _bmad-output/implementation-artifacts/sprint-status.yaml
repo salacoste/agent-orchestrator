@@ -73,7 +73,7 @@ development_status:
   2-1-5-persistent-dead-letter-queue: done
   2-1-6-performance-test-suite: done
   2-1-7-file-locking-mechanism: done
-  2-1-8-dependency-security-review: ready-for-dev
+  2-1-8-dependency-security-review: done
   2-1-9-enhanced-sync-strategies: ready-for-dev
 
   # Epic 3: Dashboard & Real-Time Monitoring
@@ -133,3 +133,35 @@ limitations:
     limitation: "Requires Runtime.getSignal() enhancement - method does not exist in interface"
     discovered_in: "2-1-2-interface-validation-checklist"
     epic_reference: "Epic 4 (Error Handling epic)"
+
+# Dependency Security Approvals
+# Tracks all approved dependencies with security review status
+dependencies:
+  chokidar:
+    version: "4.0.3"
+    license: MIT
+    approved: true
+    reviewed_at: "2026-03-09"
+    added_in: "Story 2-6 (YAML File Watcher)"
+    review_link: "_bmad/docs/dependency-reviews/chokidar-4.0.3.md"
+  proper-lockfile:
+    version: "4.1.2"
+    license: MIT
+    approved: true
+    reviewed_at: "2026-03-09"
+    added_in: "Story 2-1-7 (File Locking Mechanism)"
+    review_link: "_bmad/docs/dependency-reviews/proper-lockfile-4.1.2.md"
+  yaml:
+    version: "2.8.2"
+    license: ISC
+    approved: true
+    reviewed_at: "2026-03-09"
+    added_in: "Story 2-5 (State Manager Write-Through Cache)"
+    review_link: "_bmad/docs/dependency-reviews/yaml-2.8.2.md"
+  zod:
+    version: "3.25.76"
+    license: MIT
+    approved: true
+    reviewed_at: "2026-03-09"
+    added_in: "Story 2-1-1 (Integration Test Framework)"
+    review_link: "_bmad/docs/dependency-reviews/zod-3.25.76.md"

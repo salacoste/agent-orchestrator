@@ -82,6 +82,63 @@ limitations:
 
 **Reference:** See `packages/core/INTERFACE_VALIDATION_CHECKLIST.md` for complete interface validation guide.
 
+## Dependency Review (if applicable)
+
+**For stories that add new dependencies:**
+
+- [ ] Check if dependency is necessary (can existing code be used?)
+- [ ] Run `pnpm audit` to check for known vulnerabilities
+- [ ] Verify license compatibility (MIT, Apache-2.0, BSD, ISC are compatible)
+- [ ] Review dependency health (maintainer active, recent updates)
+- [ ] Document dependency in `_bmad/docs/DEPENDENCIES.md`
+- [ ] Create review document in `_bmad/docs/dependency-reviews/<package>-<version>.md`
+- [ ] Update sprint-status.yaml with dependency approval status
+
+**License Compatibility:**
+| License | Compatible |
+|---------|------------|
+| MIT | ✅ Yes |
+| Apache-2.0 | ✅ Yes |
+| BSD-2/3 | ✅ Yes |
+| ISC | ✅ Yes |
+| GPL-2/3 | ❌ No |
+| AGPL-3 | ❌ No |
+
+**Reference:** See `_bmad/docs/dependency-security-review-checklist.md` for complete dependency review process.
+
+## CLI Integration Testing (if applicable)
+
+**For stories that add or modify CLI commands:**
+
+- [ ] Create CLI integration test in `packages/cli/__tests__/integration/`
+- [ ] Test CLI argument parsing (all flags and options)
+- [ ] Test CLI output formatting (stdout)
+- [ ] Test CLI error handling (stderr and exit codes)
+- [ ] Test with real config files (use `createTempEnv` helper)
+- [ ] Test CLI → Core service integration paths
+
+**CLI Test Pattern:**
+```typescript
+import { describe, it, expect } from "vitest";
+import { runCliWithTsx } from "../integration/helpers/cli-test.js";
+import { createTempEnv } from "../integration/helpers/temp-env.js";
+
+describe("ao mycommand", () => {
+  it("should execute successfully", async () => {
+    const env = createTempEnv();
+    try {
+      const result = await runCliWithTsx(["mycommand"], { cwd: env.cwd });
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain("expected output");
+    } finally {
+      env.cleanup();
+    }
+  });
+});
+```
+
+**Reference:** See `packages/cli/__tests__/CLI_TEST_README.md` for complete CLI testing guide.
+
 ## Dev Notes
 
 - Relevant architecture patterns and constraints

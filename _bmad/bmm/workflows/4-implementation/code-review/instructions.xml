@@ -105,6 +105,18 @@
       5. **Test Quality**: Are tests real assertions or placeholders?
     </action>
 
+    <!-- Dependency Security Review -->
+    <action>Check for new dependencies added in this story:
+      1. Compare package.json dependencies with previous version
+      2. For each NEW dependency:
+         - Verify security review exists in `_bmad/docs/dependency-reviews/`
+         - Check license compatibility (MIT, Apache-2.0, BSD, ISC are OK)
+         - Verify no known vulnerabilities (run `pnpm audit`)
+         - If no review exists → HIGH finding (missing security review)
+      3. Update `_bmad/docs/DEPENDENCIES.md` if new dependencies added
+      4. Update sprint-status.yaml dependencies section if applicable
+    </action>
+
     <check if="total_issues_found lt 3">
       <critical>NOT LOOKING HARD ENOUGH - Find more problems!</critical>
       <action>Re-examine code for:

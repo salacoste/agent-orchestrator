@@ -177,6 +177,9 @@ export class DegradedModeServiceImpl {
       await this.checkServiceHealth(service);
     }
 
+    // Update degraded mode based on initial health check results
+    this.updateDegradedMode();
+
     // Start periodic health checks
     this.healthCheckInterval = setInterval(async () => {
       for (const service of this.healthChecks.keys()) {

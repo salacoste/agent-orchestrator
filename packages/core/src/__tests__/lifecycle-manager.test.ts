@@ -103,6 +103,9 @@ beforeEach(() => {
     loadFromConfig: vi.fn(),
     shutdown: vi.fn().mockResolvedValue(true),
     shutdownAll: vi.fn().mockResolvedValue(undefined),
+    reload: vi.fn().mockResolvedValue(true),
+    getPluginState: vi.fn().mockReturnValue(null),
+    isRegistered: vi.fn().mockReturnValue(false),
   };
 
   mockSessionManager = {

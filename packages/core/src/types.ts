@@ -1130,6 +1130,19 @@ export interface PluginRegistry {
 
   /** Shutdown all registered plugins */
   shutdownAll(): Promise<void>;
+
+  /** Hot-reload a specific plugin without full system restart */
+  reload(
+    slot: PluginSlot,
+    name: string,
+    importFn?: (pkg: string) => Promise<unknown>,
+  ): Promise<boolean>;
+
+  /** Get plugin state for hot-swap preservation */
+  getPluginState(slot: PluginSlot, name: string): Record<string, unknown> | null;
+
+  /** Check if a plugin is registered */
+  isRegistered(slot: PluginSlot, name: string): boolean;
 }
 
 // =============================================================================

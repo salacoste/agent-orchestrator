@@ -75,6 +75,12 @@ function extractPluginConfig(
 
 export function createPluginRegistry(): PluginRegistry {
   const plugins: PluginMap = new Map();
+  // Store plugin state for hot-swap preservation
+  const pluginStates: Map<string, Record<string, unknown>> = new Map();
+  // Store plugin configs for reload
+  const pluginConfigs: Map<string, Record<string, unknown> | undefined> = new Map();
+  // Store plugin package names for reload
+  const pluginPackages: Map<string, string> = new Map();
 
   /**
    * Call init() lifecycle hook on a plugin if present
@@ -87,6 +93,7 @@ export function createPluginRegistry(): PluginRegistry {
         await module.init();
       } catch (error) {
         // Log but don't throw - lifecycle errors shouldn't crash the system
+        // eslint-disable-next-line no-console
         console.error(`Plugin lifecycle init() error: ${error}`);
       }
     }
@@ -97,6 +104,7 @@ export function createPluginRegistry(): PluginRegistry {
       try {
         await lifecycleInstance.init();
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.error(`Plugin instance lifecycle init() error: ${error}`);
       }
     }
@@ -113,6 +121,7 @@ export function createPluginRegistry(): PluginRegistry {
       try {
         await lifecycleInstance.shutdown();
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.error(`Plugin instance lifecycle shutdown() error: ${error}`);
       }
     }
@@ -122,9 +131,54 @@ export function createPluginRegistry(): PluginRegistry {
       try {
         await module.shutdown();
       } catch (error) {
+        // eslint-disable-next-line no-console
         console.error(`Plugin lifecycle shutdown() error: ${error}`);
       }
     }
+  }
+
+  /**
+   * Get plugin state for hot-swap preservation
+   * Calls the plugin's getState() lifecycle hook if present
+   */
+  function captureState(key: string, instance: unknown): Record<string, unknown> | null {
+    const lifecycleInstance = instance as PluginLifecycle & {
+      getState?: () => Record<string, unknown>;
+    };
+    if (typeof lifecycleInstance?.getState === "function") {
+      try {
+        const state = lifecycleInstance.getState();
+        pluginStates.set(key, state);
+        return state;
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(`Plugin getState() error: ${error}`);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Restore plugin state after hot-swap
+   * Calls the plugin's setState() lifecycle hook if present
+   */
+  function restoreState(key: string, instance: unknown): boolean {
+    const state = pluginStates.get(key);
+    if (!state) return false;
+
+    const lifecycleInstance = instance as PluginLifecycle & {
+      setState?: (state: Record<string, unknown>) => void;
+    };
+    if (typeof lifecycleInstance?.setState === "function") {
+      try {
+        lifecycleInstance.setState(state);
+        return true;
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(`Plugin setState() error: ${error}`);
+      }
+    }
+    return false;
   }
 
   return {
@@ -133,6 +187,7 @@ export function createPluginRegistry(): PluginRegistry {
       const key = makeKey(manifest.slot, manifest.name);
       const instance = plugin.create(config);
       plugins.set(key, { manifest, instance, module: plugin });
+      pluginConfigs.set(key, config);
 
       // Call init() lifecycle hook asynchronously (don't await)
       // This allows registration to complete quickly while init runs in background
@@ -168,6 +223,8 @@ export function createPluginRegistry(): PluginRegistry {
             const pluginConfig = orchestratorConfig
               ? extractPluginConfig(builtin.slot, builtin.name, orchestratorConfig)
               : undefined;
+            const key = makeKey(builtin.slot, builtin.name);
+            pluginPackages.set(key, builtin.pkg);
             this.register(mod, pluginConfig);
           }
         } catch {
@@ -194,6 +251,9 @@ export function createPluginRegistry(): PluginRegistry {
         return false;
       }
 
+      // Capture state before shutdown
+      captureState(key, entry.instance);
+
       await callShutdown(entry.module, entry.instance);
       plugins.delete(key);
       return true;
@@ -203,6 +263,9 @@ export function createPluginRegistry(): PluginRegistry {
       const shutdownPromises: Promise<void>[] = [];
 
       for (const [key, entry] of plugins) {
+        // Capture state before shutdown
+        captureState(key, entry.instance);
+
         shutdownPromises.push(
           callShutdown(entry.module, entry.instance).then(() => {
             plugins.delete(key);
@@ -211,6 +274,80 @@ export function createPluginRegistry(): PluginRegistry {
       }
 
       await Promise.allSettled(shutdownPromises);
+    },
+
+    async reload(
+      slot: PluginSlot,
+      name: string,
+      importFn?: (pkg: string) => Promise<unknown>,
+    ): Promise<boolean> {
+      const key = makeKey(slot, name);
+      const entry = plugins.get(key);
+      if (!entry) {
+        return false;
+      }
+
+      // Capture state before shutdown
+      captureState(key, entry.instance);
+
+      // Shutdown the plugin
+      await callShutdown(entry.module, entry.instance);
+
+      // Get the package name for reload
+      const pkg = pluginPackages.get(key);
+      if (!pkg) {
+        // eslint-disable-next-line no-console
+        console.error(`Cannot reload plugin ${key}: package name not found`);
+        return false;
+      }
+
+      try {
+        // Re-import the plugin module
+        const doImport = importFn ?? ((p: string) => import(p));
+        // Clear the module from cache if possible
+        // Note: We use Object.prototype.hasOwnProperty to safely check cache
+        const modulePath = require.resolve(pkg);
+        if (Object.prototype.hasOwnProperty.call(require.cache, modulePath)) {
+          // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+          delete require.cache[modulePath];
+        }
+
+        const mod = (await doImport(pkg)) as PluginModule;
+        if (!mod.manifest || typeof mod.create !== "function") {
+          // eslint-disable-next-line no-console
+          console.error(`Reloaded plugin ${pkg} is invalid`);
+          return false;
+        }
+
+        // Get preserved config
+        const config = pluginConfigs.get(key);
+
+        // Create new instance
+        const instance = mod.create(config);
+
+        // Restore state if available
+        restoreState(key, instance);
+
+        // Re-register the plugin
+        plugins.set(key, { manifest: mod.manifest, instance, module: mod });
+
+        // Call init lifecycle
+        await callInit(mod, instance);
+
+        return true;
+      } catch (error) {
+        // eslint-disable-next-line no-console
+        console.error(`Failed to reload plugin ${key}:`, error);
+        return false;
+      }
+    },
+
+    getPluginState(slot: PluginSlot, name: string): Record<string, unknown> | null {
+      return pluginStates.get(makeKey(slot, name)) ?? null;
+    },
+
+    isRegistered(slot: PluginSlot, name: string): boolean {
+      return plugins.has(makeKey(slot, name));
     },
   };
 }

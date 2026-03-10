@@ -492,3 +492,31 @@ export type {
   ConflictMetricsConfig,
   ConflictMetricsService,
 } from "./conflict-metrics.js";
+
+// Plugin Version Compatibility — version matrix and compatibility checking
+export {
+  createVersionCompatibilityMatrix,
+  compareVersions,
+  isValidSemver,
+} from "./plugin-version-compatibility.js";
+export type {
+  CompatibilityStatus,
+  CompatibilityResult,
+  CompatibilityRange,
+  PluginCompatibilityEntry,
+  VersionCompatibilityConfig,
+  VersionCompatibilityMatrix,
+} from "./plugin-version-compatibility.js";
+
+// Plugin Marketplace — search, browse, and install plugins from registry
+export { createPluginMarketplace } from "./plugin-marketplace.js";
+export type {
+  PluginCategory,
+  PluginRating,
+  PluginReview,
+  MarketplacePlugin,
+  MarketplaceSearchOptions,
+  MarketplaceSearchResult,
+  PluginMarketplaceConfig,
+  PluginMarketplace,
+} from "./plugin-marketplace.js";

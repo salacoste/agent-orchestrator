@@ -12,7 +12,8 @@
  * - Export metrics for dashboards
  */
 
-import type { AuditTrail } from "./types.js";
+import { createHash } from "node:crypto";
+import type { AuditTrail, AuditEvent } from "./types.js";
 
 /**
  * Conflict resolution type
@@ -288,16 +289,27 @@ class ConflictMetricsServiceImpl implements ConflictMetricsService {
 
     // Write to audit trail if configured
     if (this.config.auditTrail) {
-      this.config.auditTrail
-        .append({
-          type: `conflict_metric.${event.type}`,
-          timestamp: fullEvent.timestamp,
-          data: fullEvent,
-        })
-        .catch((error) => {
-          // eslint-disable-next-line no-console
-          console.error("Failed to write conflict metric to audit trail:", error);
-        });
+      const eventType = `conflict_metric.${event.type}`;
+      const timestamp = fullEvent.timestamp.toISOString();
+      const metadata = { ...fullEvent };
+
+      // Create hash for audit event
+      const hash = createHash("sha256")
+        .update(id + timestamp + JSON.stringify(metadata))
+        .digest("hex");
+
+      const auditEvent: AuditEvent = {
+        eventId: id,
+        eventType,
+        timestamp,
+        metadata,
+        hash,
+      };
+
+      this.config.auditTrail.log(auditEvent).catch((error: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error("Failed to write conflict metric to audit trail:", error);
+      });
     }
 
     return id;

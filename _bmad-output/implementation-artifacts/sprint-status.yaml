@@ -180,3 +180,336 @@ dependencies:
     reviewed_at: "2026-03-09"
     added_in: "Story 2-1-1 (Integration Test Framework)"
     review_link: "_bmad/docs/dependency-reviews/zod-3.25.76.md"
+
+# ============================================================================
+# ACTION ITEMS FROM RETROSPECTIVES
+# ============================================================================
+# Tracked items identified during epic retrospectives that need follow-up.
+# Priority levels:
+#   - HIGH: Must fix before production deployment
+#   - MEDIUM: Should fix in next release
+#   - LOW: Nice to have, future enhancement
+# Status:
+#   - pending: Not yet started
+#   - in-progress: Currently being worked on
+#   - done: Completed
+# ============================================================================
+
+action_items:
+  # ---------------------------------------------------------------------------
+  # HIGH PRIORITY - Must Fix Before Production
+  # ---------------------------------------------------------------------------
+  high_priority:
+    # Epic 4 Action Items
+    E4-A1:
+      title: "Complete Health Check Service Integration"
+      description: |
+        - Implement actual event bus ping/latency measurement
+        - Add agent registry file availability check
+        - Wire up lifecycle manager integration
+        - Remove fake 0ms latency placeholder
+      epic: 4
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Before production deployment"
+
+    E4-A2:
+      title: "Update Story 4-1 Task Records"
+      description: |
+        - Mark completed tasks in story file
+        - Add Dev Agent Record section
+        - Document implementation summary
+      epic: 4
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Immediate"
+
+    E4-A3:
+      title: "Implement Service-Specific DLQ Replay"
+      description: |
+        - Create replay handlers for bmad_sync
+        - Create replay handlers for event_publish
+        - Wire up CLI retry command to handlers
+      epic: 4
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Before production deployment"
+
+    # Epic 5 Action Items
+    E5-A1:
+      title: "Complete Event Publisher Integration"
+      description: |
+        - Wire up conflict.detected event publishing
+        - Wire up conflict.resolved event publishing
+        - Ensure event bus lifecycle is complete
+        - Test event delivery to subscribers
+      epic: 5
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Before production deployment"
+
+    E5-A2:
+      title: "Implement Startup Conflict Detection"
+      description: |
+        - Detect existing conflicts on system start
+        - Show startup summary with conflict count
+        - Auto-resolve if configured
+        - Log startup validation results
+      epic: 5
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Before production deployment"
+
+    E5-A3:
+      title: "Test with All Runtime Plugins"
+      description: |
+        - Verify termination works with runtime-tmux
+        - Verify termination works with runtime-process
+        - Test graceful shutdown scenarios
+        - Document any plugin-specific handling
+      epic: 5
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Before production deployment"
+
+    # Epic 6 Action Items
+    E6-A1:
+      title: "Implement Permission Prompts in CLI"
+      description: |
+        - Interactive prompt when plugin requests permissions
+        - Show what permissions are being requested
+        - Allow user to grant/deny
+        - Update config with grant decisions
+      epic: 6
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Before production deployment"
+
+    E6-A2:
+      title: "Implement Dependency Checking"
+      description: |
+        - Check plugin dependencies before uninstall
+        - Prevent breaking dependent plugins
+        - Show warning if dependencies exist
+        - Provide force option
+      epic: 6
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Before production deployment"
+
+    E6-A3:
+      title: "Perform Code Review for Epic 6"
+      description: |
+        - Review all 6 stories for quality issues
+        - Document any findings
+        - Fix any identified problems
+      epic: 6
+      owner: "Alex (QA)"
+      status: pending
+      due: "Immediate"
+
+  # ---------------------------------------------------------------------------
+  # MEDIUM PRIORITY - Should Fix Soon
+  # ---------------------------------------------------------------------------
+  medium_priority:
+    # Epic 4
+    E4-A4:
+      title: "Custom Health Check Rules Engine"
+      description: |
+        - Per-component threshold configuration
+        - Weighted health aggregation
+        - Custom health check function support
+      epic: 4
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Next release"
+
+    E4-A5:
+      title: "Error Context Storage"
+      description: |
+        - Store operation context in error logs
+        - Enable automatic retry from error ID
+        - Include operation type and payload
+      epic: 4
+      owner: "Alex (QA)"
+      status: pending
+      due: "Next release"
+
+    E4-A6:
+      title: "Metadata Backup Retention"
+      description: |
+        - Implement backup rotation (keep last N)
+        - Configurable retention policy
+        - Automatic cleanup of old backups
+      epic: 4
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Next release"
+
+    # Epic 5
+    E5-A4:
+      title: "Extend Audit Trail for Conflict History"
+      description: |
+        - Store conflict events in audit log
+        - Store resolution events in audit log
+        - Enable historical conflict queries
+        - Support time-range filtering
+      epic: 5
+      owner: "Alex (QA)"
+      status: pending
+      due: "Next release"
+
+    E5-A5:
+      title: "Implement Conflict Pattern Analysis"
+      description: |
+        - Track conflict frequency by story
+        - Identify systemic conflict causes
+        - Generate prevention recommendations
+        - Dashboard trends visualization
+      epic: 5
+      owner: "Sam (PM)"
+      status: pending
+      due: "Next release"
+
+    E5-A6:
+      title: "Per-Project Configuration Overrides"
+      description: |
+        - Support project-specific conflict config
+        - Override autoResolve per project
+        - Override tieBreaker per project
+        - Configuration validation
+      epic: 5
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Next release"
+
+    # Epic 6
+    E6-A4:
+      title: "Implement Plugin Lifecycle Hooks"
+      description: |
+        - Call init() after loading
+        - Call shutdown() before unloading
+        - Handle errors gracefully
+      epic: 6
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Next release"
+
+    E6-A5:
+      title: "Implement Plugin Sandboxing"
+      description: |
+        - Run plugins in separate processes
+        - Limit resource access
+        - Implement proper timeouts
+      epic: 6
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Next release"
+
+    E6-A6:
+      title: "Complete Event Bus Integration"
+      description: |
+        - Connect triggers to event bus
+        - Auto-evaluate on story/event changes
+        - Connect workflow engine to events
+      epic: 6
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Next release"
+
+  # ---------------------------------------------------------------------------
+  # LOW PRIORITY - Nice to Have
+  # ---------------------------------------------------------------------------
+  low_priority:
+    # Epic 4
+    E4-A7:
+      title: "Watch Mode SIGKILL Cleanup"
+      description: "Handle SIGKILL for watch mode intervals, prevent orphaned timers"
+      epic: 4
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Future enhancement"
+
+    E4-A8:
+      title: "Health Check Rate Limiting"
+      description: "Prevent health check spam, throttle rapid check requests"
+      epic: 4
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Future enhancement"
+
+    E4-A9:
+      title: "Web Dashboard for Error Management"
+      description: "DLQ viewer in dashboard, health metrics panel enhancement"
+      epic: 4
+      owner: "Alex (QA)"
+      status: pending
+      due: "Future enhancement"
+
+    # Epic 5
+    E5-A7:
+      title: "Conflict Notification Integration"
+      description: "Push notifications on conflict detection/resolution, desktop/slack integration"
+      epic: 5
+      owner: "Alex (QA)"
+      status: pending
+      due: "Future enhancement"
+
+    E5-A8:
+      title: "Conflict Prevention Metrics"
+      description: "Track conflicts prevented, auto-resolutions, manual resolutions"
+      epic: 5
+      owner: "Sam (PM)"
+      status: pending
+      due: "Future enhancement"
+
+    E5-A9:
+      title: "Web-Based Conflict Resolution"
+      description: "Allow resolution from dashboard with real-time updates via SSE"
+      epic: 5
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Future enhancement"
+
+    # Epic 6
+    E6-A7:
+      title: "Plugin Hot-Swap (Reload Individual)"
+      description: "Reload single plugin without full reload, preserve plugin state"
+      epic: 6
+      owner: "Charlie (Senior Dev)"
+      status: pending
+      due: "Future enhancement"
+
+    E6-A8:
+      title: "Plugin Version Compatibility Matrix"
+      description: "Document version compatibility, show warnings for incompatible versions"
+      epic: 6
+      owner: "Sam (PM)"
+      status: pending
+      due: "Future enhancement"
+
+    E6-A9:
+      title: "Plugin Marketplace/Registry"
+      description: "Integrate with public plugin registry, search/install from marketplace"
+      epic: 6
+      owner: "Sam (PM)"
+      status: pending
+      due: "Future enhancement"
+
+  # ---------------------------------------------------------------------------
+  # SUMMARY
+  # ---------------------------------------------------------------------------
+  summary:
+    total_items: 27
+    by_priority:
+      high: 9
+      medium: 9
+      low: 9
+    by_epic:
+      epic_4: 9
+      epic_5: 9
+      epic_6: 9
+    by_status:
+      pending: 27
+      in_progress: 0
+      done: 0

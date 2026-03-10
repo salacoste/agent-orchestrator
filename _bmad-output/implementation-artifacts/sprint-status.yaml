@@ -107,7 +107,7 @@ development_status:
   5-2-conflict-resolution-service: done
   5-3-conflict-prevention-ui: done
   5-4-conflict-history-dashboard: done
-  epic-5-retrospective: optional
+  epic-5-retrospective: done
 
   # Epic 6: Plugin & Workflow Extensibility
   epic-6: done

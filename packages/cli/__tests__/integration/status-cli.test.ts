@@ -100,11 +100,14 @@ describe("ao status CLI", () => {
       try {
         const result = await runCliWithTsx(["status"], { cwd: env.cwd });
         expect(result.exitCode).toBe(0);
-        // Either shows table headers from config OR falls back to tmux list
+        // When config is valid but no sessions: shows "no active sessions"
+        // When config fails: shows fallback with "session discovery"
+        // When sessions exist: shows table with "Session" and "Branch"
+        const hasNoSessions = result.stdout.includes("no active sessions");
         const hasTableHeaders =
           result.stdout.includes("Session") && result.stdout.includes("Branch");
         const hasFallback = result.stdout.includes("session discovery");
-        expect(hasTableHeaders || hasFallback).toBe(true);
+        expect(hasNoSessions || hasTableHeaders || hasFallback).toBe(true);
       } finally {
         env.cleanup();
       }

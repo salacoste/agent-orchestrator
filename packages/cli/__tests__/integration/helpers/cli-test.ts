@@ -256,53 +256,43 @@ export function createTestConfig(
     projects: Record<string, Record<string, unknown>>;
   }>,
 ): string {
-  const config = {
-    configPath: "/tmp/test/agent-orchestrator.yaml",
-    port: 3000,
-    readyThresholdMs: 300000,
-    defaults: {
-      runtime: "tmux",
-      agent: "claude-code",
-      workspace: "worktree",
-      notifiers: ["desktop"],
-    },
-    projects: {},
-    notifiers: {},
-    notificationRouting: {},
-    reactions: {},
-    ...overrides,
-  };
+  const projects = overrides?.projects ?? {};
 
-  // Convert to YAML-like format (simple implementation)
+  // Build YAML manually to ensure correct format
   const lines: string[] = [];
-  for (const [key, value] of Object.entries(config)) {
-    if (typeof value === "object" && value !== null) {
-      lines.push(`${key}:`);
-      for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-        if (typeof v === "object" && v !== null) {
-          if (Array.isArray(v)) {
-            // Handle arrays as YAML lists
-            lines.push(`  ${k}:`);
-            for (const item of v as unknown[]) {
-              if (typeof item === "string") {
-                lines.push(`    - "${item}"`);
-              } else {
-                lines.push(`    - ${JSON.stringify(item)}`);
-              }
-            }
-          } else {
-            lines.push(`  ${k}:`);
-            for (const [k2, v2] of Object.entries(v as Record<string, unknown>)) {
-              lines.push(`    ${k2}: ${JSON.stringify(v2)}`);
-            }
-          }
-        } else {
-          lines.push(`  ${k}: ${JSON.stringify(v)}`);
-        }
-      }
-    } else {
-      lines.push(`${key}: ${JSON.stringify(value)}`);
-    }
+
+  // Port
+  lines.push(`port: ${overrides?.port ?? 3000}`);
+
+  // Ready threshold
+  lines.push(`readyThresholdMs: ${overrides?.readyThresholdMs ?? 300000}`);
+
+  // Defaults
+  const defaults = overrides?.defaults ?? {
+    runtime: "tmux",
+    agent: "claude-code",
+    workspace: "worktree",
+    notifiers: ["desktop"],
+  };
+  lines.push("defaults:");
+  lines.push(`  runtime: "${defaults.runtime}"`);
+  lines.push(`  agent: "${defaults.agent}"`);
+  lines.push(`  workspace: "${defaults.workspace}"`);
+  lines.push("  notifiers:");
+  for (const n of defaults.notifiers) {
+    lines.push(`    - "${n}"`);
+  }
+
+  // Projects
+  lines.push("projects:");
+  for (const [projectId, project] of Object.entries(projects)) {
+    lines.push(`  ${projectId}:`);
+    const p = project as Record<string, unknown>;
+    if (p.name) lines.push(`    name: "${p.name}"`);
+    if (p.repo) lines.push(`    repo: "${p.repo}"`);
+    if (p.path) lines.push(`    path: "${p.path}"`);
+    if (p.defaultBranch) lines.push(`    defaultBranch: "${p.defaultBranch}"`);
+    if (p.sessionPrefix) lines.push(`    sessionPrefix: "${p.sessionPrefix}"`);
   }
 
   return lines.join("\n");

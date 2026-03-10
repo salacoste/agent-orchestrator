@@ -11,13 +11,13 @@ describe("story-status command", () => {
       registerStoryStatus(program);
     });
 
-    it("registers status command", () => {
-      const command = program.commands.find((c) => c.name() === "status");
+    it("registers story-status command", () => {
+      const command = program.commands.find((c) => c.name() === "story-status");
       expect(command).toBeTruthy();
     });
 
     it("has correct options", () => {
-      const command = program.commands.find((c) => c.name() === "status");
+      const command = program.commands.find((c) => c.name() === "story-status");
       expect(command?.options[0].long).toBe("--agent");
       expect(command?.options[1].long).toBe("--format");
       expect(command?.options[2].long).toBe("--status");
@@ -26,12 +26,12 @@ describe("story-status command", () => {
     });
 
     it("has correct description", () => {
-      const command = program.commands.find((c) => c.name() === "status");
+      const command = program.commands.find((c) => c.name() === "story-status");
       expect(command?.description()).toBe("View story and agent status");
     });
 
     it("has correct default option values", () => {
-      const command = program.commands.find((c) => c.name() === "status");
+      const command = program.commands.find((c) => c.name() === "story-status");
       const formatOption = command?.options.find((o) => o.long === "--format");
       expect(formatOption?.defaultValue).toBe("table");
 

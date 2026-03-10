@@ -42,6 +42,7 @@ describe("File Watcher Integration", () => {
   let yamlPath: string;
   let stateManager: StateManager;
   let testYamlPath: string;
+  let testCounter = 0;
 
   beforeAll(async () => {
     testEnv = await createIntegrationTestEnv();
@@ -52,8 +53,10 @@ describe("File Watcher Integration", () => {
   });
 
   beforeEach(async () => {
-    yamlPath = join(testEnv.tempDir, "sprint-status.yaml");
-    testYamlPath = await createTestYaml(testEnv.tempDir, "sprint-status.yaml");
+    // Use unique filename per test to avoid parallel test pollution
+    const uniqueFilename = `sprint-status-${testCounter++}-${Date.now()}.yaml`;
+    yamlPath = join(testEnv.tempDir, uniqueFilename);
+    testYamlPath = await createTestYaml(testEnv.tempDir, uniqueFilename);
     stateManager = createMockStateManager(yamlPath);
     fileWatcher = createFileWatcher({
       stateManager,

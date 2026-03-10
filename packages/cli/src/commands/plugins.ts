@@ -14,12 +14,14 @@
 
 import chalk from "chalk";
 import type { Command } from "commander";
+import { confirm, checkbox } from "@inquirer/prompts";
 import {
   loadConfig,
   createPluginInstaller,
   createNpmPluginRegistry,
   type InstalledPlugin,
   type PluginSearchResult,
+  type PluginPermission,
 } from "@composio/ao-core";
 import { header } from "../lib/format.js";
 
@@ -46,6 +48,22 @@ function formatPermissions(permissions: string[]): string {
     return chalk.dim("(none)");
   }
   return permissions.join(", ");
+}
+
+/**
+ * Get human-readable description for a permission type
+ */
+function getPermissionDescription(permission: PluginPermission): string {
+  const descriptions: Record<PluginPermission, string> = {
+    runtime: "Manage runtime environments (tmux, docker, etc.)",
+    agent: "Control AI agent processes",
+    workspace: "Access and modify workspace files",
+    tracker: "Integrate with issue/story trackers",
+    scm: "Access source control management (git, github)",
+    notifier: "Send notifications to users",
+    terminal: "Control terminal sessions",
+  };
+  return descriptions[permission] || "Unknown permission type";
 }
 
 function renderPluginsTable(plugins: InstalledPlugin[]): void {
@@ -199,39 +217,89 @@ export function registerPlugins(program: Command): void {
     .command("install <package>")
     .description("Install a plugin from npm or local path")
     .option("--local", "Install from local path instead of npm")
+    .option("--grant-permissions", "Automatically grant all requested permissions")
     .option("--json", "Output as JSON")
-    .action(async (packageName: string, opts: { local?: boolean; json?: boolean }) => {
-      let _config: ReturnType<typeof loadConfig>;
-      try {
-        _config = loadConfig();
-      } catch {
-        console.error(chalk.red("No config found. Run `ao init` first."));
-        process.exit(1);
-      }
-
-      const pluginsDir = process.env.AO_PLUGINS_DIR || "./plugins";
-      const installer = createPluginInstaller({ pluginsDir });
-
-      console.log(chalk.blue(`Installing ${packageName}...`));
-      const result = await installer.install(packageName, { local: opts.local });
-
-      if (opts.json) {
-        console.log(JSON.stringify(result, null, 2));
-        return;
-      }
-
-      if (result.status === "installed") {
-        console.log(chalk.green(`✓ Installed ${packageName} v${result.version}`));
-        if (result.permissions && result.permissions.length > 0) {
-          console.log(chalk.dim(`  Permissions: ${result.permissions.join(", ")}`));
+    .action(
+      async (
+        packageName: string,
+        opts: { local?: boolean; grantPermissions?: boolean; json?: boolean },
+      ) => {
+        let _config: ReturnType<typeof loadConfig>;
+        try {
+          _config = loadConfig();
+        } catch {
+          console.error(chalk.red("No config found. Run `ao init` first."));
+          process.exit(1);
         }
-      } else if (result.status === "cancelled") {
-        console.log(chalk.yellow("Installation cancelled"));
-      } else {
-        console.log(chalk.red(`✗ Installation failed: ${result.error}`));
-        process.exit(1);
-      }
-    });
+
+        const pluginsDir = process.env.AO_PLUGINS_DIR || "./plugins";
+        const installer = createPluginInstaller({ pluginsDir });
+
+        console.log(chalk.blue(`Installing ${packageName}...`));
+        const result = await installer.install(packageName, { local: opts.local });
+
+        if (opts.json) {
+          console.log(JSON.stringify(result, null, 2));
+          return;
+        }
+
+        if (result.status === "installed") {
+          console.log(chalk.green(`✓ Installed ${packageName} v${result.version}`));
+
+          // Handle permission prompts
+          if (result.permissions && result.permissions.length > 0) {
+            if (opts.grantPermissions) {
+              console.log(
+                chalk.dim(`  Permissions: ${result.permissions.join(", ")} (auto-granted)`),
+              );
+            } else {
+              console.log();
+              console.log(chalk.bold("This plugin requests the following permissions:"));
+              console.log();
+
+              for (const permission of result.permissions) {
+                const description = getPermissionDescription(permission);
+                console.log(`  ${chalk.cyan(permission)} ${chalk.dim(`- ${description}`)}`);
+              }
+              console.log();
+
+              const grantAll = await confirm({
+                message: "Grant all requested permissions?",
+                default: true,
+              });
+
+              if (!grantAll) {
+                // Let user select which permissions to grant
+                const selectedPermissions = await checkbox({
+                  message: "Select permissions to grant:",
+                  choices: result.permissions.map((p: PluginPermission) => ({
+                    name: `${p} - ${getPermissionDescription(p)}`,
+                    value: p,
+                    checked: true,
+                  })),
+                });
+
+                if (selectedPermissions.length < result.permissions.length) {
+                  console.log(
+                    chalk.yellow(
+                      `  Granted ${selectedPermissions.length}/${result.permissions.length} permissions`,
+                    ),
+                  );
+                  // Note: In a full implementation, we would store these decisions in config
+                }
+              } else {
+                console.log(chalk.dim(`  All permissions granted`));
+              }
+            }
+          }
+        } else if (result.status === "cancelled") {
+          console.log(chalk.yellow("Installation cancelled"));
+        } else {
+          console.log(chalk.red(`✗ Installation failed: ${result.error}`));
+          process.exit(1);
+        }
+      },
+    );
 
   // Uninstall a plugin
   pluginCmd

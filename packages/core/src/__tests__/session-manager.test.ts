@@ -84,6 +84,8 @@ beforeEach(() => {
     list: vi.fn().mockReturnValue([]),
     loadBuiltins: vi.fn().mockResolvedValue(undefined),
     loadFromConfig: vi.fn().mockResolvedValue(undefined),
+    shutdown: vi.fn().mockResolvedValue(true),
+    shutdownAll: vi.fn().mockResolvedValue(undefined),
   };
 
   config = {

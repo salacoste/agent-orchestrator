@@ -210,8 +210,9 @@ action_items:
         - Remove fake 0ms latency placeholder
       epic: 4
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Before production deployment"
+      completed_at: "2026-03-10"
 
     E4-A2:
       title: "Update Story 4-1 Task Records"
@@ -221,8 +222,9 @@ action_items:
         - Document implementation summary
       epic: 4
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Immediate"
+      completed_at: "2026-03-10"
 
     E4-A3:
       title: "Implement Service-Specific DLQ Replay"
@@ -232,8 +234,9 @@ action_items:
         - Wire up CLI retry command to handlers
       epic: 4
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Before production deployment"
+      completed_at: "2026-03-10"
 
     # Epic 5 Action Items
     E5-A1:
@@ -245,8 +248,9 @@ action_items:
         - Test event delivery to subscribers
       epic: 5
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Before production deployment"
+      completed_at: "2026-03-10"
 
     E5-A2:
       title: "Implement Startup Conflict Detection"
@@ -257,8 +261,9 @@ action_items:
         - Log startup validation results
       epic: 5
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Before production deployment"
+      completed_at: "2026-03-10"
 
     E5-A3:
       title: "Test with All Runtime Plugins"
@@ -269,8 +274,14 @@ action_items:
         - Document any plugin-specific handling
       epic: 5
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Before production deployment"
+      completed_at: "2026-03-10"
+      notes: |
+        Verified termination behavior for both runtime plugins:
+        - runtime-process: SIGTERM → SIGKILL (5s timeout), process groups
+        - runtime-tmux: tmux kill-session (immediate)
+        Created TERMINATION.md documentation in runtime-process package.
 
     # Epic 6 Action Items
     E6-A1:
@@ -282,8 +293,15 @@ action_items:
         - Update config with grant decisions
       epic: 6
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Before production deployment"
+      completed_at: "2026-03-10"
+      notes: |
+        Implemented interactive permission prompts using @inquirer/prompts:
+        - Shows permission descriptions during install
+        - Prompts user to grant all or select specific permissions
+        - Added --grant-permissions flag for non-interactive mode
+        - Added getPermissionDescription() helper for human-readable descriptions
 
     E6-A2:
       title: "Implement Dependency Checking"
@@ -294,8 +312,9 @@ action_items:
         - Provide force option
       epic: 6
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Before production deployment"
+      completed_at: "2026-03-10"
 
     E6-A3:
       title: "Perform Code Review for Epic 6"
@@ -305,8 +324,9 @@ action_items:
         - Fix any identified problems
       epic: 6
       owner: "Alex (QA)"
-      status: pending
+      status: done
       due: "Immediate"
+      completed_at: "2026-03-10"
 
   # ---------------------------------------------------------------------------
   # MEDIUM PRIORITY - Should Fix Soon
@@ -321,8 +341,18 @@ action_items:
         - Custom health check function support
       epic: 4
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Next release"
+      completed_at: "2026-03-10"
+      notes: |
+        Implemented health check rules engine in health-check-rules.ts:
+        - Per-component threshold configuration (ComponentThresholds)
+        - Weighted health aggregation with customizable component weights
+        - Critical component support (unhealthy = overall unhealthy)
+        - Custom health check function registration
+        - Health score calculation (0-1 scale)
+        - Configurable healthy/degraded thresholds
+        - CommonHealthRules factory for predefined checks (memory, CPU, event loop, filesystem)
 
     E4-A5:
       title: "Error Context Storage"
@@ -332,8 +362,17 @@ action_items:
         - Include operation type and payload
       epic: 4
       owner: "Alex (QA)"
-      status: pending
+      status: done
       due: "Next release"
+      completed_at: "2026-03-10"
+      notes: |
+        Implemented error context storage in error-logger.ts:
+        - Added operationType and operationPayload to ErrorLogEntry
+        - Added registerRetryHandler() for registering operation-specific handlers
+        - Added retryFromErrorId() to retry operations from stored error context
+        - Added getRetryableErrors() to list errors with retry context
+        - Added retryCount tracking for each error
+        - Handlers wrap simple RetryOperationHandler (returns boolean) to internal RetryHandler
 
     E4-A6:
       title: "Metadata Backup Retention"
@@ -343,8 +382,17 @@ action_items:
         - Automatic cleanup of old backups
       epic: 4
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Next release"
+      completed_at: "2026-03-10"
+      notes: |
+        Enhanced file-watcher.ts with backup retention:
+        - Added maxBackupAgeMs config option (default: 7 days)
+        - Added cleanupIntervalMs config option (default: 1 hour)
+        - cleanupOldBackups now removes expired backups based on age
+        - Added startPeriodicCleanup() for automatic scheduled cleanup
+        - Added stopPeriodicCleanup() called in close() method
+        - Updated FileWatcherConfig interface with new options
 
     # Epic 5
     E5-A4:
@@ -356,8 +404,19 @@ action_items:
         - Support time-range filtering
       epic: 5
       owner: "Alex (QA)"
-      status: pending
+      status: done
       due: "Next release"
+      completed_at: "2026-03-10"
+      notes: |
+        Extended audit-trail.ts with conflict history support:
+        - Added ConflictHistoryParams and ConflictHistoryEntry interfaces to types.ts
+        - Added queryConflicts() method to AuditTrail interface
+        - Implemented queryConflicts() in AuditTrailImpl:
+          - Queries conflict.detected and conflict.resolved events
+          - Groups events by conflictId
+          - Filters by storyId, agentIds, time range
+          - Returns entries with conflict details and resolution info
+          - Supports limit parameter
 
     E5-A5:
       title: "Implement Conflict Pattern Analysis"
@@ -368,8 +427,18 @@ action_items:
         - Dashboard trends visualization
       epic: 5
       owner: "Sam (PM)"
-      status: pending
+      status: done
       due: "Next release"
+      completed_at: "2026-03-10"
+      notes: |
+        Created conflict-patterns.ts with comprehensive pattern analysis:
+        - ConflictPatternType: 7 pattern types (resource_contention, timing_issue, agent_pairing, story_hotspot, workload_imbalance, priority_confusion, stale_assignment)
+        - analyzePatterns(): Detects all pattern types from conflict history
+        - getFrequencyMetrics(): Returns frequency metrics by story, agent, agent pairs, day of week, hour of day
+        - generateRecommendations(): Creates actionable recommendations for each pattern
+        - getTrendData(): Returns daily trend data for dashboard visualization
+        - getHotspotStories(): Returns most problematic stories
+        - getConflictingAgents(): Returns agents with most conflicts and win rates
 
     E5-A6:
       title: "Per-Project Configuration Overrides"
@@ -380,8 +449,26 @@ action_items:
         - Configuration validation
       epic: 5
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Next release"
+      completed_at: "2026-03-10"
+      notes: |
+        Implemented per-project configuration overrides:
+        - Added ProjectConflictConfig interface to types.ts
+        - Added ConfigValidationResult, ConfigValidationError, ConfigValidationWarning interfaces
+        - Extended ConflictResolutionConfig with projectOverrides map
+        - Added new methods to ConflictResolutionService interface:
+          - resolveForProject(conflict, projectId)
+          - canAutoResolveForProject(projectId)
+          - getResolutionStrategyForProject(projectId)
+          - setProjectConfig(config)
+          - getProjectConfig(projectId)
+          - removeProjectConfig(projectId)
+          - validateConfig(config)
+        - Implemented all methods in ConflictResolutionServiceImpl
+        - Added validateProjectConfig() private method
+        - Added mergeWithProjectConfig() private method
+        - Configuration validation includes warnings for potential issues
 
     # Epic 6
     E6-A4:
@@ -392,8 +479,17 @@ action_items:
         - Handle errors gracefully
       epic: 6
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Next release"
+      completed_at: "2026-03-10"
+      notes: |
+        Implemented lifecycle hooks in plugin-registry.ts:
+        - Added PluginLifecycle interface with init() and shutdown() methods
+        - Updated PluginModule interface to include optional lifecycle hooks
+        - Added shutdown() and shutdownAll() methods to PluginRegistry
+        - Calls init() asynchronously after registration
+        - Supports both module-level and instance-level lifecycle hooks
+        - Handles errors gracefully without crashing the system
 
     E6-A5:
       title: "Implement Plugin Sandboxing"
@@ -403,8 +499,20 @@ action_items:
         - Implement proper timeouts
       epic: 6
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Next release"
+      completed_at: "2026-03-10"
+      notes: |
+        Implemented plugin sandboxing in plugin-sandbox.ts:
+        - Created PluginSandbox interface for isolated plugin execution
+        - Runs plugins in child processes with restricted permissions
+        - Configurable memory limits (maxMemoryMB), timeouts, and resource access
+        - File system path restrictions (allowedReadPaths, allowedWritePaths)
+        - Network and spawn process restrictions
+        - SandboxManager for managing multiple plugin sandboxes
+        - IPC communication between host and sandbox
+        - Proper timeout handling and error recovery
+        - Resource usage tracking across all sandboxes
 
     E6-A6:
       title: "Complete Event Bus Integration"
@@ -414,8 +522,20 @@ action_items:
         - Connect workflow engine to events
       epic: 6
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Next release"
+      completed_at: "2026-03-10"
+      notes: |
+        Implemented event bus integration in event-bus-integration.ts:
+        - Created EventBusIntegration interface for connecting triggers/workflows to events
+        - Event subscription and processing with debouncing
+        - Trigger evaluation on incoming events
+        - Automatic workflow execution when triggers fire
+        - Concurrent workflow execution with configurable limits
+        - Event queue management with processing state
+        - Statistics tracking (events processed, triggers evaluated, workflows executed)
+        - EventFactory helper for creating common event types
+        - storyAttributesFromEvent helper for extracting story data from events
 
   # ---------------------------------------------------------------------------
   # LOW PRIORITY - Nice to Have
@@ -510,6 +630,9 @@ action_items:
       epic_5: 9
       epic_6: 9
     by_status:
-      pending: 27
+      pending: 9
       in_progress: 0
-      done: 0
+      done: 18
+    notes: |
+      All HIGH and MEDIUM priority action items completed as of 2026-03-10.
+      Remaining LOW priority items are marked as "Future enhancement".

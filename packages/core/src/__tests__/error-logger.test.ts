@@ -353,6 +353,180 @@ describe("ErrorLogger", () => {
     });
   });
 
+  describe("operation context storage", () => {
+    beforeEach(() => {
+      errorLogger = createErrorLogger({ logDir: testLogDir });
+    });
+
+    it("stores operation type and payload in error log", async () => {
+      const error = new Error("Sync failed");
+      await errorLogger.logError(error, {
+        component: "SyncService",
+        operationType: "bmad_sync",
+        operationPayload: { storyId: "4-5-test", action: "update_status" },
+      });
+
+      const files = readdirSync(testLogDir);
+      const logContent = readFileSync(join(testLogDir, files[0]), "utf-8");
+      const logEntry = JSON.parse(logContent);
+
+      expect(logEntry.operationType).toBe("bmad_sync");
+      expect(logEntry.operationPayload).toEqual({ storyId: "4-5-test", action: "update_status" });
+      expect(logEntry.retryCount).toBe(0);
+    });
+
+    it("redacts secrets in operation payload", async () => {
+      const error = new Error("API call failed");
+      await errorLogger.logError(error, {
+        component: "APIService",
+        operationType: "event_publish",
+        operationPayload: {
+          eventType: "story.completed",
+          apiKey: "test-fake-key-not-real", // gitleaks:allow
+        },
+      });
+
+      const files = readdirSync(testLogDir);
+      const logContent = readFileSync(join(testLogDir, files[0]), "utf-8");
+      const logEntry = JSON.parse(logContent);
+
+      expect(logEntry.operationPayload.apiKey).toBe("[REDACTED: api_key]");
+    });
+
+    it("returns retryable errors with operation context", async () => {
+      // Log an error with operation context
+      await errorLogger.logError(new Error("Error 1"), {
+        component: "TestService",
+        operationType: "op1",
+        operationPayload: { data: "test1" },
+      });
+
+      // Log an error without operation context
+      await errorLogger.logError(new Error("Error 2"), {
+        component: "TestService",
+      });
+
+      // Log another error with operation context
+      await errorLogger.logError(new Error("Error 3"), {
+        component: "TestService",
+        operationType: "op3",
+        operationPayload: { data: "test3" },
+      });
+
+      const retryableErrors = errorLogger.getRetryableErrors();
+
+      expect(retryableErrors.length).toBe(2);
+      expect(retryableErrors[0].operationType).toBe("op1");
+      expect(retryableErrors[1].operationType).toBe("op3");
+    });
+  });
+
+  describe("retry handlers", () => {
+    beforeEach(() => {
+      errorLogger = createErrorLogger({ logDir: testLogDir });
+    });
+
+    it("registers and executes retry handler", async () => {
+      const handler = vi.fn().mockResolvedValue(true);
+
+      errorLogger.registerRetryHandler("test_op", handler);
+
+      await errorLogger.logError(new Error("Test error"), {
+        component: "TestService",
+        operationType: "test_op",
+        operationPayload: { value: 123 },
+        context: { requestId: "req-1" },
+      });
+
+      // Get the error ID
+      const errors = errorLogger.getErrors();
+      const errorId = (errors[0] as { errorId: string }).errorId;
+
+      // Retry the operation
+      const result = await errorLogger.retryFromErrorId(errorId);
+
+      expect(result.success).toBe(true);
+      expect(handler).toHaveBeenCalledWith("test_op", { value: 123 });
+    });
+
+    it("increments retry count on each retry", async () => {
+      errorLogger.registerRetryHandler("test_op", async () => true);
+
+      await errorLogger.logError(new Error("Test error"), {
+        component: "TestService",
+        operationType: "test_op",
+        operationPayload: { value: 123 },
+      });
+
+      const errors = errorLogger.getErrors();
+      const entry = errors[0] as { errorId: string; retryCount: number };
+      expect(entry.retryCount).toBe(0);
+
+      await errorLogger.retryFromErrorId(entry.errorId);
+      expect(entry.retryCount).toBe(1);
+
+      await errorLogger.retryFromErrorId(entry.errorId);
+      expect(entry.retryCount).toBe(2);
+    });
+
+    it("returns error when error not found", async () => {
+      const result = await errorLogger.retryFromErrorId("nonexistent-id");
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("Error not found");
+    });
+
+    it("returns error when error has no operation type", async () => {
+      await errorLogger.logError(new Error("No op type"), {
+        component: "TestService",
+      });
+
+      const errors = errorLogger.getErrors();
+      const errorId = (errors[0] as { errorId: string }).errorId;
+
+      const result = await errorLogger.retryFromErrorId(errorId);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("no operation type");
+    });
+
+    it("returns error when no handler registered for operation type", async () => {
+      await errorLogger.logError(new Error("Unknown op"), {
+        component: "TestService",
+        operationType: "unknown_op",
+        operationPayload: { data: "test" },
+      });
+
+      const errors = errorLogger.getErrors();
+      const errorId = (errors[0] as { errorId: string }).errorId;
+
+      const result = await errorLogger.retryFromErrorId(errorId);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain("No retry handler registered");
+    });
+
+    it("handles handler errors gracefully", async () => {
+      errorLogger.registerRetryHandler("failing_op", async () => {
+        throw new Error("Handler failed");
+      });
+
+      await errorLogger.logError(new Error("Test error"), {
+        component: "TestService",
+        operationType: "failing_op",
+        operationPayload: { data: "test" },
+      });
+
+      const errors = errorLogger.getErrors();
+      const errorId = (errors[0] as { errorId: string }).errorId;
+
+      const result = await errorLogger.retryFromErrorId(errorId);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toBe("Handler failed");
+    });
+  });
+
   describe("cleanup", () => {
     it("closes all resources gracefully", async () => {
       const logger = createErrorLogger({ logDir: testLogDir });

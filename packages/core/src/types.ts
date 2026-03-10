@@ -1007,10 +1007,23 @@ export interface PluginManifest {
   version: string;
 }
 
+/** Lifecycle hooks for plugins (optional) */
+export interface PluginLifecycle {
+  /** Called after plugin is loaded and instantiated */
+  init?(): Promise<void> | void;
+
+  /** Called before plugin is unloaded */
+  shutdown?(): Promise<void> | void;
+}
+
 /** What a plugin module must export */
 export interface PluginModule<T = unknown> {
   manifest: PluginManifest;
   create(config?: Record<string, unknown>): T;
+
+  /** Optional lifecycle hooks at module level */
+  init?(): Promise<void> | void;
+  shutdown?(): Promise<void> | void;
 }
 
 // =============================================================================
@@ -1111,6 +1124,12 @@ export interface PluginRegistry {
     config: OrchestratorConfig,
     importFn?: (pkg: string) => Promise<unknown>,
   ): Promise<void>;
+
+  /** Shutdown a specific plugin, calling its shutdown() lifecycle hook if present */
+  shutdown(slot: PluginSlot, name: string): Promise<boolean>;
+
+  /** Shutdown all registered plugins */
+  shutdownAll(): Promise<void>;
 }
 
 // =============================================================================
@@ -1405,6 +1424,12 @@ export interface EventBus {
   /** Get number of queued events */
   getQueueSize(): number;
 
+  /**
+   * Ping the event bus backend to measure latency.
+   * Returns round-trip latency in milliseconds, or undefined if not connected.
+   */
+  ping?(): Promise<number | undefined>;
+
   /** Close event bus connection */
   close(): Promise<void>;
 }
@@ -1696,6 +1721,37 @@ export interface AuditTrailStats {
   newestEvent?: string;
 }
 
+/** Query parameters for conflict history */
+export interface ConflictHistoryParams {
+  /** Filter by story ID */
+  storyId?: string;
+  /** Filter by conflicting agents */
+  agentIds?: string[];
+  /** Start time for time-range filtering */
+  since?: Date | string;
+  /** End time for time-range filtering */
+  until?: Date | string;
+  /** Include archived events */
+  includeArchived?: boolean;
+  /** Maximum number of results */
+  limit?: number;
+}
+
+/** Conflict history entry */
+export interface ConflictHistoryEntry {
+  /** The audit event */
+  event: AuditEvent;
+  /** Parsed conflict data */
+  conflictId: string;
+  storyId: string;
+  conflictingAgents: string[];
+  resolution?: {
+    winner: string;
+    strategy: string;
+    timestamp: string;
+  };
+}
+
 /** Audit trail service interface */
 export interface AuditTrail {
   // Log an event to the audit trail
@@ -1703,6 +1759,9 @@ export interface AuditTrail {
 
   // Query events with filters
   query(params: QueryParams): AuditEvent[];
+
+  // Query conflict history with time-range filtering
+  queryConflicts(params?: ConflictHistoryParams): ConflictHistoryEntry[];
 
   // Export events to file
   export(path: string, params?: ExportParams): Promise<void>;
@@ -1919,6 +1978,8 @@ export interface FileWatcherConfig {
   retryInterval?: number; // Default: 5000ms
   backupDir?: string; // Default: .backups/
   maxBackups?: number; // Default: 10
+  maxBackupAgeMs?: number; // Default: 7 days (604800000ms) - maximum age of backups
+  cleanupIntervalMs?: number; // Default: 1 hour (3600000ms) - how often to run automatic cleanup
   debounceOverflowThreshold?: number; // Default: 10
   interactive?: boolean; // Default: false
 }
@@ -2121,6 +2182,10 @@ export interface HealthCheckConfig {
   stateManager?: StateManager;
   bmadTracker?: BMADTracker;
   agentRegistry?: AgentRegistry;
+  /** Data directory for agent registry files (for file availability check) */
+  dataDir?: string;
+  /** Lifecycle manager for session health checks */
+  lifecycleManager?: LifecycleManager;
   thresholds?: HealthCheckThresholds;
   checkIntervalMs?: number;
 }
@@ -2283,6 +2348,39 @@ export interface ConflictDetectionService {
    @returns true if auto-resolved, false otherwise
    */
   attemptAutoResolution(conflict: AgentConflictEvent): boolean;
+
+  /**
+   * Scan all existing assignments and detect conflicts on startup
+   * @returns Array of detected conflicts
+   */
+  detectStartupConflicts(): Promise<AgentConflict[]>;
+
+  /**
+   * Get startup validation summary
+   * @returns Summary of conflicts detected at startup
+   */
+  getStartupSummary(): Promise<StartupConflictSummary>;
+
+  /**
+   * Clear all conflicts (useful for testing or reset)
+   */
+  clearConflicts(): void;
+}
+
+/**
+ * Startup conflict detection summary
+ */
+export interface StartupConflictSummary {
+  /** Total number of agent assignments */
+  totalAssignments: number;
+  /** Number of conflicts detected */
+  conflictCount: number;
+  /** Number of conflicts auto-resolved */
+  autoResolvedCount: number;
+  /** Conflicts grouped by severity */
+  conflictsBySeverity: Record<AgentConflictSeverity, number>;
+  /** All detected conflicts */
+  conflicts: AgentConflict[];
 }
 
 /**
@@ -2333,6 +2431,80 @@ export interface ConflictResolutionConfig extends ResolutionStrategy {
   eventPublisher?: {
     publish(event: unknown): Promise<void>;
   };
+  /** Per-project configuration overrides */
+  projectOverrides?: Map<string, ProjectConflictConfig>;
+}
+
+/**
+ * Project-specific conflict configuration overrides
+ * Allows customizing conflict resolution behavior per project
+ */
+export interface ProjectConflictConfig {
+  /** Project identifier */
+  projectId: string;
+  /** Override autoResolve setting for this project */
+  autoResolve?: boolean;
+  /** Override tieBreaker setting for this project */
+  tieBreaker?: TieBreaker;
+  /** Override notification setting for this project */
+  notifyOnResolution?: boolean;
+  /** Custom priority weights for this project */
+  priorityWeights?: {
+    /** Weight for explicit priority field */
+    explicitPriority?: number;
+    /** Weight for progress percentage */
+    progress?: number;
+    /** Weight for assignment age */
+    assignmentAge?: number;
+    /** Weight for story priority */
+    storyPriority?: number;
+    /** Weight for agent workload */
+    workload?: number;
+  };
+  /** Custom priority factors for this project */
+  customFactors?: Array<{
+    name: string;
+    weight: number;
+    calculate: (conflict: AgentConflict, agentId: string) => number;
+  }>;
+  /** Enabled/disabled for this project */
+  enabled?: boolean;
+}
+
+/**
+ * Configuration validation result
+ */
+export interface ConfigValidationResult {
+  /** Whether configuration is valid */
+  valid: boolean;
+  /** Validation errors */
+  errors: ConfigValidationError[];
+  /** Validation warnings */
+  warnings: ConfigValidationWarning[];
+}
+
+/**
+ * Configuration validation error
+ */
+export interface ConfigValidationError {
+  /** Field path with error */
+  field: string;
+  /** Error message */
+  message: string;
+  /** Error severity */
+  severity: "error";
+}
+
+/**
+ * Configuration validation warning
+ */
+export interface ConfigValidationWarning {
+  /** Field path with warning */
+  field: string;
+  /** Warning message */
+  message: string;
+  /** Suggested fix */
+  suggestion?: string;
 }
 
 /**
@@ -2348,14 +2520,62 @@ export interface ConflictResolutionService {
   resolve(conflict: AgentConflict): Promise<ResolutionResult>;
 
   /**
+   * Resolve a conflict with project-specific config
+   * @param conflict - Conflict to resolve
+   * @param projectId - Project ID for config override
+   * @returns Resolution result with action taken
+   */
+  resolveForProject(conflict: AgentConflict, projectId: string): Promise<ResolutionResult>;
+
+  /**
    * Check if auto-resolution is enabled
    * @returns true if auto-resolve is enabled
    */
   canAutoResolve(): boolean;
 
   /**
+   * Check if auto-resolution is enabled for a specific project
+   * @param projectId - Project ID to check
+   * @returns true if auto-resolve is enabled for the project
+   */
+  canAutoResolveForProject(projectId: string): boolean;
+
+  /**
    * Get the current resolution strategy
    * @returns Resolution strategy configuration
    */
   getResolutionStrategy(): ResolutionStrategy;
+
+  /**
+   * Get resolution strategy for a specific project
+   * @param projectId - Project ID to get strategy for
+   * @returns Resolution strategy with project overrides applied
+   */
+  getResolutionStrategyForProject(projectId: string): ResolutionStrategy;
+
+  /**
+   * Set project-specific configuration override
+   * @param config - Project conflict configuration
+   */
+  setProjectConfig(config: ProjectConflictConfig): void;
+
+  /**
+   * Get project-specific configuration
+   * @param projectId - Project ID to get config for
+   * @returns Project configuration or undefined if not set
+   */
+  getProjectConfig(projectId: string): ProjectConflictConfig | undefined;
+
+  /**
+   * Remove project-specific configuration
+   * @param projectId - Project ID to remove config for
+   */
+  removeProjectConfig(projectId: string): void;
+
+  /**
+   * Validate configuration
+   * @param config - Configuration to validate
+   * @returns Validation result with errors and warnings
+   */
+  validateConfig(config: ConflictResolutionConfig): ConfigValidationResult;
 }

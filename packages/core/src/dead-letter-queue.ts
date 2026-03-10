@@ -207,6 +207,25 @@ export class DeadLetterQueueServiceImpl {
   }
 
   /**
+   * Remove an entry from the DLQ by error ID
+   * Useful after external replay succeeds
+   * @param errorId - The error ID to remove
+   * @returns true if entry was found and removed, false if not found
+   */
+  async remove(errorId: string): Promise<boolean> {
+    const entryIndex = this.entries.findIndex((e) => e.errorId === errorId);
+
+    if (entryIndex === -1) {
+      return false;
+    }
+
+    this.entries.splice(entryIndex, 1);
+    await this.persistToDisk();
+
+    return true;
+  }
+
+  /**
    * Remove entries older than the specified threshold
    * @param olderThanMs - Age threshold in milliseconds
    * @returns Number of entries purged

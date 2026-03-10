@@ -197,3 +197,147 @@ describe("loadFromConfig", () => {
     await expect(registry.loadFromConfig(config)).resolves.toBeUndefined();
   });
 });
+
+describe("lifecycle hooks", () => {
+  it("calls module-level init() after registration", async () => {
+    const initFn = vi.fn().mockResolvedValue(undefined);
+    const plugin: PluginModule = {
+      ...makePlugin("runtime", "tmux"),
+      init: initFn,
+    };
+
+    const registry = createPluginRegistry();
+    registry.register(plugin);
+
+    // init is called asynchronously, so we need to wait a bit
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(initFn).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls instance-level init() after registration", async () => {
+    const instanceInit = vi.fn().mockResolvedValue(undefined);
+    const plugin = {
+      ...makePlugin("runtime", "tmux"),
+      create: vi.fn(() => ({
+        name: "tmux",
+        init: instanceInit,
+      })),
+    };
+
+    const registry = createPluginRegistry();
+    registry.register(plugin);
+
+    // init is called asynchronously
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(instanceInit).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls shutdown() when shutdown is invoked", async () => {
+    const shutdownFn = vi.fn().mockResolvedValue(undefined);
+    const plugin: PluginModule = {
+      ...makePlugin("runtime", "tmux"),
+      shutdown: shutdownFn,
+    };
+
+    const registry = createPluginRegistry();
+    registry.register(plugin);
+
+    const result = await registry.shutdown("runtime", "tmux");
+
+    expect(result).toBe(true);
+    expect(shutdownFn).toHaveBeenCalledTimes(1);
+    expect(registry.get("runtime", "tmux")).toBeNull();
+  });
+
+  it("calls instance-level shutdown() when shutdown is invoked", async () => {
+    const instanceShutdown = vi.fn().mockResolvedValue(undefined);
+    const plugin = {
+      ...makePlugin("runtime", "tmux"),
+      create: vi.fn(() => ({
+        name: "tmux",
+        shutdown: instanceShutdown,
+      })),
+    };
+
+    const registry = createPluginRegistry();
+    registry.register(plugin);
+
+    const result = await registry.shutdown("runtime", "tmux");
+
+    expect(result).toBe(true);
+    expect(instanceShutdown).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns false when shutting down non-existent plugin", async () => {
+    const registry = createPluginRegistry();
+    const result = await registry.shutdown("runtime", "nonexistent");
+    expect(result).toBe(false);
+  });
+
+  it("shutdownAll calls shutdown on all plugins", async () => {
+    const shutdown1 = vi.fn().mockResolvedValue(undefined);
+    const shutdown2 = vi.fn().mockResolvedValue(undefined);
+
+    const plugin1: PluginModule = {
+      ...makePlugin("runtime", "tmux"),
+      shutdown: shutdown1,
+    };
+    const plugin2: PluginModule = {
+      ...makePlugin("runtime", "process"),
+      shutdown: shutdown2,
+    };
+
+    const registry = createPluginRegistry();
+    registry.register(plugin1);
+    registry.register(plugin2);
+
+    await registry.shutdownAll();
+
+    expect(shutdown1).toHaveBeenCalledTimes(1);
+    expect(shutdown2).toHaveBeenCalledTimes(1);
+    expect(registry.list("runtime")).toHaveLength(0);
+  });
+
+  it("handles init() errors gracefully", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const initFn = vi.fn().mockRejectedValue(new Error("init failed"));
+    const plugin: PluginModule = {
+      ...makePlugin("runtime", "tmux"),
+      init: initFn,
+    };
+
+    const registry = createPluginRegistry();
+    // Should not throw
+    registry.register(plugin);
+
+    // Wait for async init to complete
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    expect(initFn).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+  });
+
+  it("handles shutdown() errors gracefully", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const shutdownFn = vi.fn().mockRejectedValue(new Error("shutdown failed"));
+    const plugin: PluginModule = {
+      ...makePlugin("runtime", "tmux"),
+      shutdown: shutdownFn,
+    };
+
+    const registry = createPluginRegistry();
+    registry.register(plugin);
+
+    // Should not throw
+    await registry.shutdown("runtime", "tmux");
+
+    expect(shutdownFn).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalled();
+
+    errorSpy.mockRestore();
+  });
+});

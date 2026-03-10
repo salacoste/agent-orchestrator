@@ -5,6 +5,10 @@
  * 1. Built-in (packages/plugins/*)
  * 2. npm packages (@composio/ao-plugin-*)
  * 3. Local file paths specified in config
+ *
+ * Supports lifecycle hooks:
+ * - init(): Called after plugin is loaded and instantiated
+ * - shutdown(): Called before plugin is unloaded
  */
 
 import type {
@@ -13,10 +17,18 @@ import type {
   PluginModule,
   PluginRegistry,
   OrchestratorConfig,
+  PluginLifecycle,
 } from "./types.js";
 
-/** Map from "slot:name" → plugin instance */
-type PluginMap = Map<string, { manifest: PluginManifest; instance: unknown }>;
+/** Map from "slot:name" → plugin entry */
+type PluginMap = Map<
+  string,
+  {
+    manifest: PluginManifest;
+    instance: unknown;
+    module: PluginModule;
+  }
+>;
 
 function makeKey(slot: PluginSlot, name: string): string {
   return `${slot}:${name}`;
@@ -64,12 +76,69 @@ function extractPluginConfig(
 export function createPluginRegistry(): PluginRegistry {
   const plugins: PluginMap = new Map();
 
+  /**
+   * Call init() lifecycle hook on a plugin if present
+   * Checks both module-level and instance-level hooks
+   */
+  async function callInit(module: PluginModule, instance: unknown): Promise<void> {
+    // Try module-level init first
+    if (typeof module.init === "function") {
+      try {
+        await module.init();
+      } catch (error) {
+        // Log but don't throw - lifecycle errors shouldn't crash the system
+        console.error(`Plugin lifecycle init() error: ${error}`);
+      }
+    }
+
+    // Try instance-level init
+    const lifecycleInstance = instance as PluginLifecycle;
+    if (typeof lifecycleInstance?.init === "function") {
+      try {
+        await lifecycleInstance.init();
+      } catch (error) {
+        console.error(`Plugin instance lifecycle init() error: ${error}`);
+      }
+    }
+  }
+
+  /**
+   * Call shutdown() lifecycle hook on a plugin if present
+   * Checks both module-level and instance-level hooks
+   */
+  async function callShutdown(module: PluginModule, instance: unknown): Promise<void> {
+    // Try instance-level shutdown first (reverse order from init)
+    const lifecycleInstance = instance as PluginLifecycle;
+    if (typeof lifecycleInstance?.shutdown === "function") {
+      try {
+        await lifecycleInstance.shutdown();
+      } catch (error) {
+        console.error(`Plugin instance lifecycle shutdown() error: ${error}`);
+      }
+    }
+
+    // Try module-level shutdown
+    if (typeof module.shutdown === "function") {
+      try {
+        await module.shutdown();
+      } catch (error) {
+        console.error(`Plugin lifecycle shutdown() error: ${error}`);
+      }
+    }
+  }
+
   return {
     register(plugin: PluginModule, config?: Record<string, unknown>): void {
       const { manifest } = plugin;
       const key = makeKey(manifest.slot, manifest.name);
       const instance = plugin.create(config);
-      plugins.set(key, { manifest, instance });
+      plugins.set(key, { manifest, instance, module: plugin });
+
+      // Call init() lifecycle hook asynchronously (don't await)
+      // This allows registration to complete quickly while init runs in background
+      callInit(plugin, instance).catch(() => {
+        // Already logged in callInit
+      });
     },
 
     get<T>(slot: PluginSlot, name: string): T | null {
@@ -116,6 +185,32 @@ export function createPluginRegistry(): PluginRegistry {
 
       // Then, load any additional plugins specified in project configs
       // (future: support npm package names and local file paths)
+    },
+
+    async shutdown(slot: PluginSlot, name: string): Promise<boolean> {
+      const key = makeKey(slot, name);
+      const entry = plugins.get(key);
+      if (!entry) {
+        return false;
+      }
+
+      await callShutdown(entry.module, entry.instance);
+      plugins.delete(key);
+      return true;
+    },
+
+    async shutdownAll(): Promise<void> {
+      const shutdownPromises: Promise<void>[] = [];
+
+      for (const [key, entry] of plugins) {
+        shutdownPromises.push(
+          callShutdown(entry.module, entry.instance).then(() => {
+            plugins.delete(key);
+          }),
+        );
+      }
+
+      await Promise.allSettled(shutdownPromises);
     },
   };
 }

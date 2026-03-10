@@ -16,8 +16,9 @@ import type {
   HealthCheckResult,
   HealthCheckService,
   HealthStatus,
+  LifecycleManager,
 } from "./types.js";
-import { access } from "node:fs/promises";
+import { access, readdir } from "node:fs/promises";
 import { constants } from "node:fs";
 
 const DEFAULT_CHECK_INTERVAL_MS = 30000; // 30 seconds
@@ -74,6 +75,16 @@ export class HealthCheckServiceImpl implements HealthCheckService {
       components.push(await this.checkAgentRegistry());
     }
 
+    // Check Data Directory (agent registry file availability)
+    if (this.config.dataDir) {
+      components.push(await this.checkDataDir());
+    }
+
+    // Check Lifecycle Manager
+    if (this.config.lifecycleManager) {
+      components.push(await this.checkLifecycleManager());
+    }
+
     const result = this.aggregateHealth(components);
     this.currentStatus = result;
     return result;
@@ -102,6 +113,16 @@ export class HealthCheckServiceImpl implements HealthCheckService {
       case "agent-registry":
         if (this.config.agentRegistry) {
           return this.checkAgentRegistry();
+        }
+        break;
+      case "data-dir":
+        if (this.config.dataDir) {
+          return this.checkDataDir();
+        }
+        break;
+      case "lifecycle-manager":
+        if (this.config.lifecycleManager) {
+          return this.checkLifecycleManager();
         }
         break;
     }
@@ -215,10 +236,12 @@ export class HealthCheckServiceImpl implements HealthCheckService {
         };
       }
 
-      // Measure latency by doing a test operation
-      const startTime = Date.now();
-      // TODO: Could add a ping method to EventBus for latency measurement
-      const latencyMs = Date.now() - startTime;
+      // Measure latency by pinging the event bus
+      let latencyMs = 0;
+      if (eventBus.ping) {
+        const measuredLatency = await eventBus.ping();
+        latencyMs = measuredLatency ?? 0;
+      }
 
       const maxLatency = this.config.thresholds?.maxLatencyMs ?? DEFAULT_MAX_LATENCY_MS;
       if (latencyMs > maxLatency) {
@@ -415,6 +438,98 @@ export class HealthCheckServiceImpl implements HealthCheckService {
     } catch (error) {
       return {
         component: "Agent Registry",
+        status: "unhealthy",
+        message: `Health check failed: ${error instanceof Error ? error.message : String(error)}`,
+        timestamp: new Date(),
+      };
+    }
+  }
+
+  /**
+   * Check Data Directory health (agent registry file availability)
+   */
+  private async checkDataDir(): Promise<ComponentHealth> {
+    const dataDir = this.config.dataDir;
+    if (!dataDir) {
+      return {
+        component: "Data Directory",
+        status: "unhealthy",
+        message: "Not configured",
+        timestamp: new Date(),
+      };
+    }
+
+    try {
+      // Check if data directory exists and is readable
+      await access(dataDir, constants.R_OK);
+
+      // Check if we can list the directory contents
+      const files = await readdir(dataDir);
+      const sessionCount = files.filter((f) => f.endsWith(".meta")).length;
+
+      return {
+        component: "Data Directory",
+        status: "healthy",
+        message: `Directory accessible (${sessionCount} session files)`,
+        details: [`Path: ${dataDir}`],
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      return {
+        component: "Data Directory",
+        status: "unhealthy",
+        message: `Cannot access data directory: ${error instanceof Error ? error.message : String(error)}`,
+        details: [`Path: ${dataDir}`],
+        timestamp: new Date(),
+      };
+    }
+  }
+
+  /**
+   * Check Lifecycle Manager health
+   */
+  private async checkLifecycleManager(): Promise<ComponentHealth> {
+    const lifecycleManager = this.config.lifecycleManager as LifecycleManager | undefined;
+    if (!lifecycleManager) {
+      return {
+        component: "Lifecycle Manager",
+        status: "unhealthy",
+        message: "Not configured",
+        timestamp: new Date(),
+      };
+    }
+
+    try {
+      // Get session states count
+      const states = lifecycleManager.getStates();
+      const sessionCount = states.size;
+
+      // Check degraded mode status if available
+      const degradedStatus = lifecycleManager.getDegradedModeStatus?.();
+      if (degradedStatus && degradedStatus.mode !== "normal") {
+        // Get unavailable services from the services record
+        const unavailableServices = Object.entries(degradedStatus.services)
+          .filter(([, availability]) => !availability.available)
+          .map(([service]) => service);
+
+        return {
+          component: "Lifecycle Manager",
+          status: "degraded",
+          message: `Operating in degraded mode (${sessionCount} sessions)`,
+          details: unavailableServices.map((s) => `Service unavailable: ${s}`),
+          timestamp: new Date(),
+        };
+      }
+
+      return {
+        component: "Lifecycle Manager",
+        status: "healthy",
+        message: `Running (${sessionCount} active sessions)`,
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      return {
+        component: "Lifecycle Manager",
         status: "unhealthy",
         message: `Health check failed: ${error instanceof Error ? error.message : String(error)}`,
         timestamp: new Date(),

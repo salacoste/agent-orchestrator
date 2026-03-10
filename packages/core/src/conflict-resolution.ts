@@ -23,6 +23,10 @@ import type {
   AgentAssignment,
   Runtime,
   RuntimeHandle,
+  ProjectConflictConfig,
+  ConfigValidationResult,
+  ConfigValidationError,
+  ConfigValidationWarning,
 } from "./types.js";
 
 /**
@@ -41,6 +45,7 @@ class ConflictResolutionServiceImpl implements ConflictResolutionService {
   private registry: AgentRegistry;
   private runtime: Runtime;
   private config: ConflictResolutionConfig;
+  private projectConfigs: Map<string, ProjectConflictConfig> = new Map();
 
   constructor(
     registry: AgentRegistry,
@@ -54,7 +59,15 @@ class ConflictResolutionServiceImpl implements ConflictResolutionService {
       tieBreaker: config?.tieBreaker ?? DEFAULT_CONFIG.tieBreaker,
       notifyOnResolution: config?.notifyOnResolution ?? DEFAULT_CONFIG.notifyOnResolution,
       eventPublisher: config?.eventPublisher,
+      projectOverrides: config?.projectOverrides ?? new Map(),
     };
+
+    // Initialize project configs from config
+    if (this.config.projectOverrides) {
+      for (const [projectId, projectConfig] of this.config.projectOverrides.entries()) {
+        this.projectConfigs.set(projectId, projectConfig);
+      }
+    }
   }
 
   /**
@@ -160,6 +173,221 @@ class ConflictResolutionServiceImpl implements ConflictResolutionService {
       autoResolve: this.config.autoResolve,
       tieBreaker: this.config.tieBreaker,
       notifyOnResolution: this.config.notifyOnResolution ?? false,
+    };
+  }
+
+  /**
+   * Resolve a conflict with project-specific config
+   */
+  async resolveForProject(conflict: AgentConflict, projectId: string): Promise<ResolutionResult> {
+    const projectConfig = this.getProjectConfig(projectId);
+    const effectiveConfig = projectConfig
+      ? this.mergeWithProjectConfig(this.config, projectConfig)
+      : this.config;
+
+    // Temporarily use project config for resolution
+    const originalConfig = { ...this.config };
+    this.config = effectiveConfig;
+
+    try {
+      return await this.resolve(conflict);
+    } finally {
+      // Restore original config
+      this.config = originalConfig;
+    }
+  }
+
+  /**
+   * Check if auto-resolution is enabled for a specific project
+   */
+  canAutoResolveForProject(projectId: string): boolean {
+    const projectConfig = this.getProjectConfig(projectId);
+    if (projectConfig?.autoResolve !== undefined) {
+      return projectConfig.autoResolve;
+    }
+    return this.config.autoResolve;
+  }
+
+  /**
+   * Get resolution strategy for a specific project
+   */
+  getResolutionStrategyForProject(projectId: string): ResolutionStrategy {
+    const projectConfig = this.getProjectConfig(projectId);
+    if (!projectConfig) {
+      return this.getResolutionStrategy();
+    }
+
+    return {
+      autoResolve: projectConfig.autoResolve ?? this.config.autoResolve,
+      tieBreaker: projectConfig.tieBreaker ?? this.config.tieBreaker,
+      notifyOnResolution:
+        projectConfig.notifyOnResolution ?? this.config.notifyOnResolution ?? false,
+    };
+  }
+
+  /**
+   * Set project-specific configuration override
+   */
+  setProjectConfig(config: ProjectConflictConfig): void {
+    // Validate before setting
+    const validation = this.validateProjectConfig(config);
+    if (!validation.valid) {
+      throw new Error(
+        `Invalid project config: ${validation.errors.map((e) => e.message).join(", ")}`,
+      );
+    }
+
+    this.projectConfigs.set(config.projectId, config);
+  }
+
+  /**
+   * Get project-specific configuration
+   */
+  getProjectConfig(projectId: string): ProjectConflictConfig | undefined {
+    return this.projectConfigs.get(projectId);
+  }
+
+  /**
+   * Remove project-specific configuration
+   */
+  removeProjectConfig(projectId: string): void {
+    this.projectConfigs.delete(projectId);
+  }
+
+  /**
+   * Validate configuration
+   */
+  validateConfig(config: ConflictResolutionConfig): ConfigValidationResult {
+    const errors: ConfigValidationError[] = [];
+    const warnings: ConfigValidationWarning[] = [];
+
+    // Validate autoResolve
+    if (typeof config.autoResolve !== "boolean") {
+      errors.push({
+        field: "autoResolve",
+        message: "autoResolve must be a boolean",
+        severity: "error",
+      });
+    }
+
+    // Validate tieBreaker
+    const validTieBreakers: ResolutionStrategy["tieBreaker"][] = ["recent", "progress"];
+    if (!validTieBreakers.includes(config.tieBreaker)) {
+      errors.push({
+        field: "tieBreaker",
+        message: `tieBreaker must be one of: ${validTieBreakers.join(", ")}`,
+        severity: "error",
+      });
+    }
+
+    // Validate project overrides
+    if (config.projectOverrides) {
+      for (const [projectId, projectConfig] of config.projectOverrides.entries()) {
+        const projectValidation = this.validateProjectConfig(projectConfig);
+        if (!projectValidation.valid) {
+          errors.push({
+            field: `projectOverrides.${projectId}`,
+            message: projectValidation.errors.map((e) => e.message).join("; "),
+            severity: "error",
+          });
+        }
+      }
+    }
+
+    // Add warnings for potential issues
+    if (config.autoResolve && config.tieBreaker === "recent") {
+      warnings.push({
+        field: "tieBreaker",
+        message: "Using 'recent' tie-breaker with autoResolve may cause agent thrashing",
+        suggestion: "Consider using 'progress' tie-breaker to prefer agents with more work done",
+      });
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings,
+    };
+  }
+
+  /**
+   * Validate project-specific configuration
+   */
+  private validateProjectConfig(config: ProjectConflictConfig): ConfigValidationResult {
+    const errors: ConfigValidationError[] = [];
+    const warnings: ConfigValidationWarning[] = [];
+
+    // Validate projectId
+    if (!config.projectId || typeof config.projectId !== "string") {
+      errors.push({
+        field: "projectId",
+        message: "projectId is required and must be a string",
+        severity: "error",
+      });
+    }
+
+    // Validate autoResolve if provided
+    if (config.autoResolve !== undefined && typeof config.autoResolve !== "boolean") {
+      errors.push({
+        field: "autoResolve",
+        message: "autoResolve must be a boolean",
+        severity: "error",
+      });
+    }
+
+    // Validate tieBreaker if provided
+    if (config.tieBreaker !== undefined) {
+      const validTieBreakers: ResolutionStrategy["tieBreaker"][] = ["recent", "progress"];
+      if (!validTieBreakers.includes(config.tieBreaker)) {
+        errors.push({
+          field: "tieBreaker",
+          message: `tieBreaker must be one of: ${validTieBreakers.join(", ")}`,
+          severity: "error",
+        });
+      }
+    }
+
+    // Validate priority weights if provided
+    if (config.priorityWeights) {
+      for (const [key, value] of Object.entries(config.priorityWeights)) {
+        if (typeof value !== "number" || value < 0 || value > 1) {
+          errors.push({
+            field: `priorityWeights.${key}`,
+            message: "Priority weights must be numbers between 0 and 1",
+            severity: "error",
+          });
+        }
+      }
+    }
+
+    // Add warnings for conflicting settings
+    if (config.enabled === false && config.autoResolve === true) {
+      warnings.push({
+        field: "enabled",
+        message: "Conflict resolution is disabled but autoResolve is true",
+        suggestion: "Set enabled: true or autoResolve: false",
+      });
+    }
+
+    return {
+      valid: errors.length === 0,
+      errors,
+      warnings,
+    };
+  }
+
+  /**
+   * Merge base config with project-specific overrides
+   */
+  private mergeWithProjectConfig(
+    baseConfig: ConflictResolutionConfig,
+    projectConfig: ProjectConflictConfig,
+  ): ConflictResolutionConfig {
+    return {
+      ...baseConfig,
+      autoResolve: projectConfig.autoResolve ?? baseConfig.autoResolve,
+      tieBreaker: projectConfig.tieBreaker ?? baseConfig.tieBreaker,
+      notifyOnResolution: projectConfig.notifyOnResolution ?? baseConfig.notifyOnResolution,
     };
   }
 

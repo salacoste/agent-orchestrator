@@ -101,6 +101,8 @@ beforeEach(() => {
     list: vi.fn().mockReturnValue([]),
     loadBuiltins: vi.fn(),
     loadFromConfig: vi.fn(),
+    shutdown: vi.fn().mockResolvedValue(true),
+    shutdownAll: vi.fn().mockResolvedValue(undefined),
   };
 
   mockSessionManager = {

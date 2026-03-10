@@ -287,6 +287,143 @@ export class ConflictDetectionServiceImpl implements ConflictDetectionService {
 
     return false;
   }
+
+  /**
+   * Scan all existing assignments and detect conflicts on startup
+   * @returns Array of detected conflicts
+   */
+  async detectStartupConflicts(): Promise<AgentConflict[]> {
+    if (!this.config.enabled) {
+      return [];
+    }
+
+    const detectedConflicts: AgentConflict[] = [];
+
+    // Get all active assignments
+    const allAssignments = this.registry.list().filter((a) => a.status === "active");
+
+    // Group assignments by story
+    const storyAssignments = new Map<string, AgentAssignment[]>();
+    for (const assignment of allAssignments) {
+      const existing = storyAssignments.get(assignment.storyId) ?? [];
+      existing.push(assignment);
+      storyAssignments.set(assignment.storyId, existing);
+    }
+
+    // Find stories with multiple assignments (conflicts)
+    for (const [storyId, assignments] of storyAssignments) {
+      if (assignments.length > 1) {
+        // Sort by assignedAt to get oldest first
+        const sorted = [...assignments].sort(
+          (a, b) => a.assignedAt.getTime() - b.assignedAt.getTime(),
+        );
+
+        // Create conflict events for each additional assignment
+        for (let i = 1; i < sorted.length; i++) {
+          const existing = sorted[0];
+          const conflicting = sorted[i];
+
+          const conflict: AgentConflict = {
+            conflictId: randomUUID(),
+            storyId,
+            existingAgent: existing.agentId,
+            conflictingAgent: conflicting.agentId,
+            type: "duplicate-assignment",
+            detectedAt: new Date(),
+            priorityScores: this.calculatePriorityScores({
+              conflictId: randomUUID(),
+              storyId,
+              existingAgent: existing.agentId,
+              conflictingAgent: conflicting.agentId,
+              type: "duplicate-assignment",
+              detectedAt: new Date(),
+              priorityScores: {},
+            }),
+            severity: this.calculateSeverity({
+              conflictId: "",
+              storyId,
+              existingAgent: existing.agentId,
+              conflictingAgent: conflicting.agentId,
+              type: "duplicate-assignment",
+              detectedAt: new Date(),
+              priorityScores: {},
+            }),
+            recommendations: [],
+          };
+
+          // Generate recommendations
+          conflict.recommendations = this.generateRecommendations({
+            conflictId: conflict.conflictId,
+            storyId,
+            existingAgent: existing.agentId,
+            conflictingAgent: conflicting.agentId,
+            type: "duplicate-assignment",
+            detectedAt: new Date(),
+            priorityScores: conflict.priorityScores,
+          });
+
+          // Record the conflict
+          this.conflicts.set(conflict.conflictId, conflict);
+          detectedConflicts.push(conflict);
+
+          // Attempt auto-resolution if enabled
+          if (this.config.autoResolve?.enabled) {
+            this.attemptAutoResolution({
+              conflictId: conflict.conflictId,
+              storyId,
+              existingAgent: existing.agentId,
+              conflictingAgent: conflicting.agentId,
+              type: "duplicate-assignment",
+              detectedAt: conflict.detectedAt,
+              priorityScores: conflict.priorityScores,
+            });
+          }
+        }
+      }
+    }
+
+    return detectedConflicts;
+  }
+
+  /**
+   * Get startup validation summary
+   */
+  async getStartupSummary(): Promise<{
+    totalAssignments: number;
+    conflictCount: number;
+    autoResolvedCount: number;
+    conflictsBySeverity: Record<AgentConflictSeverity, number>;
+    conflicts: AgentConflict[];
+  }> {
+    const allAssignments = this.registry.list().filter((a) => a.status === "active");
+    const conflicts = this.getConflicts();
+
+    const conflictsBySeverity: Record<AgentConflictSeverity, number> = {
+      critical: 0,
+      high: 0,
+      medium: 0,
+      low: 0,
+    };
+
+    for (const conflict of conflicts) {
+      conflictsBySeverity[conflict.severity]++;
+    }
+
+    return {
+      totalAssignments: allAssignments.length,
+      conflictCount: conflicts.length,
+      autoResolvedCount: 0, // Will be updated when auto-resolution is tracked
+      conflictsBySeverity,
+      conflicts,
+    };
+  }
+
+  /**
+   * Clear all conflicts (useful for testing or reset)
+   */
+  clearConflicts(): void {
+    this.conflicts.clear();
+  }
 }
 
 /**

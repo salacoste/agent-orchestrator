@@ -12,7 +12,7 @@
 
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { writeFile, mkdir, rm, readdir } from "node:fs/promises";
+import { writeFile, mkdir, rm, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { createPluginLoader, type PluginPermission } from "./plugin-loader.js";
@@ -194,11 +194,15 @@ export function createPluginInstaller(options: {
    */
   async function uninstall(
     packageName: string,
-    _opts: {
+    opts: {
       /** Skip confirmation prompts */
       force?: boolean;
     } = {},
-  ): Promise<{ status: "uninstalled" | "failed" | "cancelled"; error?: string }> {
+  ): Promise<{
+    status: "uninstalled" | "failed" | "cancelled";
+    error?: string;
+    dependents?: string[];
+  }> {
     try {
       const name = packageName.replace(/^@[^/]+\//, "");
       const pluginDir = join(pluginsDir, name);
@@ -211,6 +215,18 @@ export function createPluginInstaller(options: {
         };
       }
 
+      // Check for dependent plugins unless force is true
+      if (!opts.force) {
+        const dependents = await checkDependents(name);
+        if (dependents.length > 0) {
+          return {
+            status: "cancelled",
+            error: `Cannot uninstall: ${dependents.length} plugins depend on ${name}: ${dependents.join(", ")}`,
+            dependents,
+          };
+        }
+      }
+
       // Remove plugin directory
       await rm(pluginDir, { recursive: true, force: true });
 
@@ -221,6 +237,47 @@ export function createPluginInstaller(options: {
         error: error instanceof Error ? error.message : "Uninstallation failed",
       };
     }
+  }
+
+  /**
+   * Check which plugins depend on a given plugin
+   */
+  async function checkDependents(pluginName: string): Promise<string[]> {
+    const installed = await listPlugins();
+    const dependents: string[] = [];
+
+    for (const plugin of installed) {
+      // Check if this plugin has dependencies in its plugin manifest
+      const pluginDir = join(pluginsDir, plugin.dirName);
+      const manifestPath = join(pluginDir, "plugin.yaml");
+
+      if (!existsSync(manifestPath)) {
+        continue;
+      }
+
+      let manifestContent: string;
+      try {
+        manifestContent = await readFile(manifestPath, "utf-8");
+        // Simple YAML parsing for dependencies field
+        const lines = manifestContent.split("\n");
+        let inDeps = false;
+
+        for (const line of lines) {
+          if (line.startsWith("dependencies:")) {
+            inDeps = true;
+          } else if (inDeps && line.trim()) {
+            const dep = line.trim().replace(/^[\s"]/, "");
+            if (dep === pluginName) {
+              dependents.push(plugin.name);
+            }
+          }
+        }
+      } catch {
+        // Ignore manifest parse errors
+      }
+    }
+
+    return dependents;
   }
 
   /**

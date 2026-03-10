@@ -62,6 +62,15 @@ export interface ErrorLogEntry {
 
   /** State snapshot at time of error */
   stateSnapshot?: Record<string, unknown>;
+
+  /** Operation type for retry (e.g., 'bmad_sync', 'event_publish', 'state_write') */
+  operationType?: string;
+
+  /** Operation payload for retry */
+  operationPayload?: Record<string, unknown>;
+
+  /** Number of retry attempts made */
+  retryCount?: number;
 }
 
 export interface ErrorRateSummary {
@@ -89,7 +98,16 @@ export interface ErrorLoggerDeps {
   /** Directory to write error log files */
   logDir: string;
   config?: Partial<ErrorLoggerConfig>;
+
+  /** Retry handlers by operation type */
+  retryHandlers?: Map<string, RetryHandler>;
 }
+
+/** Handler function for retrying an operation */
+export type RetryOperationHandler = (
+  operationType: string,
+  payload: Record<string, unknown>,
+) => Promise<boolean>;
 
 export interface ErrorLogger {
   /** Log an error with context information */
@@ -100,6 +118,15 @@ export interface ErrorLogger {
 
   /** Find a specific error by error ID */
   getErrorById(errorId: string): ErrorLogEntry | null;
+
+  /** Register a handler for a specific operation type */
+  registerRetryHandler(operationType: string, handler: RetryOperationHandler): void;
+
+  /** Retry an operation from an error ID */
+  retryFromErrorId(errorId: string): Promise<{ success: boolean; error?: string }>;
+
+  /** Get all errors that have operation context for retry */
+  getRetryableErrors(): ErrorLogEntry[];
 
   /** Close the logger and release resources */
   close(): Promise<void>;
@@ -126,6 +153,12 @@ export interface ErrorLogOptions {
 
   /** State snapshot at time of error */
   stateSnapshot?: Record<string, unknown>;
+
+  /** Operation type for retry (e.g., 'bmad_sync', 'event_publish', 'state_write') */
+  operationType?: string;
+
+  /** Operation payload for retry */
+  operationPayload?: Record<string, unknown>;
 }
 
 export interface ErrorFilter {
@@ -147,7 +180,17 @@ export interface ErrorFilter {
 
   /** Filter by agent ID */
   agentId?: string;
+
+  /** Filter by operation type */
+  operationType?: string;
 }
+
+/** Handler function for retrying operations from error context */
+export type RetryHandler = (
+  operationType: string,
+  payload: Record<string, unknown>,
+  context: Record<string, unknown>,
+) => Promise<{ success: boolean; error?: string }>;
 
 /**
  * Patterns for detecting sensitive information that should be redacted
@@ -190,6 +233,7 @@ class ErrorLoggerImpl implements ErrorLogger {
   private highErrorRateThreshold: number;
   private highErrorRateWindow: number;
   private timeFormat: string;
+  private retryHandlers: Map<string, RetryHandler>;
 
   // Error tracking
   private errors: ErrorLog[] = [];
@@ -205,6 +249,7 @@ class ErrorLoggerImpl implements ErrorLogger {
       deps.config?.highErrorRateThreshold ?? DEFAULT_HIGH_ERROR_RATE_THRESHOLD;
     this.highErrorRateWindow = deps.config?.highErrorRateWindow ?? DEFAULT_HIGH_ERROR_RATE_WINDOW;
     this.timeFormat = deps.config?.timeFormat ?? DEFAULT_TIME_FORMAT;
+    this.retryHandlers = deps.retryHandlers ? new Map(deps.retryHandlers) : new Map();
 
     // Create log directory if it doesn't exist
     try {
@@ -226,6 +271,11 @@ class ErrorLoggerImpl implements ErrorLogger {
       ? this.redactSecrets(options.stateSnapshot)
       : undefined;
 
+    // Redact operation payload to prevent secret leaks
+    const redactedOperationPayload = options.operationPayload
+      ? this.redactSecrets(options.operationPayload)
+      : undefined;
+
     // Create error log entry
     const entry: ErrorLogEntry = {
       errorId,
@@ -239,6 +289,9 @@ class ErrorLoggerImpl implements ErrorLogger {
       correlationId: options.correlationId,
       context: redactedContext,
       stateSnapshot: redactedStateSnapshot,
+      operationType: options.operationType,
+      operationPayload: redactedOperationPayload,
+      retryCount: 0,
     };
 
     // Store error in memory
@@ -295,6 +348,11 @@ class ErrorLoggerImpl implements ErrorLogger {
         return errorTime >= startTime && errorTime <= endTime;
       });
     }
+    if (filter?.operationType) {
+      results = results.filter(
+        (e) => isErrorLogEntry(e) && e.operationType === filter.operationType,
+      );
+    }
 
     return results;
   }
@@ -309,6 +367,76 @@ class ErrorLoggerImpl implements ErrorLogger {
       }
     }
     return null;
+  }
+
+  registerRetryHandler(operationType: string, handler: RetryOperationHandler): void {
+    // Wrap the simple handler to match our internal RetryHandler signature
+    const wrappedHandler: RetryHandler = async (opType, payload, _context) => {
+      const success = await handler(opType, payload);
+      return { success, error: success ? undefined : "Handler returned false" };
+    };
+    this.retryHandlers.set(operationType, wrappedHandler);
+  }
+
+  async retryFromErrorId(errorId: string): Promise<{ success: boolean; error?: string }> {
+    const entry = this.getErrorById(errorId);
+    if (!entry) {
+      return { success: false, error: `Error not found: ${errorId}` };
+    }
+
+    if (!entry.operationType) {
+      return { success: false, error: `Error ${errorId} has no operation type for retry` };
+    }
+
+    if (!entry.operationPayload) {
+      return { success: false, error: `Error ${errorId} has no operation payload for retry` };
+    }
+
+    const handler = this.retryHandlers.get(entry.operationType);
+    if (!handler) {
+      return {
+        success: false,
+        error: `No retry handler registered for operation type: ${entry.operationType}`,
+      };
+    }
+
+    try {
+      // Increment retry count
+      entry.retryCount = (entry.retryCount ?? 0) + 1;
+
+      // Execute the retry handler
+      const result = await handler(
+        entry.operationType,
+        entry.operationPayload,
+        entry.context || {},
+      );
+
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
+  }
+
+  getRetryableErrors(): ErrorLogEntry[] {
+    const isErrorLogEntry = (e: ErrorLog): e is ErrorLogEntry => {
+      return e.type !== "ErrorRateSummary";
+    };
+
+    const hasRetryContext = (
+      e: ErrorLog,
+    ): e is ErrorLogEntry & {
+      operationType: string;
+      operationPayload: Record<string, unknown>;
+    } => {
+      return (
+        isErrorLogEntry(e) && e.operationType !== undefined && e.operationPayload !== undefined
+      );
+    };
+
+    return this.errors.filter(hasRetryContext);
   }
 
   close(): Promise<void> {

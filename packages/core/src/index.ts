@@ -221,8 +221,10 @@ export type {
 export {
   registerDegradedModeService,
   registerEventPublisher,
+  registerBMADTracker,
   getDegradedModeService,
   getEventPublisher,
+  getBMADTracker,
   clearServiceRegistry,
 } from "./service-registry.js";
 
@@ -236,6 +238,19 @@ export type {
   ReplayResult,
   AlertCallback,
 } from "./dead-letter-queue.js";
+
+// DLQ Replay Handlers — service-specific replay logic for failed operations
+export {
+  registerReplayHandler,
+  getReplayHandler,
+  getRegisteredOperationTypes,
+  replayEntry,
+  replayEntries,
+  bmadSyncHandler,
+  eventPublishHandler,
+  stateWriteHandler,
+} from "./dlq-replay-handlers.js";
+export type { DLQReplayHandlerFn, ReplayContext, DLQReplayResult } from "./dlq-replay-handlers.js";
 
 // Completion Handlers — handle agent completion and failure events
 export {
@@ -411,3 +426,51 @@ export type {
   FeatureFlagConfig,
   FeatureFlagCheck,
 } from "./interface-validation.js";
+
+// Plugin Sandbox — isolated plugin execution
+export { createPluginSandbox, createSandboxManager } from "./plugin-sandbox.js";
+export type {
+  SandboxConfig,
+  SandboxResult,
+  PluginSandbox,
+  SandboxManager,
+} from "./plugin-sandbox.js";
+
+// Event Bus Integration — connects triggers and workflows to events
+export {
+  createEventBusIntegration,
+  storyAttributesFromEvent,
+  EventFactory,
+} from "./event-bus-integration.js";
+export type {
+  IntegrationEventType,
+  IntegrationEvent,
+  EventBusIntegrationConfig,
+  IntegrationStats,
+  EventBusIntegration,
+} from "./event-bus-integration.js";
+
+// Health Check Rules Engine — custom health check rules with weights
+export { createHealthCheckRulesEngine, CommonHealthRules } from "./health-check-rules.js";
+export type {
+  ComponentThresholds,
+  ComponentWeight,
+  CustomHealthCheckFn,
+  CustomHealthCheckRule,
+  HealthCheckRulesConfig,
+  WeightedHealthResult,
+  HealthCheckRulesEngine,
+} from "./health-check-rules.js";
+
+// Conflict Pattern Analysis — analyze conflict history and generate recommendations
+export { createConflictPatternAnalysis } from "./conflict-patterns.js";
+export type {
+  ConflictPatternType,
+  ConflictFrequency,
+  ConflictPattern,
+  PatternEvidence,
+  PreventionRecommendation,
+  TrendDataPoint,
+  ConflictPatternConfig,
+  ConflictPatternAnalysis,
+} from "./conflict-patterns.js";

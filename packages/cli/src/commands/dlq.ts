@@ -1,8 +1,35 @@
 import chalk from "chalk";
 import type { Command } from "commander";
 import { confirm } from "@inquirer/prompts";
-import { join } from "node:path";
-import { createDeadLetterQueue, expandHome, loadConfig, type DLQEntry } from "@composio/ao-core";
+import { join, dirname } from "node:path";
+import {
+  createDeadLetterQueue,
+  expandHome,
+  loadConfig,
+  getEventPublisher,
+  getBMADTracker,
+  getRegisteredOperationTypes,
+  replayEntry,
+  type DLQEntry,
+} from "@composio/ao-core";
+
+/**
+ * Get the DLQ path based on config location
+ */
+function getDlqPath(config: ReturnType<typeof loadConfig>): string {
+  // DLQ is stored relative to the config file location
+  // Default to ~/.agent-orchestrator/dlq.jsonl for global state
+  const configDir = dirname(config.configPath);
+  return expandHome(join(configDir, ".ao/state/dlq.jsonl"));
+}
+
+/**
+ * Helper to derive dataDir from config
+ */
+function getDataDir(config: ReturnType<typeof loadConfig>): string {
+  const configDir = dirname(config.configPath);
+  return expandHome(join(configDir, ".ao/state"));
+}
 
 /**
  * Format a DLQ entry for display
@@ -87,7 +114,7 @@ export function registerDLQ(program: Command): void {
       }
 
       // Default DLQ path
-      const dlqPath = expandHome(join(config.stateDir || ".ao/state", "dlq.jsonl"));
+      const dlqPath = getDlqPath(config);
       const dlq = createDeadLetterQueue({ dlqPath, alertThreshold: 1000 });
 
       try {
@@ -136,7 +163,7 @@ export function registerDLQ(program: Command): void {
       }
 
       // Default DLQ path
-      const dlqPath = expandHome(join(config.stateDir || ".ao/state", "dlq.jsonl"));
+      const dlqPath = getDlqPath(config);
       const dlq = createDeadLetterQueue({ dlqPath, alertThreshold: 1000 });
 
       try {
@@ -153,22 +180,53 @@ export function registerDLQ(program: Command): void {
         console.log(chalk.dim(`Payload: ${JSON.stringify(entry.payload, null, 2)}`));
         console.log();
 
-        // For now, we can't actually replay without knowing what operation to execute
-        // This would require integration with the actual services (event bus, BMAD sync, etc.)
-        // For now, we'll show what would be replayed
-        console.log(chalk.yellow("⚠ Replay not fully implemented"));
-        console.log(chalk.dim("This requires integration with service-specific replay handlers."));
-        console.log();
-        console.log(chalk.dim("To manually replay:"));
-        console.log(`  1. Extract payload: ${JSON.stringify(entry.payload)}`);
-        console.log(`  2. Run operation: ${entry.operation}`);
-        console.log(`  3. If successful, run: ao dlq remove ${errorId}`);
+        // Build replay context from registered services
+        const eventPublisher = getEventPublisher();
+        const bmadTracker = getBMADTracker();
 
-        // TODO: Implement service-specific replay handlers
-        // const result = await dlq.replay(errorId, async (payload) => {
-        //   // Service-specific replay logic here
-        //   return await replayOperation(entry.operation, payload);
-        // });
+        // Check if we have handlers for this operation type
+        const registeredTypes = getRegisteredOperationTypes();
+        if (!registeredTypes.includes(entry.operation)) {
+          console.log(chalk.yellow(`⚠ No replay handler for operation type: ${entry.operation}`));
+          console.log(chalk.dim(`Supported types: ${registeredTypes.join(", ")}`));
+          console.log();
+          console.log(chalk.dim("To manually replay:"));
+          console.log(`  1. Extract payload: ${JSON.stringify(entry.payload)}`);
+          console.log(`  2. Run operation: ${entry.operation}`);
+          console.log(`  3. If successful, run: ao dlq remove ${errorId}`);
+          process.exit(1);
+        }
+
+        // Check service availability
+        if (entry.operation === "event_publish" && !eventPublisher) {
+          console.log(chalk.yellow("⚠ Event publisher not available"));
+          console.log(chalk.dim("Start the application to enable event replay."));
+          process.exit(1);
+        }
+
+        if (entry.operation === "bmad_sync" && !bmadTracker) {
+          console.log(chalk.yellow("⚠ BMAD tracker not available"));
+          console.log(chalk.dim("Start the application to enable BMAD sync replay."));
+          process.exit(1);
+        }
+
+        // Attempt replay
+        const result = await replayEntry(entry, {
+          eventPublisher,
+          bmadTracker,
+          dataDir: getDataDir(config),
+        });
+
+        if (result.success) {
+          console.log(chalk.green(`✓ Replay successful`));
+          // Remove from DLQ on success
+          await dlq.remove(errorId);
+          console.log(chalk.dim(`Removed entry ${errorId} from DLQ`));
+        } else {
+          console.log(chalk.red(`✗ Replay failed: ${result.error}`));
+          console.log(chalk.dim("Entry remains in DLQ for future retry"));
+          process.exit(1);
+        }
       } finally {
         await dlq.stop();
       }
@@ -189,7 +247,7 @@ export function registerDLQ(program: Command): void {
       }
 
       // Default DLQ path
-      const dlqPath = expandHome(join(config.stateDir || ".ao/state", "dlq.jsonl"));
+      const dlqPath = getDlqPath(config);
       const dlq = createDeadLetterQueue({ dlqPath, alertThreshold: 1000 });
 
       try {
@@ -201,18 +259,54 @@ export function registerDLQ(program: Command): void {
           return;
         }
 
-        console.log(
-          chalk.bold(`Found ${chalk.yellow(String(entries.length))} failed operations to replay\n`),
-        );
+        // Build replay context from registered services
+        const eventPublisher = getEventPublisher();
+        const bmadTracker = getBMADTracker();
+        const registeredTypes = getRegisteredOperationTypes();
+
+        // Categorize entries
+        const supported: DLQEntry[] = [];
+        const unsupported: DLQEntry[] = [];
 
         for (const entry of entries) {
+          if (registeredTypes.includes(entry.operation)) {
+            supported.push(entry);
+          } else {
+            unsupported.push(entry);
+          }
+        }
+
+        console.log(
+          chalk.bold(`Found ${chalk.yellow(String(entries.length))} failed operations\n`),
+        );
+        console.log(`  Supported: ${chalk.green(String(supported.length))}`);
+        console.log(`  Unsupported: ${chalk.red(String(unsupported.length))}`);
+
+        if (unsupported.length > 0) {
+          console.log();
+          console.log(chalk.dim("Unsupported operation types:"));
+          const unsupportedTypes = [...new Set(unsupported.map((e) => e.operation))];
+          for (const type of unsupportedTypes) {
+            console.log(`  - ${type}`);
+          }
+        }
+
+        if (supported.length === 0) {
+          console.log();
+          console.log(chalk.yellow("No supported operations to replay"));
+          return;
+        }
+
+        console.log();
+        console.log(chalk.dim("Operations to replay:"));
+        for (const entry of supported) {
           console.log(`  ${chalk.cyan(entry.operation)}: ${entry.failureReason}`);
         }
         console.log();
 
         if (!opts.force) {
           const confirmed = await confirm({
-            message: "Replay all failed operations?",
+            message: `Replay ${supported.length} supported operations?`,
             default: false,
           });
 
@@ -222,14 +316,37 @@ export function registerDLQ(program: Command): void {
           }
         }
 
-        // For now, show what would be replayed
-        // TODO: Implement service-specific replay handlers
-        console.log(chalk.yellow("⚠ Replay not fully implemented"));
-        console.log(chalk.dim("This requires integration with service-specific replay handlers."));
+        // Replay each supported entry
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const entry of supported) {
+          const result = await replayEntry(entry, {
+            eventPublisher,
+            bmadTracker,
+            dataDir: getDataDir(config),
+          });
+
+          if (result.success) {
+            await dlq.remove(entry.errorId);
+            console.log(chalk.green(`  ✓ ${entry.operation} (${entry.errorId})`));
+            successCount++;
+          } else {
+            console.log(chalk.red(`  ✗ ${entry.operation} (${entry.errorId}): ${result.error}`));
+            failCount++;
+          }
+        }
+
         console.log();
-        console.log(chalk.dim("To manually replay each operation:"));
-        console.log(`  Run: ${chalk.bold("ao dlq list")}`);
-        console.log(`  Then: ${chalk.bold("ao dlq replay <error-id>")}`);
+        console.log(chalk.bold("Replay Summary"));
+        console.log(`  Successful: ${chalk.green(String(successCount))}`);
+        console.log(`  Failed: ${chalk.red(String(failCount))}`);
+
+        if (failCount > 0) {
+          console.log();
+          console.log(chalk.dim("Failed entries remain in DLQ for future retry"));
+          process.exit(1);
+        }
       } finally {
         await dlq.stop();
       }
@@ -251,7 +368,7 @@ export function registerDLQ(program: Command): void {
       }
 
       // Default DLQ path
-      const dlqPath = expandHome(join(config.stateDir || ".ao/state", "dlq.jsonl"));
+      const dlqPath = getDlqPath(config);
       const dlq = createDeadLetterQueue({ dlqPath, alertThreshold: 1000 });
 
       try {
@@ -327,7 +444,7 @@ export function registerDLQ(program: Command): void {
       }
 
       // Default DLQ path
-      const dlqPath = expandHome(join(config.stateDir || ".ao/state", "dlq.jsonl"));
+      const dlqPath = getDlqPath(config);
       const dlq = createDeadLetterQueue({ dlqPath, alertThreshold: 1000 });
 
       try {

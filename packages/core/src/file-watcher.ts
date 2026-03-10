@@ -22,7 +22,11 @@ export class FileWatcherImpl implements FileWatcher {
   private debounceEventCounts: Map<string, number> = new Map();
   private previousVersions: Map<string, Record<string, unknown>> = new Map();
   private retryAttempts: Map<string, number> = new Map();
+  private cleanupTimer: NodeJS.Timeout | null = null;
   private readonly maxRetryAttempts = 5;
+  // Default retention settings
+  private readonly defaultMaxBackupAgeMs = 7 * 24 * 60 * 60 * 1000; // 7 days
+  private readonly defaultCleanupIntervalMs = 60 * 60 * 1000; // 1 hour
 
   constructor(config: FileWatcherConfig) {
     this.config = config;
@@ -63,6 +67,11 @@ export class FileWatcherImpl implements FileWatcher {
 
     // Store initial state for comparison
     await this.storeInitialState(path);
+
+    // Start periodic cleanup if this is the first watcher and cleanup is enabled
+    if (this.watchers.size === 1 && this.config.cleanupIntervalMs !== 0) {
+      this.startPeriodicCleanup();
+    }
   }
 
   async unwatch(path: string): Promise<void> {
@@ -85,6 +94,12 @@ export class FileWatcherImpl implements FileWatcher {
   }
 
   async close(): Promise<void> {
+    // Stop periodic cleanup timer
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
+
     for (const [_path, watcher] of this.watchers.entries()) {
       await watcher.close();
     }
@@ -490,17 +505,85 @@ export class FileWatcherImpl implements FileWatcher {
   private async cleanupOldBackups(backupDir: string, maxBackups: number): Promise<void> {
     try {
       const files = await readdir(backupDir);
-      const backupFiles = files.filter((f) => f.startsWith("sprint-status.yaml.backup.")).sort();
+      const maxAgeMs = this.config.maxBackupAgeMs ?? this.defaultMaxBackupAgeMs;
+      const now = Date.now();
 
-      // Remove oldest backups if we have too many
-      while (backupFiles.length > maxBackups) {
-        const oldestBackup = backupFiles.shift();
+      // Get backup files with their stats
+      const backupFilesWithStats = await Promise.all(
+        files
+          .filter((f) => f.startsWith("sprint-status.yaml.backup."))
+          .map(async (f) => {
+            const filePath = join(backupDir, f);
+            const stat = await import("node:fs/promises").then((fs) => fs.stat(filePath));
+            return {
+              name: f,
+              path: filePath,
+              mtime: stat.mtimeMs,
+              age: now - stat.mtimeMs,
+            };
+          }),
+      );
+
+      // Sort by modification time (oldest first)
+      backupFilesWithStats.sort((a, b) => a.mtime - b.mtime);
+
+      // Remove files that are too old
+      const expiredFiles = backupFilesWithStats.filter((f) => f.age > maxAgeMs);
+      for (const file of expiredFiles) {
+        await unlink(file.path);
+        console.log(
+          `🗑️  Removed expired backup: ${file.name} (age: ${Math.round(file.age / (1000 * 60 * 60 * 24))} days)`,
+        );
+      }
+
+      // Get remaining files after age-based cleanup
+      const remainingFiles = backupFilesWithStats.filter((f) => f.age <= maxAgeMs);
+
+      // Remove oldest backups if we still have too many
+      while (remainingFiles.length > maxBackups) {
+        const oldestBackup = remainingFiles.shift();
         if (oldestBackup) {
-          await unlink(join(backupDir, oldestBackup));
+          await unlink(oldestBackup.path);
+          console.log(`🗑️  Removed old backup: ${oldestBackup.name} (exceeds maxBackups limit)`);
         }
       }
     } catch (error) {
       console.error("Failed to cleanup old backups:", (error as Error).message);
+    }
+  }
+
+  /**
+   * Start periodic backup cleanup
+   */
+  private startPeriodicCleanup(): void {
+    const cleanupIntervalMs = this.config.cleanupIntervalMs ?? this.defaultCleanupIntervalMs;
+    const backupDir = this.config.backupDir || ".backups/";
+    const maxBackups = this.config.maxBackups ?? 10;
+
+    // Run initial cleanup
+    this.cleanupOldBackups(backupDir, maxBackups).catch((error) => {
+      console.error("Failed to run initial backup cleanup:", (error as Error).message);
+    });
+
+    // Schedule periodic cleanup
+    this.cleanupTimer = setInterval(() => {
+      this.cleanupOldBackups(backupDir, maxBackups).catch((error) => {
+        console.error("Failed to run periodic backup cleanup:", (error as Error).message);
+      });
+    }, cleanupIntervalMs);
+
+    console.log(
+      `🗑️  Started periodic backup cleanup (every ${cleanupIntervalMs / 1000 / 60} minutes)`,
+    );
+  }
+
+  /**
+   * Stop periodic backup cleanup
+   */
+  private stopPeriodicCleanup(): void {
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
     }
   }
 

@@ -14,6 +14,8 @@ import type {
   AuditTrailStats,
   EventBus,
   EventBusEvent,
+  ConflictHistoryParams as _ConflictHistoryParams,
+  ConflictHistoryEntry as _ConflictHistoryEntry,
 } from "./types.js";
 import { createHash } from "node:crypto";
 import { appendFile, stat, writeFile } from "node:fs/promises";
@@ -295,6 +297,93 @@ export class AuditTrailImpl implements AuditTrail {
     }
 
     return filtered;
+  }
+
+  /**
+   * Query conflict history with time-range filtering
+   * @param params - Query parameters for conflicts
+   * @returns Conflict history entries
+   */
+  queryConflicts(params: _ConflictHistoryParams = {}): _ConflictHistoryEntry[] {
+    const results: _ConflictHistoryEntry[] = [];
+
+    // Build query params for conflict events
+    const queryParams: QueryParams = {
+      eventType: ["conflict.detected", "conflict.resolved"],
+      since: params.since,
+      until: params.until,
+      includeArchived: params.includeArchived,
+    };
+
+    // Query all conflict-related events
+    const events = this.query(queryParams);
+
+    // Group events by conflict ID
+    const conflictGroups = new Map<string, { detected?: AuditEvent; resolved?: AuditEvent }>();
+
+    for (const event of events) {
+      const conflictId = event.metadata?.conflictId as string | undefined;
+      if (!conflictId) continue;
+
+      const group = conflictGroups.get(conflictId) || {};
+      if (event.eventType === "conflict.detected") {
+        group.detected = event;
+      } else if (event.eventType === "conflict.resolved") {
+        group.resolved = event;
+      }
+      conflictGroups.set(conflictId, group);
+    }
+
+    // Convert groups to entries
+    for (const [conflictId, group] of conflictGroups.entries()) {
+      const detectedEvent = group.detected;
+      if (!detectedEvent) continue;
+
+      const entry: _ConflictHistoryEntry = {
+        event: detectedEvent,
+        conflictId,
+        storyId: (detectedEvent.metadata?.storyId as string) || "",
+        conflictingAgents: (detectedEvent.metadata?.conflictingAgents as string[]) || [],
+      };
+
+      // Add resolution info if available
+      if (group.resolved) {
+        entry.resolution = {
+          winner: (group.resolved.metadata?.winner as string) || "",
+          strategy: (group.resolved.metadata?.strategy as string) || "",
+          timestamp: group.resolved.timestamp,
+        };
+      }
+
+      // Filter by storyId if specified
+      if (params.storyId && entry.storyId !== params.storyId) {
+        continue;
+      }
+
+      // Filter by agentIds if specified
+      if (params.agentIds && params.agentIds.length > 0) {
+        const hasAgent = params.agentIds.some((agentId) =>
+          entry.conflictingAgents.includes(agentId),
+        );
+        if (!hasAgent) {
+          continue;
+        }
+      }
+
+      results.push(entry);
+    }
+
+    // Sort by timestamp (most recent first)
+    results.sort(
+      (a, b) => new Date(b.event.timestamp).getTime() - new Date(a.event.timestamp).getTime(),
+    );
+
+    // Apply limit
+    if (params.limit && results.length > params.limit) {
+      return results.slice(0, params.limit);
+    }
+
+    return results;
   }
 
   /**

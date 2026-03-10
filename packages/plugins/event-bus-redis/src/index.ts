@@ -301,6 +301,21 @@ export function create(config: EventBusConfig): EventBus {
       return eventQueue.length;
     },
 
+    async ping(): Promise<number | undefined> {
+      if (!redis || !state.isConnected) {
+        return undefined;
+      }
+
+      try {
+        const startTime = Date.now();
+        // Use Redis PING command to measure round-trip latency
+        await redis.config("GET", "timeout"); // Light command that requires server response
+        return Date.now() - startTime;
+      } catch {
+        return undefined;
+      }
+    },
+
     async close(): Promise<void> {
       // Close Redis connection first (this will trigger "close" event setting isDegraded)
       if (redis) {

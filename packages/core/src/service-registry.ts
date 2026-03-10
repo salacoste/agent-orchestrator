@@ -4,11 +4,12 @@
  */
 
 import type { DegradedModeService } from "./degraded-mode.js";
-import type { EventPublisher } from "./types.js";
+import type { BMADTracker, EventPublisher } from "./types.js";
 
 interface ServiceRegistry {
   degradedModeService?: DegradedModeService;
   eventPublisher?: EventPublisher;
+  bmadTracker?: BMADTracker;
 }
 
 // Global registry instance
@@ -44,6 +45,22 @@ export function getDegradedModeService(): DegradedModeService | undefined {
  */
 export function getEventPublisher(): EventPublisher | undefined {
   return registry.eventPublisher;
+}
+
+/**
+ * Register the BMADTracker instance
+ * Called by the application during initialization
+ */
+export function registerBMADTracker(tracker: BMADTracker): void {
+  registry.bmadTracker = tracker;
+}
+
+/**
+ * Get the registered BMADTracker instance
+ * Returns undefined if not registered
+ */
+export function getBMADTracker(): BMADTracker | undefined {
+  return registry.bmadTracker;
 }
 
 /**

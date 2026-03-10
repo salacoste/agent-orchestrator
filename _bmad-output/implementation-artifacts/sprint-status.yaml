@@ -87,7 +87,7 @@ development_status:
   3-6-agent-session-cards-with-activity-history: done
   3-7-event-audit-trail-viewer: done
   3-8-workflow-health-metrics-panel: done
-  epic-3-retrospective: optional
+  epic-3-retrospective: done
 
   # Epic 4: Error Handling & Graceful Degradation
   epic-4: done

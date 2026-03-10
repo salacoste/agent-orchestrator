@@ -99,7 +99,7 @@ development_status:
   4-6-event-bus-backlog-recovery: done
   4-7-metadata-corruption-detection-and-recovery: done
   4-8-health-check-configuration: done
-  epic-4-retrospective: optional
+  epic-4-retrospective: done
 
   # Epic 5: Multi-Agent Conflict Resolution
   epic-5: done

@@ -27,9 +27,69 @@ export class FileWatcherImpl implements FileWatcher {
   // Default retention settings
   private readonly defaultMaxBackupAgeMs = 7 * 24 * 60 * 60 * 1000; // 7 days
   private readonly defaultCleanupIntervalMs = 60 * 60 * 1000; // 1 hour
+  // Signal handlers for cleanup (static to prevent multiple registrations)
+  private static signalHandlersRegistered = false;
+  private static activeWatchers: Set<FileWatcherImpl> = new Set();
+  private isShuttingDown = false;
 
   constructor(config: FileWatcherConfig) {
     this.config = config;
+
+    // Register this instance
+    FileWatcherImpl.activeWatchers.add(this);
+
+    // Setup signal handlers only once globally
+    if (!FileWatcherImpl.signalHandlersRegistered) {
+      FileWatcherImpl.signalHandlersRegistered = true;
+
+      // Note: SIGKILL cannot be caught, so we only handle SIGTERM and SIGINT
+      process.on("SIGTERM", FileWatcherImpl.handleSignal);
+      process.on("SIGINT", FileWatcherImpl.handleSignal);
+    }
+  }
+
+  /**
+   * Handle process signals for graceful cleanup (static method)
+   */
+  private static handleSignal(signal: string): void {
+    console.info(`\nReceived ${signal}, cleaning up file watcher resources...`);
+
+    // Cleanup all active watchers synchronously
+    for (const watcher of FileWatcherImpl.activeWatchers) {
+      if (!watcher.isShuttingDown) {
+        watcher.isShuttingDown = true;
+        watcher.cleanupSync();
+      }
+    }
+    FileWatcherImpl.activeWatchers.clear();
+  }
+
+  /**
+   * Synchronous cleanup for signals that don't allow async operations
+   */
+  private cleanupSync(): void {
+    // Clear debounce timers synchronously
+    for (const timer of this.debounceTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.debounceTimers.clear();
+
+    // Clear cleanup timer
+    if (this.cleanupTimer) {
+      clearInterval(this.cleanupTimer);
+      this.cleanupTimer = null;
+    }
+
+    // Close all watchers synchronously (best effort)
+    for (const watcher of this.watchers.values()) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+        (watcher as unknown as { close: () => void }).close();
+      } catch {
+        // Ignore errors during sync cleanup
+      }
+    }
+    this.watchers.clear();
   }
 
   async watch(path: string): Promise<void> {
@@ -94,12 +154,22 @@ export class FileWatcherImpl implements FileWatcher {
   }
 
   async close(): Promise<void> {
+    // Remove from active watchers
+    FileWatcherImpl.activeWatchers.delete(this);
+
     // Stop periodic cleanup timer
     if (this.cleanupTimer) {
       clearInterval(this.cleanupTimer);
       this.cleanupTimer = null;
     }
 
+    // Clear all debounce timers
+    for (const timer of this.debounceTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.debounceTimers.clear();
+
+    // Close all watchers
     for (const [_path, watcher] of this.watchers.entries()) {
       await watcher.close();
     }

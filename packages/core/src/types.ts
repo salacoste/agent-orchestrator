@@ -2164,6 +2164,9 @@ export interface HealthCheckResult {
   components: ComponentHealth[];
   timestamp: Date;
   exitCode: number;
+  /** Rate limiting metadata */
+  rateLimited?: boolean;
+  rateLimitMessage?: string;
 }
 
 /**
@@ -2188,6 +2191,12 @@ export interface HealthCheckConfig {
   lifecycleManager?: LifecycleManager;
   thresholds?: HealthCheckThresholds;
   checkIntervalMs?: number;
+  /** Rate limiting: minimum interval between health checks (ms) */
+  minCheckIntervalMs?: number;
+  /** Rate limiting: time window for tracking check frequency (ms) */
+  rateLimitWindowMs?: number;
+  /** Rate limiting: maximum checks allowed per time window */
+  maxChecksPerWindow?: number;
 }
 
 /**

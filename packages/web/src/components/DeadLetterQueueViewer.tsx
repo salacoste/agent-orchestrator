@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type { DLQEntry, DLQStats } from "@composio/ao-core";
 
 interface DLQResponse {
@@ -29,10 +29,14 @@ export function DeadLetterQueueViewer({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [purging, setPurging] = useState(false);
+  const [filterOperation, setFilterOperation] = useState<string>("all");
+  const [retrying, setRetrying] = useState<Set<string>>(new Set());
+  const [retryResults, setRetryResults] = useState<
+    Map<string, { success: boolean; message: string }>
+  >(new Map());
 
   const fetchData = useCallback(() => {
     setLoading(true);
-    // TODO: Pass projectId to API for project-specific DLQ paths when config loading is available
     fetch(`/api/dlq?format=all&project=${encodeURIComponent(projectId)}`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load DLQ");
@@ -46,7 +50,7 @@ export function DeadLetterQueueViewer({ projectId }: { projectId: string }) {
         console.error("Failed to load DLQ:", err);
         setLoading(false);
       });
-  }, []);
+  }, [projectId]);
 
   useEffect(() => {
     fetchData();
@@ -81,6 +85,64 @@ export function DeadLetterQueueViewer({ projectId }: { projectId: string }) {
     }
   };
 
+  const handleRetry = async (errorId: string) => {
+    setRetrying((prev) => new Set(prev).add(errorId));
+    setRetryResults((prev) => {
+      const next = new Map(prev);
+      next.delete(errorId);
+      return next;
+    });
+
+    try {
+      const res = await fetch(`/api/dlq/${errorId}/retry`, { method: "POST" });
+      const result = await res.json();
+
+      setRetryResults((prev) => {
+        const next = new Map(prev);
+        next.set(errorId, {
+          success: result.success,
+          message: result.success ? "Retry successful" : result.error || "Retry failed",
+        });
+        return next;
+      });
+
+      if (result.success) {
+        // Remove from list after successful retry
+        setTimeout(() => {
+          fetchData();
+        }, 1000);
+      }
+    } catch (err) {
+      setRetryResults((prev) => {
+        const next = new Map(prev);
+        next.set(errorId, {
+          success: false,
+          message: err instanceof Error ? err.message : "Retry failed",
+        });
+        return next;
+      });
+    } finally {
+      setRetrying((prev) => {
+        const next = new Set(prev);
+        next.delete(errorId);
+        return next;
+      });
+    }
+  };
+
+  // Get unique operation types for filter
+  const operationTypes = useMemo(() => {
+    if (!data?.stats.byOperation) return ["all"];
+    return ["all", ...Object.keys(data.stats.byOperation)];
+  }, [data?.stats.byOperation]);
+
+  // Filter entries by operation type
+  const filteredEntries = useMemo(() => {
+    if (!data?.entries) return [];
+    if (filterOperation === "all") return data.entries;
+    return data.entries.filter((entry) => entry.operation === filterOperation);
+  }, [data?.entries, filterOperation]);
+
   if (loading) {
     return (
       <div className="rounded-[6px] border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-4 py-3">
@@ -106,7 +168,7 @@ export function DeadLetterQueueViewer({ projectId }: { projectId: string }) {
     );
   }
 
-  const { stats, entries } = data;
+  const { stats } = data;
 
   return (
     <div className="rounded-[6px] border border-[var(--color-border)] bg-[var(--color-bg-surface)] px-4 py-3">
@@ -135,9 +197,30 @@ export function DeadLetterQueueViewer({ projectId }: { projectId: string }) {
         </div>
       )}
 
+      {/* Operation type filter */}
+      <div className="mb-3">
+        <select
+          value={filterOperation}
+          onChange={(e) => setFilterOperation(e.target.value)}
+          className="text-xs bg-[var(--color-bg-secondary)] border border-[var(--color-border)] rounded px-2 py-1 text-[var(--color-text-primary)]"
+        >
+          {operationTypes.map((op) => (
+            <option key={op} value={op}>
+              {op === "all" ? "All operations" : `${op} (${stats.byOperation[op] || 0})`}
+            </option>
+          ))}
+        </select>
+        <span className="text-xs text-[var(--color-text-muted)] ml-2">
+          Showing {filteredEntries.length} of {stats.totalEntries}
+        </span>
+      </div>
+
       <div className="space-y-2 max-h-96 overflow-y-auto">
-        {entries.map((entry) => {
+        {filteredEntries.map((entry) => {
           const isExpanded = expanded.has(entry.errorId);
+          const isRetrying = retrying.has(entry.errorId);
+          const retryResult = retryResults.get(entry.errorId);
+
           return (
             <div
               key={entry.errorId}
@@ -174,6 +257,27 @@ export function DeadLetterQueueViewer({ projectId }: { projectId: string }) {
                       </div>
                     )}
                   </div>
+
+                  {/* Retry button and result */}
+                  <div className="mt-2 flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRetry(entry.errorId);
+                      }}
+                      disabled={isRetrying}
+                      className="text-xs px-2 py-1 bg-[var(--color-accent)] text-[var(--color-accent-foreground)] rounded hover:opacity-90 disabled:opacity-50 transition-opacity"
+                    >
+                      {isRetrying ? "Retrying..." : "Retry"}
+                    </button>
+                    {retryResult && (
+                      <span
+                        className={`text-xs ${retryResult.success ? "text-green-400" : "text-red-400"}`}
+                      >
+                        {retryResult.message}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -185,7 +289,11 @@ export function DeadLetterQueueViewer({ projectId }: { projectId: string }) {
         <div className="text-xs text-[var(--color-text-muted)]">
           By operation:
           {Object.entries(stats.byOperation).map(([op, count]) => (
-            <span key={op} className="ml-2">
+            <span
+              key={op}
+              className={`ml-2 cursor-pointer hover:text-[var(--color-text-secondary)] ${filterOperation === op ? "text-[var(--color-accent)]" : ""}`}
+              onClick={() => setFilterOperation(op)}
+            >
               {op}: {count}
             </span>
           ))}

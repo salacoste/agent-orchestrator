@@ -474,3 +474,21 @@ export type {
   ConflictPatternConfig,
   ConflictPatternAnalysis,
 } from "./conflict-patterns.js";
+
+// Conflict Notification Integration — push notifications for conflict events
+export { createConflictNotificationIntegration } from "./conflict-notification.js";
+export type {
+  ConflictNotificationConfig,
+  ConflictNotificationStats,
+  ConflictNotificationIntegration,
+} from "./conflict-notification.js";
+
+// Conflict Metrics — track prevention, auto-resolution, manual resolution
+export { createConflictMetricsService } from "./conflict-metrics.js";
+export type {
+  ConflictResolutionType,
+  ConflictMetricsSummary,
+  ConflictMetricEvent,
+  ConflictMetricsConfig,
+  ConflictMetricsService,
+} from "./conflict-metrics.js";

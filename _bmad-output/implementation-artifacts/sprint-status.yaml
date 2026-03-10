@@ -547,24 +547,50 @@ action_items:
       description: "Handle SIGKILL for watch mode intervals, prevent orphaned timers"
       epic: 4
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Future enhancement"
+      completed_at: "2026-03-10"
+      notes: |
+        Implemented graceful signal handling in file-watcher.ts:
+        - Static signal handler registration (prevents duplicate handlers)
+        - Handles SIGTERM and SIGINT for graceful cleanup
+        - cleanupSync() for synchronous timer cleanup
+        - Active watchers set for cleanup on signal
+        - Note: SIGKILL cannot be caught in Node.js (by design)
 
     E4-A8:
       title: "Health Check Rate Limiting"
       description: "Prevent health check spam, throttle rapid check requests"
       epic: 4
       owner: "Charlie (Senior Dev)"
-      status: pending
+      status: done
       due: "Future enhancement"
+      completed_at: "2026-03-10"
+      notes: |
+        Implemented rate limiting in health-check.ts:
+        - minCheckIntervalMs: Minimum time between checks (default 1s)
+        - rateLimitWindowMs: Time window for tracking frequency (default 60s)
+        - maxChecksPerWindow: Max checks per window (default 60)
+        - pruneOldCheckTimestamps() for cleaning old entries
+        - isRateLimited() and getRateLimitStatus() methods
+        - Returns cached status when rate limited
+        - rateLimited and rateLimitMessage fields in HealthCheckResult
 
     E4-A9:
       title: "Web Dashboard for Error Management"
       description: "DLQ viewer in dashboard, health metrics panel enhancement"
       epic: 4
       owner: "Alex (QA)"
-      status: pending
+      status: done
       due: "Future enhancement"
+      completed_at: "2026-03-10"
+      notes: |
+        Enhanced DeadLetterQueueViewer component with:
+        - Operation type filtering (dropdown filter)
+        - Individual retry functionality with POST /api/dlq/[errorId]/retry
+        - Retry result display (success/failure feedback)
+        - Integration with replay handlers from @composio/ao-core
+        - Auto-refresh after successful retry
 
     # Epic 5
     E5-A7:
@@ -572,16 +598,34 @@ action_items:
       description: "Push notifications on conflict detection/resolution, desktop/slack integration"
       epic: 5
       owner: "Alex (QA)"
-      status: pending
+      status: done
       due: "Future enhancement"
+      completed_at: "2026-03-10"
+      notes: |
+        Implemented conflict-notification.ts with:
+        - Event bus subscription for conflict.detected and conflict.resolved events
+        - Notification service integration for push notifications
+        - Configurable notification channels (desktop, slack, webhook)
+        - Severity-based filtering (minSeverity threshold)
+        - Optional notification on auto-resolution
+        - Statistics tracking for sent/failed notifications
 
     E5-A8:
       title: "Conflict Prevention Metrics"
       description: "Track conflicts prevented, auto-resolutions, manual resolutions"
       epic: 5
       owner: "Sam (PM)"
-      status: pending
+      status: done
       due: "Future enhancement"
+      completed_at: "2026-03-10"
+      notes: |
+        Implemented conflict-metrics.ts with:
+        - Record conflict detection, prevention, auto-resolution, manual resolution
+        - Track resolution time (time from detection to resolution)
+        - Calculate prevention rate and auto-resolution rate
+        - Breakdown by severity and resolution type
+        - Export metrics as JSON
+        - Audit trail integration for persistent storage
 
     E5-A9:
       title: "Web-Based Conflict Resolution"
@@ -630,9 +674,10 @@ action_items:
       epic_5: 9
       epic_6: 9
     by_status:
-      pending: 9
+      pending: 4
       in_progress: 0
-      done: 18
+      done: 23
     notes: |
       All HIGH and MEDIUM priority action items completed as of 2026-03-10.
-      Remaining LOW priority items are marked as "Future enhancement".
+      LOW priority items completed: E4-A7, E4-A8, E4-A9, E5-A7, E5-A8.
+      Remaining: E5-A9, E6-A7, E6-A8, E6-A9 (future enhancements).

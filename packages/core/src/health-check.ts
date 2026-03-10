@@ -8,6 +8,7 @@
  * - Agent registry (active agents)
  *
  * Provides configurable thresholds, watch mode, and proper exit codes.
+ * Includes rate limiting to prevent health check spam.
  */
 
 import type {
@@ -24,6 +25,9 @@ import { constants } from "node:fs";
 const DEFAULT_CHECK_INTERVAL_MS = 30000; // 30 seconds
 const DEFAULT_MAX_LATENCY_MS = 1000; // 1 second
 const DEFAULT_MAX_QUEUE_DEPTH = 100;
+const DEFAULT_MIN_CHECK_INTERVAL_MS = 1000; // 1 second minimum between checks
+const DEFAULT_RATE_LIMIT_WINDOW_MS = 60000; // 1 minute window for rate limiting
+const DEFAULT_MAX_CHECKS_PER_WINDOW = 60; // Max 60 checks per minute (1 per second average)
 
 /**
  * Health Check Service Implementation
@@ -33,6 +37,12 @@ export class HealthCheckServiceImpl implements HealthCheckService {
   private currentStatus: HealthCheckResult | null = null;
   private checkInterval?: ReturnType<typeof setInterval>;
   private startTime: Date;
+  // Rate limiting state
+  private lastCheckTime = 0;
+  private checkTimestamps: number[] = [];
+  private readonly minCheckIntervalMs: number;
+  private readonly rateLimitWindowMs: number;
+  private readonly maxChecksPerWindow: number;
 
   constructor(config: HealthCheckConfig) {
     // Validate thresholds
@@ -47,12 +57,74 @@ export class HealthCheckServiceImpl implements HealthCheckService {
 
     this.config = config;
     this.startTime = new Date();
+    // Rate limiting configuration
+    this.minCheckIntervalMs = config.minCheckIntervalMs ?? DEFAULT_MIN_CHECK_INTERVAL_MS;
+    this.rateLimitWindowMs = config.rateLimitWindowMs ?? DEFAULT_RATE_LIMIT_WINDOW_MS;
+    this.maxChecksPerWindow = config.maxChecksPerWindow ?? DEFAULT_MAX_CHECKS_PER_WINDOW;
+  }
+
+  /**
+   * Prune check timestamps older than the rate limit window
+   */
+  private pruneOldCheckTimestamps(now: number): void {
+    const cutoff = now - this.rateLimitWindowMs;
+    this.checkTimestamps = this.checkTimestamps.filter((ts) => ts >= cutoff);
+  }
+
+  /**
+   * Check if rate limiting is in effect
+   */
+  isRateLimited(): boolean {
+    const now = Date.now();
+    this.pruneOldCheckTimestamps(now);
+    return this.checkTimestamps.length >= this.maxChecksPerWindow;
+  }
+
+  /**
+   * Get current rate limit status
+   */
+  getRateLimitStatus(): { checksInWindow: number; maxChecks: number; windowMs: number } {
+    const now = Date.now();
+    this.pruneOldCheckTimestamps(now);
+    return {
+      checksInWindow: this.checkTimestamps.length,
+      maxChecks: this.maxChecksPerWindow,
+      windowMs: this.rateLimitWindowMs,
+    };
   }
 
   /**
    * Run all health checks
+   * Implements rate limiting to prevent check spam
    */
   async check(): Promise<HealthCheckResult> {
+    const now = Date.now();
+
+    // Rate limit check: enforce minimum interval between checks
+    if (now - this.lastCheckTime < this.minCheckIntervalMs) {
+      // Return cached status if available
+      if (this.currentStatus) {
+        return this.currentStatus;
+      }
+    }
+
+    // Rate limit check: enforce max checks per time window
+    this.pruneOldCheckTimestamps(now);
+    if (this.checkTimestamps.length >= this.maxChecksPerWindow) {
+      // Return cached status or create a rate-limited response
+      if (this.currentStatus) {
+        return {
+          ...this.currentStatus,
+          rateLimited: true,
+          rateLimitMessage: `Rate limit exceeded: ${this.maxChecksPerWindow} checks per ${this.rateLimitWindowMs / 1000}s`,
+        };
+      }
+    }
+
+    // Record this check
+    this.lastCheckTime = now;
+    this.checkTimestamps.push(now);
+
     const components: ComponentHealth[] = [];
 
     // Check Event Bus

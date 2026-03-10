@@ -1,7 +1,8 @@
-# Agent Orchestrator — self-hosting config (dog-fooding)
+# Agent Orchestrator — multi-project config
+# R2d2's workspace: spawn agents across all active projects
 
 dataDir: ~/.ao-sessions
-worktreeDir: ~/.worktrees/ao
+worktreeDir: ~/.worktrees
 
 defaults:
   runtime: tmux
@@ -9,11 +10,17 @@ defaults:
   workspace: worktree
   notifiers: [desktop]
 
+# ─────────────────────────────────────────────
+# Projects
+# ─────────────────────────────────────────────
+
 projects:
+
+  # ── Agent Orchestrator (this project) ──────
   ao:
     name: Agent Orchestrator
-    repo: ComposioHQ/agent-orchestrator
-    path: ~/agent-orchestrator
+    repo: salacoste/agent-orchestrator
+    path: ~/Documents/Code_Projects/00_mcp/agent-orchestrator
     defaultBranch: main
     sessionPrefix: ao
     scm:
@@ -24,5 +31,130 @@ projects:
     symlinks: [.claude]
     postCreate:
       - "pnpm install"
+      - "pnpm build"
     agentConfig:
       permissions: skip
+      model: opus
+    agentRules: |
+      Follow CLAUDE.md conventions strictly.
+      Use execFile, never exec. Use .js extensions in ESM imports.
+      Run pnpm typecheck && pnpm lint before committing.
+      Use conventional commits: feat:, fix:, chore:, docs:
+
+  # ── WB Repricer / ERP System ───────────────
+  wb-repricer:
+    name: WB Repricer System
+    repo: salacoste/wb-erp-system-daytona
+    path: ~/Documents/Code_Projects/wb-repricer-system-new
+    defaultBranch: main
+    sessionPrefix: wb
+    postCreate:
+      - "npm install"
+    agentConfig:
+      permissions: skip
+
+  # ── SpaceChemical ──────────────────────────
+  spacechemical:
+    name: SpaceChemical
+    repo: salacoste/spacechemical
+    path: ~/Documents/Code_Projects/spacechemical
+    defaultBranch: main
+    sessionPrefix: sc
+    agentConfig:
+      permissions: skip
+
+  # ── Auto-Claude ────────────────────────────
+  auto-claude:
+    name: Auto-Claude
+    repo: salacoste/Auto-Claude
+    path: ~/Documents/Code_Projects/Auto-Claude
+    defaultBranch: main
+    sessionPrefix: ac
+    postCreate:
+      - "npm install"
+    agentConfig:
+      permissions: skip
+
+  # ── MCP N8N Workflow Builder ───────────────
+  n8n-mcp:
+    name: N8N MCP Builder
+    repo: salacoste/mcp-n8n-workflow-builder
+    path: ~/Documents/Code_Projects/mcp-n8n-workflow-builder
+    defaultBranch: main
+    sessionPrefix: n8n
+    agentConfig:
+      permissions: skip
+
+  # ── CloudControl (Rust) ────────────────────
+  cloudcontrol:
+    name: CloudControl
+    repo: salacoste/cloudcontrol-rust
+    path: ~/Documents/Code_Projects/cloudcontrol-rust
+    defaultBranch: main
+    sessionPrefix: cc
+    postCreate:
+      - "cargo build"
+    agentConfig:
+      permissions: skip
+
+  # ── Antigravity Manager ────────────────────
+  antigravity:
+    name: Antigravity Manager
+    repo: salacoste/Antigravity-Manager
+    path: ~/Documents/Code_Projects/00_mcp/Antigravity-Manager
+    defaultBranch: main
+    sessionPrefix: ag
+    postCreate:
+      - "npm install"
+    agentConfig:
+      permissions: skip
+
+  # ── Automaker ──────────────────────────────
+  automaker:
+    name: Automaker
+    repo: salacoste/automaker
+    path: ~/Documents/Code_Projects/00_mcp/automaker
+    defaultBranch: main
+    sessionPrefix: am
+    postCreate:
+      - "npm install"
+    agentConfig:
+      permissions: skip
+
+  # ── rafctl (CLI Agent Manager) ─────────────
+  rafctl:
+    name: rafctl
+    repo: salacoste/rafctl
+    path: ~/Documents/Code_Projects/00_mcp/cli_agent_manager-my
+    defaultBranch: main
+    sessionPrefix: rf
+    postCreate:
+      - "cargo build"
+    agentConfig:
+      permissions: skip
+
+# ─────────────────────────────────────────────
+# Reactions (global defaults)
+# ─────────────────────────────────────────────
+
+reactions:
+  ci-failed:
+    auto: true
+    action: send-to-agent
+    retries: 2
+    escalateAfter: 2
+
+  changes-requested:
+    auto: true
+    action: send-to-agent
+    escalateAfter: 30m
+
+  approved-and-green:
+    auto: false
+    action: notify
+    priority: action
+
+  agent-stuck:
+    threshold: 10m
+    action: notify
+    priority: urgent

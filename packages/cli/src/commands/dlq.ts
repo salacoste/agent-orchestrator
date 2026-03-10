@@ -174,6 +174,67 @@ export function registerDLQ(program: Command): void {
       }
     });
 
+  // Replay all failed operations
+  dlqCmd
+    .command("replay-all")
+    .description("Replay all failed operations in the DLQ")
+    .option("--force", "Skip confirmation prompt")
+    .action(async (opts: { force?: boolean }) => {
+      let config: ReturnType<typeof loadConfig>;
+      try {
+        config = loadConfig();
+      } catch {
+        console.error(chalk.red("No config found. Run `ao init` first."));
+        process.exit(1);
+      }
+
+      // Default DLQ path
+      const dlqPath = expandHome(join(config.stateDir || ".ao/state", "dlq.jsonl"));
+      const dlq = createDeadLetterQueue({ dlqPath, alertThreshold: 1000 });
+
+      try {
+        await dlq.start();
+        const entries = await dlq.list();
+
+        if (entries.length === 0) {
+          console.log(chalk.green("✓ DLQ is empty — nothing to replay"));
+          return;
+        }
+
+        console.log(
+          chalk.bold(`Found ${chalk.yellow(String(entries.length))} failed operations to replay\n`),
+        );
+
+        for (const entry of entries) {
+          console.log(`  ${chalk.cyan(entry.operation)}: ${entry.failureReason}`);
+        }
+        console.log();
+
+        if (!opts.force) {
+          const confirmed = await confirm({
+            message: "Replay all failed operations?",
+            default: false,
+          });
+
+          if (!confirmed) {
+            console.log(chalk.dim("Replay cancelled"));
+            return;
+          }
+        }
+
+        // For now, show what would be replayed
+        // TODO: Implement service-specific replay handlers
+        console.log(chalk.yellow("⚠ Replay not fully implemented"));
+        console.log(chalk.dim("This requires integration with service-specific replay handlers."));
+        console.log();
+        console.log(chalk.dim("To manually replay each operation:"));
+        console.log(`  Run: ${chalk.bold("ao dlq list")}`);
+        console.log(`  Then: ${chalk.bold("ao dlq replay <error-id>")}`);
+      } finally {
+        await dlq.stop();
+      }
+    });
+
   // Purge old entries
   dlqCmd
     .command("purge")

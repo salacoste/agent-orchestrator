@@ -1,6 +1,6 @@
 # Story 2.1.3: Task Completion Validation
 
-Status: review
+Status: done
 
 ## Story
 

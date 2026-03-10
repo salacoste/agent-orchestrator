@@ -8,7 +8,7 @@
  * - Alert on large queue size
  */
 
-import { unlink, readFile, mkdir, writeFile } from "node:fs/promises";
+import { unlink, readFile, mkdir, writeFile, readdir, stat, rmdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -305,8 +305,8 @@ describe("DeadLetterQueue", () => {
 
       await dlq.enqueue(oldEntry);
 
-      // Wait a bit to ensure time difference
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      // Wait longer to ensure time difference
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const newEntry: DLQEntryInput = {
         operation: "new_operation",
@@ -318,8 +318,8 @@ describe("DeadLetterQueue", () => {
 
       await dlq.enqueue(newEntry);
 
-      // Purge entries older than 1ms (should keep only new entry)
-      const purged = await dlq.purge(1);
+      // Purge entries older than 50ms (should keep only new entry)
+      const purged = await dlq.purge(50);
 
       expect(purged).toBe(1);
 
@@ -345,9 +345,9 @@ describe("DeadLetterQueue", () => {
       await dlq.enqueue(entry);
 
       // Wait to ensure entry is old enough
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const purged = await dlq.purge(1);
+      const purged = await dlq.purge(50);
 
       expect(purged).toBe(1);
 
@@ -454,6 +454,172 @@ describe("DeadLetterQueue", () => {
 
       expect(list.length).toBe(1);
       expect(list[0].errorId).toBe("test-id-1");
+    });
+  });
+
+  describe("rotation and retention", () => {
+    it("should rotate DLQ file when it exceeds max size", async () => {
+      const tempDir = join(tmpdir(), `ao-dlq-rotation-${Date.now()}`);
+      await mkdir(tempDir, { recursive: true });
+      const dlqPath = join(tempDir, "dlq.jsonl");
+
+      // Create DLQ with very small max size (1KB)
+      const smallMaxSize = 1024; // 1KB
+      const dlq = createDeadLetterQueue({
+        dlqPath,
+        alertThreshold: 1000,
+        maxDlqSize: smallMaxSize,
+      });
+
+      await dlq.start();
+
+      // Add a small entry (should not trigger rotation)
+      const smallEntry: DLQEntryInput = {
+        operation: "small_op",
+        payload: { data: "x" },
+        failureReason: "Test",
+        retryCount: 1,
+        originalError: new Error("Test"),
+      };
+      await dlq.enqueue(smallEntry);
+
+      // File should exist and be small
+      const stats1 = await stat(dlqPath);
+      expect(stats1.size).toBeLessThan(smallMaxSize);
+
+      // Add multiple large entries to exceed max size
+      for (let i = 0; i < 10; i++) {
+        const largeEntry: DLQEntryInput = {
+          operation: `large_op_${i}`,
+          payload: { data: "x".repeat(500) }, // 500 chars per entry
+          failureReason: "Test failure with large payload",
+          retryCount: 3,
+          originalError: new Error("Large error"),
+        };
+        await dlq.enqueue(largeEntry);
+      }
+
+      // Rotation should have occurred - rotated file should exist
+      const files = await readdir(tempDir);
+      const rotatedFiles = files.filter((f) => f.startsWith("dlq.jsonl."));
+      expect(rotatedFiles.length).toBeGreaterThan(0);
+
+      await dlq.stop();
+
+      // Cleanup
+      await unlink(dlqPath).catch(() => {});
+      for (const file of rotatedFiles) {
+        await unlink(join(tempDir, file)).catch(() => {});
+      }
+      await rmdir(tempDir);
+    });
+
+    it("should clean up old rotated files beyond retention period", async () => {
+      const tempDir = join(tmpdir(), `ao-dlq-retention-${Date.now()}`);
+      await mkdir(tempDir, { recursive: true });
+      const dlqPath = join(tempDir, "dlq.jsonl");
+
+      // Create DLQ with 1 day retention and small max size
+      const retentionDays = 1;
+      const smallMaxSize = 1024; // 1KB
+      const dlq = createDeadLetterQueue({
+        dlqPath,
+        alertThreshold: 1000,
+        retentionDays,
+        maxDlqSize: smallMaxSize,
+      });
+
+      await dlq.start();
+
+      // Create some old rotated files
+      const oldDate = new Date();
+      oldDate.setDate(oldDate.getDate() - 3); // 3 days ago
+      const oldDateStr = oldDate.toISOString().split("T")[0];
+
+      const rotatedPath = join(tempDir, `dlq.jsonl.${oldDateStr}`);
+      await writeFile(rotatedPath, JSON.stringify({ test: "old" }), "utf-8");
+
+      // Verify old file exists
+      expect(existsSync(rotatedPath)).toBe(true);
+
+      // Add enough entries to trigger rotation (which triggers cleanup)
+      for (let i = 0; i < 10; i++) {
+        const entry: DLQEntryInput = {
+          operation: `test_op_${i}`,
+          payload: { data: "x".repeat(500) },
+          failureReason: "Test",
+          retryCount: 1,
+          originalError: new Error("Test"),
+        };
+        await dlq.enqueue(entry);
+      }
+
+      // Give cleanup a moment to run
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Old rotated file should have been cleaned up
+      const stillExists = existsSync(rotatedPath);
+      expect(stillExists).toBe(false);
+
+      await dlq.stop();
+
+      // Cleanup all rotated files first
+      const remainingFiles = await readdir(tempDir);
+      for (const file of remainingFiles) {
+        await unlink(join(tempDir, file)).catch(() => {});
+      }
+      await rmdir(tempDir);
+    });
+
+    it("should preserve recent rotated files within retention period", async () => {
+      const tempDir = join(tmpdir(), `ao-dlq-recent-${Date.now()}`);
+      await mkdir(tempDir, { recursive: true });
+      const dlqPath = join(tempDir, "dlq.jsonl");
+
+      // Create DLQ with 7 day retention
+      const retentionDays = 7;
+      const dlq = createDeadLetterQueue({
+        dlqPath,
+        alertThreshold: 1000,
+        retentionDays,
+      });
+
+      await dlq.start();
+
+      // Create a recent rotated file (1 day old)
+      const recentDate = new Date();
+      recentDate.setDate(recentDate.getDate() - 1);
+      const recentDateStr = recentDate.toISOString().split("T")[0];
+
+      const rotatedPath = join(tempDir, `dlq.jsonl.${recentDateStr}`);
+      await writeFile(rotatedPath, JSON.stringify({ test: "recent" }), "utf-8");
+
+      // Verify recent file exists
+      expect(existsSync(rotatedPath)).toBe(true);
+
+      // Add an entry to trigger cleanup check
+      const entry: DLQEntryInput = {
+        operation: "test_op",
+        payload: {},
+        failureReason: "Test",
+        retryCount: 1,
+        originalError: new Error("Test"),
+      };
+      await dlq.enqueue(entry);
+
+      // Give cleanup a moment to run
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Recent rotated file should still exist
+      const stillExists = existsSync(rotatedPath);
+      expect(stillExists).toBe(true);
+
+      await dlq.stop();
+
+      // Cleanup
+      await unlink(dlqPath).catch(() => {});
+      await unlink(rotatedPath).catch(() => {});
+      await rmdir(tempDir);
     });
   });
 });

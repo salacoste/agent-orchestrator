@@ -12,9 +12,9 @@
  * capture operations that have exhausted all retry attempts.
  */
 
-import { appendFile, readFile, writeFile, mkdir } from "node:fs/promises";
+import { appendFile, readFile, writeFile, mkdir, readdir, unlink, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname, basename } from "node:path";
 import { randomUUID } from "node:crypto";
 
 // =============================================================================
@@ -63,6 +63,10 @@ export interface DLQConfig {
   dlqPath: string;
   /** Alert threshold - fire alert when entries exceed this count */
   alertThreshold?: number;
+  /** Maximum DLQ file size before rotation (default: 10MB) */
+  maxDlqSize?: number;
+  /** Retention period for rotated DLQ files in days (default: 30) */
+  retentionDays?: number;
 }
 
 /**
@@ -80,6 +84,8 @@ export type AlertCallback = (size: number) => void;
 // =============================================================================
 
 const DEFAULT_ALERT_THRESHOLD = 1000;
+const DEFAULT_MAX_DLQ_SIZE = 10 * 1024 * 1024; // 10MB
+const DEFAULT_RETENTION_DAYS = 30;
 
 export class DeadLetterQueueServiceImpl {
   private config: Required<DLQConfig>;
@@ -90,6 +96,8 @@ export class DeadLetterQueueServiceImpl {
     this.config = {
       dlqPath: config.dlqPath,
       alertThreshold: config.alertThreshold ?? DEFAULT_ALERT_THRESHOLD,
+      maxDlqSize: config.maxDlqSize ?? DEFAULT_MAX_DLQ_SIZE,
+      retentionDays: config.retentionDays ?? DEFAULT_RETENTION_DAYS,
     };
   }
 
@@ -316,11 +324,89 @@ export class DeadLetterQueueServiceImpl {
       const dir = join(this.config.dlqPath, "..");
       await mkdir(dir, { recursive: true });
 
+      // Check if rotation is needed before appending
+      await this.maybeRotateDLQ();
+
       const line = JSON.stringify(entry) + "\n";
       await appendFile(this.config.dlqPath, line, "utf-8");
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error("[DLQ] Failed to append to disk:", error);
+    }
+  }
+
+  /**
+   * Rotate DLQ file if it exceeds max size
+   */
+  private async maybeRotateDLQ(): Promise<void> {
+    if (!existsSync(this.config.dlqPath)) {
+      return;
+    }
+
+    try {
+      const stats = await stat(this.config.dlqPath);
+      if (stats.size <= this.config.maxDlqSize) {
+        return;
+      }
+
+      // Rotate the file by renaming with timestamp
+      const timestamp = new Date().toISOString().split("T")[0];
+      const rotatedPath = `${this.config.dlqPath}.${timestamp}`;
+
+      await unlink(rotatedPath).catch(() => {
+        // Ignore if old rotated file doesn't exist
+      });
+      await writeFile(rotatedPath, await readFile(this.config.dlqPath, "utf-8"));
+      await writeFile(this.config.dlqPath, "", "utf-8");
+
+      // eslint-disable-next-line no-console
+      console.log(`[DLQ] Rotated DLQ file (${Math.round(stats.size / 1024)}KB → ${rotatedPath})`);
+
+      // Clean up old rotated files
+      await this.cleanupOldRotatedFiles();
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("[DLQ] Failed to rotate DLQ:", error);
+    }
+  }
+
+  /**
+   * Clean up rotated DLQ files older than retention period
+   */
+  private async cleanupOldRotatedFiles(): Promise<void> {
+    const dlqDir = dirname(this.config.dlqPath);
+    const dlqBasename = basename(this.config.dlqPath);
+
+    try {
+      const files = await readdir(dlqDir);
+      const retentionMs = this.config.retentionDays * 24 * 60 * 60 * 1000;
+      const now = Date.now();
+      let cleaned = 0;
+
+      for (const file of files) {
+        // Match rotated DLQ files: dlq.jsonl.YYYY-MM-DD
+        const escapedBasename = dlqBasename.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const match = file.match(new RegExp(`^${escapedBasename}\\.(\\d{4}-\\d{2}-\\d{2})$`));
+        if (!match) continue;
+
+        const fileDate = new Date(match[1]);
+        if (isNaN(fileDate.getTime())) continue;
+
+        const age = now - fileDate.getTime();
+        if (age > retentionMs) {
+          const filePath = join(dlqDir, file);
+          await unlink(filePath);
+          cleaned++;
+        }
+      }
+
+      if (cleaned > 0) {
+        // eslint-disable-next-line no-console
+        console.log(`[DLQ] Cleaned up ${cleaned} old rotated DLQ file(s)`);
+      }
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("[DLQ] Failed to cleanup old rotated files:", error);
     }
   }
 }

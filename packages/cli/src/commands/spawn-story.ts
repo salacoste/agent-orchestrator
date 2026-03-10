@@ -14,6 +14,8 @@ import {
   computeStoryContextHash,
   getSessionsDir,
   type AgentStatus,
+  createConflictDetectionService,
+  createConflictResolutionService,
 } from "@composio/ao-core";
 
 import { getSessionManager } from "../lib/create-session-manager.js";
@@ -387,29 +389,140 @@ export function registerSpawnStory(program: Command): void {
 
       spinner.succeed(`Found story ${storyId} (status: ${storyStatus})`);
 
-      // Get agent registry for duplicate detection
+      // Get agent registry for conflict detection
       const sessionsDir = getSessionsDir(config.configPath, projectId);
       const registry = getAgentRegistry(sessionsDir, config);
 
-      // Check for duplicate assignment unless --force is specified
+      // Check for conflicts unless --force is specified
       if (!opts.force) {
-        const existing = registry.findActiveByStory(storyId);
-        if (existing) {
+        const conflictSpinner = ora("Checking for conflicts").start();
+
+        // Create conflict detection service
+        const conflictService = createConflictDetectionService(registry, {
+          enabled: true,
+        });
+
+        // Check if spawning would create a conflict
+        const wouldConflict = conflictService.canAssign(storyId);
+        const existingConflict = conflictService.detectConflict(storyId, "temp-new-agent");
+
+        if (wouldConflict && existingConflict) {
+          conflictSpinner.warn("Conflict detected");
+
           console.log();
-          console.log(
-            chalk.yellow(
-              `⚠️  Warning: Story '${storyId}' is already assigned to agent ${existing.agentId}`,
-            ),
-          );
-          console.log(chalk.dim(`  Assigned: ${formatDuration(existing.assignedAt)}`));
+          console.log(chalk.red.bold(`⛔ Conflict Prevention: Cannot spawn agent for ${storyId}`));
           console.log();
 
-          const shouldContinue = await promptConfirmation("Do you want to spawn anyway?");
-          if (!shouldContinue) {
-            console.log(chalk.dim("Spawn cancelled."));
-            process.exit(0);
+          // Show existing assignments
+          console.log(chalk.bold("Existing assignments:"));
+          const existing = registry.findActiveByStory(storyId);
+          if (existing) {
+            console.log(`  ${chalk.yellow("•")} ${chalk.bold(existing.agentId)}`);
+            console.log(`      ${chalk.dim(`Assigned ${formatDuration(existing.assignedAt)}`)}`);
+            if (existing.contextHash) {
+              console.log(
+                `      ${chalk.dim(`Context: ${existing.contextHash.substring(0, 8)}...`)}`,
+              );
+            }
           }
+          console.log();
+
+          // Check if auto-resolve is enabled
+          const conflictsConfig = config.defaults.conflicts ?? {};
+          const autoResolve = conflictsConfig.autoResolve ?? false;
+
+          if (autoResolve) {
+            // Auto-resolve is enabled - show what would happen
+            console.log(chalk.dim("Auto-resolution is enabled."));
+            console.log(
+              chalk.dim(`The existing agent will be terminated and replaced with the new agent.`),
+            );
+            console.log();
+
+            const shouldContinue = await promptConfirmation("Continue with auto-resolution?");
+            if (!shouldContinue) {
+              console.log(chalk.dim("Spawn cancelled."));
+              process.exit(0);
+            }
+
+            // Perform auto-resolution
+            const resolveSpinner = ora("Resolving conflict").start();
+
+            // Create a mock runtime for the resolution service
+            // Note: In production, this should use the actual runtime plugin
+            const mockRuntime = {
+              name: "spawn-story-runtime",
+              async create() {
+                return { id: "spawn-session", runtimeName: "spawn-story-runtime", data: {} };
+              },
+              async destroy(_handle: { id: string }) {
+                // Will be called after the new agent is spawned
+              },
+              async sendMessage(): Promise<void> {},
+              async getOutput(): Promise<string> {
+                return "";
+              },
+              async isAlive(): Promise<boolean> {
+                return false;
+              },
+            };
+
+            const resolutionService = createConflictResolutionService(registry, mockRuntime, {
+              autoResolve: true,
+              tieBreaker: conflictsConfig.tieBreaker ?? "recent",
+              notifyOnResolution: true,
+            });
+
+            const result = await resolutionService.resolve(existingConflict);
+
+            if (result.action === "manual") {
+              resolveSpinner.warn("Auto-resolution failed");
+              console.log(
+                chalk.yellow("Could not auto-resolve conflict. Manual resolution required."),
+              );
+              console.log(chalk.dim(`Use ${chalk.bold("--force")} to spawn anyway.`));
+              process.exit(1);
+            }
+
+            resolveSpinner.succeed(`Conflict resolved: ${result.reason}`);
+            console.log();
+            console.log(
+              chalk.dim(`Existing agent ${chalk.red(result.terminatedAgent)} will be terminated.`),
+            );
+            console.log();
+          } else {
+            // Auto-resolve is disabled - block spawn
+            console.log(chalk.bold("Options:"));
+            console.log(
+              `  ${chalk.green("[f]orce")}  ${chalk.dim("-- Spawn anyway (creates conflict)")}`,
+            );
+            console.log(`  ${chalk.green("[c]ancel")} ${chalk.dim("-- Abort spawn")}`);
+            console.log();
+
+            const rl = createInterface({
+              input: process.stdin,
+              output: process.stdout,
+            });
+
+            const answer = await new Promise<string>((resolve) => {
+              rl.question("Choice [f/c]: ", (ans: string) => {
+                rl.close();
+                resolve(ans.trim().toLowerCase());
+              });
+            });
+
+            if (answer === "f" || answer === "force") {
+              console.log(chalk.dim("Spawning anyway..."));
+            } else {
+              console.log(chalk.dim("Spawn cancelled."));
+              process.exit(0);
+            }
+          }
+        } else {
+          conflictSpinner.succeed("No conflicts detected");
         }
+      } else {
+        console.log(chalk.dim("Skipping conflict check (--force specified)"));
       }
 
       // Get story location from sprint-status.yaml

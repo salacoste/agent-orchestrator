@@ -235,6 +235,18 @@ export interface Runtime {
 
   /** Get info needed to attach a human to this session (for Terminal plugin) */
   getAttachInfo?(handle: RuntimeHandle): Promise<AttachInfo>;
+
+  /**
+   * Get the exit code of the session's main process.
+   * Returns null if the session is still alive, undefined if unable to determine.
+   */
+  getExitCode?(handle: RuntimeHandle): Promise<number | null | undefined>;
+
+  /**
+   * Get the signal that terminated the session's main process (e.g., "SIGTERM", "SIGKILL").
+   * Returns null if the session is still alive, undefined if no signal or unable to determine.
+   */
+  getSignal?(handle: RuntimeHandle): Promise<string | null | undefined>;
 }
 
 export interface RuntimeCreateConfig {

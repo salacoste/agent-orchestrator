@@ -181,6 +181,32 @@ export function create(): Runtime {
         command: `tmux attach -t ${handle.id}`,
       };
     },
+
+    async getExitCode(handle: RuntimeHandle): Promise<number | null | undefined> {
+      // Check if session is still alive
+      const alive = await this.isAlive(handle);
+      if (alive) {
+        return null; // Session is still running
+      }
+
+      // Session is dead - tmux doesn't track exit codes natively
+      // We could enhance this by storing exit codes in handle.data if we
+      // set up a trap in the shell, but for now return undefined
+      // to indicate "dead but exit code unknown"
+      return undefined;
+    },
+
+    async getSignal(handle: RuntimeHandle): Promise<string | null | undefined> {
+      // Check if session is still alive
+      const alive = await this.isAlive(handle);
+      if (alive) {
+        return null; // Session is still running
+      }
+
+      // Session is dead - tmux doesn't track termination signals natively
+      // Return undefined to indicate "dead but signal unknown"
+      return undefined;
+    },
   };
 }
 

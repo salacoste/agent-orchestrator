@@ -280,6 +280,34 @@ export function create(): Runtime {
         target: String(entry.process.pid),
       };
     },
+
+    async getExitCode(handle: RuntimeHandle): Promise<number | null | undefined> {
+      const entry = processes.get(handle.id);
+      if (!entry || !entry.process) {
+        return undefined; // Process never existed or was already cleaned up
+      }
+
+      const child = entry.process;
+      if (child.exitCode === null && child.signalCode === null) {
+        return null; // Process is still running
+      }
+
+      return child.exitCode;
+    },
+
+    async getSignal(handle: RuntimeHandle): Promise<string | null | undefined> {
+      const entry = processes.get(handle.id);
+      if (!entry || !entry.process) {
+        return undefined; // Process never existed or was already cleaned up
+      }
+
+      const child = entry.process;
+      if (child.exitCode === null && child.signalCode === null) {
+        return null; // Process is still running
+      }
+
+      return child.signalCode ?? undefined;
+    },
   };
 }
 

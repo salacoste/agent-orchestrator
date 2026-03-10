@@ -122,18 +122,32 @@ development_status:
 # Known Limitations & Feature Flags
 # Documented interface methods that don't exist but are commonly assumed
 limitations:
-  # Runtime Interface Missing Methods
+  # Runtime Interface Methods - RESOLVED 2026-03-10
+  # getExitCode() and getSignal() have been added to Runtime interface
+  # Implementation status:
+  # - runtime-process: Full implementation (uses child.exitCode and child.signalCode)
+  # - runtime-tmux: Partial implementation (returns null if alive, undefined if dead - tmux doesn't natively track exit codes)
   runtime-exit-code-detection:
     flag_name: RUNTIME_EXIT_CODE_DETECTION
-    limitation: "Requires Runtime.getExitCode() enhancement - method does not exist in interface"
+    limitation: "RESOLVED - Runtime.getExitCode() added to interface (2026-03-10)"
     discovered_in: "2-1-2-interface-validation-checklist"
+    resolved_in: "2026-03-10"
     affected_stories: "1-6-agent-completion-detection, 1-7-cli-resume-blocked-story"
     epic_reference: "Epic 4 (Error Handling epic)"
+    resolution_notes: |
+      - Added getExitCode() optional method to Runtime interface
+      - Implemented in runtime-process plugin (returns actual exit code)
+      - Implemented in runtime-tmux plugin (returns null if alive, undefined if dead)
   runtime-signal-detection:
     flag_name: RUNTIME_SIGNAL_DETECTION
-    limitation: "Requires Runtime.getSignal() enhancement - method does not exist in interface"
+    limitation: "RESOLVED - Runtime.getSignal() added to interface (2026-03-10)"
     discovered_in: "2-1-2-interface-validation-checklist"
+    resolved_in: "2026-03-10"
     epic_reference: "Epic 4 (Error Handling epic)"
+    resolution_notes: |
+      - Added getSignal() optional method to Runtime interface
+      - Implemented in runtime-process plugin (returns actual signal code)
+      - Implemented in runtime-tmux plugin (returns null if alive, undefined if dead)
 
 # Dependency Security Approvals
 # Tracks all approved dependencies with security review status

@@ -2,16 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { SprintHealthResult } from "@composio/ao-plugin-tracker-bmad";
 
-const { mockConfigRef, mockGetTracker, mockComputeSprintHealth, mockSessionsDir } = vi.hoisted(
-  () => ({
-    mockConfigRef: { current: null as Record<string, unknown> | null },
-    mockGetTracker: vi.fn(),
-    mockComputeSprintHealth: vi.fn(),
-    mockSessionsDir: { current: "" },
-  }),
-);
+const { mockConfigRef, mockGetTracker, mockSessionsDir } = vi.hoisted(() => ({
+  mockConfigRef: { current: null as Record<string, unknown> | null },
+  mockGetTracker: vi.fn(),
+  mockSessionsDir: { current: "" },
+}));
 
 vi.mock("@composio/ao-core", async (importOriginal) => {
   // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -33,10 +29,6 @@ vi.mock("../../src/lib/plugins.js", () => ({
   getSCM: vi.fn(),
 }));
 
-vi.mock("@composio/ao-plugin-tracker-bmad", () => ({
-  computeSprintHealth: mockComputeSprintHealth,
-}));
-
 let tmpDir: string;
 
 import { Command } from "commander";
@@ -44,15 +36,15 @@ import { registerHealth } from "../../src/commands/health.js";
 
 let program: Command;
 let consoleSpy: ReturnType<typeof vi.spyOn>;
-let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+let _consoleErrorSpy: ReturnType<typeof vi.spyOn>;
 
-function makeHealth(overrides: Partial<SprintHealthResult> = {}): SprintHealthResult {
+/**
+ * Create a mock BMAD tracker with required methods
+ */
+function makeMockTracker() {
   return {
-    overall: "ok",
-    indicators: [],
-    stuckStories: [],
-    wipColumns: [],
-    ...overrides,
+    name: "bmad",
+    isAvailable: vi.fn().mockResolvedValue(true),
   };
 }
 
@@ -86,17 +78,20 @@ beforeEach(() => {
     reactions: {},
   } as Record<string, unknown>;
 
-  mockGetTracker.mockReturnValue({ name: "bmad" });
-  mockComputeSprintHealth.mockReturnValue(makeHealth());
+  mockGetTracker.mockReturnValue(makeMockTracker());
 
   program = new Command();
   program.exitOverride();
   registerHealth(program);
 
   consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
-  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+  _consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
   vi.spyOn(process, "exit").mockImplementation((code) => {
-    throw new Error(`process.exit(${code})`);
+    // Only throw on non-zero exit codes to allow successful tests to complete
+    if (code !== 0) {
+      throw new Error(`process.exit(${code})`);
+    }
+    return undefined as never;
   });
 });
 
@@ -106,108 +101,77 @@ afterEach(() => {
 });
 
 describe("health command", () => {
-  it("displays all-ok output when no issues", async () => {
+  it("displays system health output", async () => {
     await program.parseAsync(["node", "test", "health"]);
 
     const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(output).toContain("Sprint Health");
-    expect(output).toContain("OK");
+    expect(output).toContain("System Health");
+    expect(output).toContain("healthy");
   });
 
-  it("displays warning indicators", async () => {
-    mockComputeSprintHealth.mockReturnValue(
-      makeHealth({
-        overall: "warning",
-        indicators: [
-          {
-            id: "stuck-stories",
-            severity: "warning",
-            message: "1 story stuck for >48h",
-            details: ["s1"],
-          },
-        ],
-        stuckStories: ["s1"],
-      }),
-    );
-
+  it("displays BMAD Tracker component when tracker is bmad", async () => {
     await program.parseAsync(["node", "test", "health"]);
 
     const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(output).toContain("WARNING");
-    expect(output).toContain("stuck");
-    expect(output).toContain("s1");
+    expect(output).toContain("BMAD Tracker");
   });
 
-  it("displays critical indicators", async () => {
-    mockComputeSprintHealth.mockReturnValue(
-      makeHealth({
-        overall: "critical",
-        indicators: [
-          {
-            id: "wip-alert",
-            severity: "critical",
-            message: "in-progress has 6 stories (limit: 5)",
-            details: ["in-progress"],
-          },
-        ],
-        wipColumns: ["in-progress"],
-      }),
-    );
-
+  it("displays Agent Registry component", async () => {
     await program.parseAsync(["node", "test", "health"]);
 
     const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(output).toContain("CRITICAL");
-    expect(output).toContain("in-progress");
+    expect(output).toContain("Agent Registry");
   });
 
   it("outputs valid JSON with --json flag", async () => {
-    const health = makeHealth({
-      overall: "warning",
-      indicators: [
-        {
-          id: "stuck-stories",
-          severity: "warning",
-          message: "1 story stuck",
-          details: ["s1"],
-        },
-      ],
-      stuckStories: ["s1"],
-    });
-    mockComputeSprintHealth.mockReturnValue(health);
-
     await program.parseAsync(["node", "test", "health", "--json"]);
 
     const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("");
     const parsed = JSON.parse(output) as {
-      sprintHealth: SprintHealthResult;
-      degradedMode?: unknown;
+      overall: string;
+      components: Array<{ component: string; status: string }>;
+      exitCode: number;
     };
-    expect(parsed.sprintHealth.overall).toBe("warning");
-    expect(parsed.sprintHealth.stuckStories).toEqual(["s1"]);
+    expect(parsed.overall).toBe("healthy");
+    expect(parsed.exitCode).toBe(0);
+    expect(parsed.components).toBeInstanceOf(Array);
   });
 
-  it("handles non-bmad tracker", async () => {
+  it("handles non-bmad tracker (skips BMAD check)", async () => {
     mockGetTracker.mockReturnValue({ name: "github" });
 
-    await expect(program.parseAsync(["node", "test", "health"])).rejects.toThrow("process.exit(1)");
+    // Non-bmad tracker should NOT exit(1), just skip BMAD health check
+    await program.parseAsync(["node", "test", "health"]);
 
-    const errorOutput = consoleErrorSpy.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(errorOutput).toMatch(/bmad tracker/);
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    // Should show Agent Registry but not BMAD Tracker
+    expect(output).toContain("Agent Registry");
+    expect(output).not.toContain("BMAD Tracker");
   });
 
   it("resolves project when specified", async () => {
     await program.parseAsync(["node", "test", "health", "my-app"]);
 
-    expect(mockComputeSprintHealth).toHaveBeenCalled();
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(output).toContain("My App");
   });
 
-  it("handles no tracker configured", async () => {
+  it("handles no tracker configured (skips BMAD check)", async () => {
     mockGetTracker.mockReturnValue(null);
 
-    await expect(program.parseAsync(["node", "test", "health"])).rejects.toThrow("process.exit(1)");
+    // No tracker should NOT exit(1), just skip BMAD health check
+    await program.parseAsync(["node", "test", "health"]);
 
-    const errorOutput = consoleErrorSpy.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(errorOutput).toMatch(/bmad tracker/);
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+    expect(output).toContain("Agent Registry");
+    expect(output).not.toContain("BMAD Tracker");
+  });
+
+  it("exits with code 1 when component is unhealthy", async () => {
+    const unhealthyTracker = makeMockTracker();
+    unhealthyTracker.isAvailable.mockResolvedValue(false);
+    mockGetTracker.mockReturnValue(unhealthyTracker);
+
+    await expect(program.parseAsync(["node", "test", "health"])).rejects.toThrow("process.exit(1)");
   });
 });

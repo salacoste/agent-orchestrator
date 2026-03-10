@@ -80,6 +80,7 @@ describe("assign command", () => {
 
   describe("assignment functionality", () => {
     beforeEach(() => {
+      registerAssign(program);
       vi.mocked(core.loadConfig).mockReturnValue({
         projects: {
           test: {
@@ -383,6 +384,10 @@ describe("assign command", () => {
   });
 
   describe("error handling", () => {
+    beforeEach(() => {
+      registerAssign(program);
+    });
+
     it("handles missing sprint-status.yaml", async () => {
       vi.mocked(core.loadConfig).mockReturnValue(null);
 

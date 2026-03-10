@@ -4,11 +4,14 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { SprintHealthResult } from "@composio/ao-plugin-tracker-bmad";
 
-const { mockConfigRef, mockGetTracker, mockComputeSprintHealth } = vi.hoisted(() => ({
-  mockConfigRef: { current: null as Record<string, unknown> | null },
-  mockGetTracker: vi.fn(),
-  mockComputeSprintHealth: vi.fn(),
-}));
+const { mockConfigRef, mockGetTracker, mockComputeSprintHealth, mockSessionsDir } = vi.hoisted(
+  () => ({
+    mockConfigRef: { current: null as Record<string, unknown> | null },
+    mockGetTracker: vi.fn(),
+    mockComputeSprintHealth: vi.fn(),
+    mockSessionsDir: { current: "" },
+  }),
+);
 
 vi.mock("@composio/ao-core", async (importOriginal) => {
   // eslint-disable-next-line @typescript-eslint/consistent-type-imports
@@ -16,6 +19,10 @@ vi.mock("@composio/ao-core", async (importOriginal) => {
   return {
     ...actual,
     loadConfig: () => mockConfigRef.current,
+    // Mock path functions that require config file to exist
+    getSessionsDir: () => mockSessionsDir.current,
+    getProjectBaseDir: () => mockSessionsDir.current.replace("/sessions", ""),
+    getAgentRegistry: () => new Map(),
   };
 });
 
@@ -51,6 +58,9 @@ function makeHealth(overrides: Partial<SprintHealthResult> = {}): SprintHealthRe
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "ao-health-test-"));
+
+  // Set up mock sessions dir
+  mockSessionsDir.current = join(tmpDir, "sessions");
 
   mockConfigRef.current = {
     configPath: join(tmpDir, "agent-orchestrator.yaml"),

@@ -165,8 +165,8 @@ describe("AgentCompletionDetector", () => {
   describe("completion handlers", () => {
     it("should register completion handler", () => {
       const completionHandler = vi.fn();
-      const statusBefore = detector.getStatus("test-agent");
-      
+      const _statusBefore = detector.getStatus("test-agent");
+
       detector.onCompletion(completionHandler);
 
       // Verify handler was registered by checking it can be called
@@ -191,7 +191,7 @@ describe("AgentCompletionDetector", () => {
   describe("failure handlers", () => {
     it("should register failure handler", () => {
       const failureHandler = vi.fn();
-      
+
       detector.onFailure(failureHandler);
 
       // Verify handler is a function (it was registered)

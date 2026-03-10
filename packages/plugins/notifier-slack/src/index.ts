@@ -136,6 +136,7 @@ export function create(config?: Record<string, unknown>): Notifier {
   const username = (config?.username as string) ?? "Agent Orchestrator";
 
   if (!webhookUrl) {
+    // eslint-disable-next-line no-console -- notifier plugin: console is the only fallback when the notification layer itself cannot initialize
     console.warn("[notifier-slack] No webhookUrl configured — notifications will be no-ops");
   } else {
     validateUrl(webhookUrl, "notifier-slack");

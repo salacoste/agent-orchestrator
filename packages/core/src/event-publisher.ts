@@ -84,7 +84,6 @@ export class EventPublisherImpl implements EventPublisher {
                 console.warn(
                   `[EventPublisher] Flush attempt ${attempt} failed, retrying in ${delayMs}ms...`,
                 );
-                // eslint-disable-next-line no-await-in-loop
                 await new Promise((resolve) => setTimeout(resolve, delayMs));
               } else {
                 // eslint-disable-next-line no-console

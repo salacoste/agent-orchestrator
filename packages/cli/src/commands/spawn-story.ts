@@ -403,10 +403,13 @@ export function registerSpawnStory(program: Command): void {
         });
 
         // Check if spawning would create a conflict
-        const wouldConflict = conflictService.canAssign(storyId);
-        const existingConflict = conflictService.detectConflict(storyId, "temp-new-agent");
+        const canAssign = conflictService.canAssign(storyId, "temp-new-agent");
+        const existingConflictEvent = conflictService.detectConflict(storyId, "temp-new-agent");
 
-        if (wouldConflict && existingConflict) {
+        if (!canAssign && existingConflictEvent) {
+          // Record the conflict event to get a full AgentConflict with severity/recommendations
+          conflictService.recordConflict(existingConflictEvent);
+          const existingConflict = conflictService.getConflictsByStory(storyId)[0];
           conflictSpinner.warn("Conflict detected");
 
           console.log();
@@ -428,8 +431,9 @@ export function registerSpawnStory(program: Command): void {
           console.log();
 
           // Check if auto-resolve is enabled
-          const conflictsConfig = config.defaults.conflicts ?? {};
-          const autoResolve = conflictsConfig.autoResolve ?? false;
+          // Note: conflict resolution config is not part of DefaultPlugins;
+          // default to manual resolution (autoResolve: false)
+          const autoResolve = false;
 
           if (autoResolve) {
             // Auto-resolve is enabled - show what would happen
@@ -469,7 +473,7 @@ export function registerSpawnStory(program: Command): void {
 
             const resolutionService = createConflictResolutionService(registry, mockRuntime, {
               autoResolve: true,
-              tieBreaker: conflictsConfig.tieBreaker ?? "recent",
+              tieBreaker: "recent",
               notifyOnResolution: true,
             });
 

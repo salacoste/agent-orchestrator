@@ -72,7 +72,7 @@ function weekEnd(mondayStr: string): Date {
 function computeTrend(values: number[], invertBetter: boolean = false): MetricTrend {
   if (values.length < 2) return "stable";
   const avg = values.reduce((s, v) => s + v, 0) / values.length;
-  const last = values[values.length - 1]!;
+  const last = values[values.length - 1] ?? 0;
   if (avg === 0) return "stable";
   const change = (last - avg) / avg;
   const threshold = 0.1;
@@ -183,7 +183,8 @@ export function computeSprintComparison(
       // Find last done transition in this week
       let completedInWeek = false;
       for (let i = entries.length - 1; i >= 0; i--) {
-        const e = entries[i]!;
+        const e = entries[i];
+        if (!e) continue;
         const ts = new Date(e.timestamp).getTime();
         if (e.toStatus === "done" && ts >= wsTime && ts <= weTime) {
           completedInWeek = true;
@@ -209,8 +210,9 @@ export function computeSprintComparison(
 
       // Flow efficiency — compute dwells for transitions in this week
       for (let i = 0; i < entries.length - 1; i++) {
-        const current = entries[i]!;
-        const next = entries[i + 1]!;
+        const current = entries[i];
+        const next = entries[i + 1];
+        if (!current || !next) continue;
         const currentTs = new Date(current.timestamp).getTime();
         const nextTs = new Date(next.timestamp).getTime();
 

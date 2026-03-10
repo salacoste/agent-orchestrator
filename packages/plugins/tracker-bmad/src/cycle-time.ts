@@ -49,9 +49,9 @@ function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   if (sorted.length % 2 === 0) {
-    return (sorted[mid - 1]! + sorted[mid]!) / 2;
+    return ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
   }
-  return sorted[mid]!;
+  return sorted[mid] ?? 0;
 }
 
 function computeColumnDwells(entries: HistoryEntry[]): ColumnDwell[] {
@@ -59,8 +59,9 @@ function computeColumnDwells(entries: HistoryEntry[]): ColumnDwell[] {
 
   const dwells: ColumnDwell[] = [];
   for (let i = 0; i < entries.length - 1; i++) {
-    const current = entries[i]!;
-    const next = entries[i + 1]!;
+    const current = entries[i];
+    const next = entries[i + 1];
+    if (!current || !next) continue;
     const dwellMs = new Date(next.timestamp).getTime() - new Date(current.timestamp).getTime();
     if (dwellMs >= 0) {
       dwells.push({ column: current.toStatus, dwellMs });
@@ -129,7 +130,7 @@ export function computeCycleTime(project: ProjectConfig, epicFilter?: string): C
     // Find last completion — handles bouncing (done→in-progress→done)
     let lastDoneIdx = -1;
     for (let i = entries.length - 1; i >= 0; i--) {
-      if (entries[i]!.toStatus === DONE) {
+      if (entries[i]?.toStatus === DONE) {
         lastDoneIdx = i;
         break;
       }
@@ -138,8 +139,9 @@ export function computeCycleTime(project: ProjectConfig, epicFilter?: string): C
 
     // startedAt: first entry where story leaves backlog, or first entry overall
     const firstNonBacklog = entries.find((e) => e.fromStatus === BACKLOG);
-    const startEntry = firstNonBacklog ?? entries[0]!;
-    const completionEntry = entries[lastDoneIdx]!;
+    const startEntry = firstNonBacklog ?? entries[0];
+    const completionEntry = entries[lastDoneIdx];
+    if (!startEntry || !completionEntry) continue;
 
     const startedAt = startEntry.timestamp;
     const completedAt = completionEntry.timestamp;
@@ -186,7 +188,8 @@ export function computeCycleTime(project: ProjectConfig, epicFilter?: string): C
   // Sort by dwell time descending for easy bottleneck identification
   averageColumnDwells.sort((a, b) => b.dwellMs - a.dwellMs);
 
-  const bottleneckColumn = averageColumnDwells.length > 0 ? averageColumnDwells[0]!.column : null;
+  const bottleneckColumn =
+    averageColumnDwells.length > 0 ? (averageColumnDwells[0]?.column ?? null) : null;
 
   // Throughput — trailing 7 days and 4 weeks
   const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;

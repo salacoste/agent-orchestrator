@@ -43,9 +43,9 @@ function percentile(sorted: number[], p: number): number {
   const idx = (p / 100) * (sorted.length - 1);
   const lower = Math.floor(idx);
   const upper = Math.ceil(idx);
-  if (lower === upper) return sorted[lower]!;
+  if (lower === upper) return sorted[lower] ?? 0;
   const weight = idx - lower;
-  return sorted[lower]! * (1 - weight) + sorted[upper]! * weight;
+  return (sorted[lower] ?? 0) * (1 - weight) + (sorted[upper] ?? 0) * weight;
 }
 
 // ---------------------------------------------------------------------------

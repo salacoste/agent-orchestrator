@@ -59,11 +59,51 @@ describe("/api/sprint/[project]/conflicts", () => {
     it("should return 404 for unknown project", async () => {
       // Mock getServices to return null project
       const { getServices } = await import("@/lib/services");
+      // Only config is used by the route handler; provide stub registry/sessionManager
+      const mockRegistry = {
+        register: vi.fn(),
+        get: vi.fn().mockReturnValue(null),
+        list: vi.fn().mockReturnValue([]),
+        loadBuiltins: vi.fn(),
+        loadFromConfig: vi.fn(),
+        shutdown: vi.fn().mockResolvedValue(false),
+        shutdownAll: vi.fn(),
+        reload: vi.fn().mockResolvedValue(false),
+        getPluginState: vi.fn().mockReturnValue(null),
+        isRegistered: vi.fn().mockReturnValue(false),
+      };
+      const mockSessionManager = {
+        spawn: vi.fn(),
+        spawnOrchestrator: vi.fn(),
+        restore: vi.fn(),
+        list: vi.fn().mockResolvedValue([]),
+        get: vi.fn().mockResolvedValue(null),
+        kill: vi.fn(),
+        cleanup: vi.fn(),
+        send: vi.fn(),
+      };
       vi.mocked(getServices).mockResolvedValueOnce({
         config: {
           projects: {},
           configPath: "/test/config",
+          readyThresholdMs: 300000,
+          defaults: {
+            runtime: "tmux",
+            agent: "claude-code",
+            workspace: "worktree",
+            notifiers: ["desktop"],
+          },
+          notifiers: {},
+          notificationRouting: {
+            urgent: ["desktop"],
+            action: ["desktop"],
+            warning: ["desktop"],
+            info: ["desktop"],
+          },
+          reactions: {},
         },
+        registry: mockRegistry,
+        sessionManager: mockSessionManager,
       });
 
       const request = new Request("http://localhost:3000/api/sprint/unknown-project/conflicts");

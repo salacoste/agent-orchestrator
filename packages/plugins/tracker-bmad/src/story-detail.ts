@@ -98,11 +98,13 @@ export function getStoryDetail(storyId: string, project: ProjectConfig): StoryDe
   // 4. Build transitions array
   const transitions: StoryTransition[] = [];
   for (let i = 0; i < storyEntries.length; i++) {
-    const entry = storyEntries[i]!;
+    const entry = storyEntries[i];
+    if (!entry) continue;
     let dwellMs: number | null = null;
 
     if (i > 0) {
-      const prev = storyEntries[i - 1]!;
+      const prev = storyEntries[i - 1];
+      if (!prev) continue;
       dwellMs = new Date(entry.timestamp).getTime() - new Date(prev.timestamp).getTime();
     }
 
@@ -117,8 +119,9 @@ export function getStoryDetail(storyId: string, project: ProjectConfig): StoryDe
   // 5. Build columnDwells — aggregate total time in each column
   const dwellMap = new Map<string, number>();
   for (let i = 0; i < storyEntries.length - 1; i++) {
-    const current = storyEntries[i]!;
-    const next = storyEntries[i + 1]!;
+    const current = storyEntries[i];
+    const next = storyEntries[i + 1];
+    if (!current || !next) continue;
     const dwell = new Date(next.timestamp).getTime() - new Date(current.timestamp).getTime();
     if (dwell >= 0) {
       const column = current.toStatus;
@@ -135,14 +138,28 @@ export function getStoryDetail(storyId: string, project: ProjectConfig): StoryDe
 
   // 6. startedAt: first transition where fromStatus is "backlog", or first transition overall
   const firstNonBacklog = storyEntries.find((e) => e.fromStatus === BACKLOG);
-  const startEntry = firstNonBacklog ?? storyEntries[0]!;
+  const startEntry = firstNonBacklog ?? storyEntries[0];
+  if (!startEntry) {
+    return {
+      storyId,
+      currentStatus,
+      epic,
+      transitions,
+      columnDwells,
+      totalCycleTimeMs: null,
+      startedAt: null,
+      completedAt: null,
+      isCompleted: currentStatus === DONE,
+    };
+  }
   const startedAt = startEntry.timestamp;
 
   // 7. completedAt: timestamp of last transition where toStatus is "done" (or null)
   let completedAt: string | null = null;
   for (let i = storyEntries.length - 1; i >= 0; i--) {
-    if (storyEntries[i]!.toStatus === DONE) {
-      completedAt = storyEntries[i]!.timestamp;
+    const entry = storyEntries[i];
+    if (entry?.toStatus === DONE) {
+      completedAt = entry.timestamp;
       break;
     }
   }

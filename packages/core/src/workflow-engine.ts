@@ -358,7 +358,8 @@ export function createWorkflowEngine(): WorkflowEngine {
 
   async function processAsyncQueue(): Promise<void> {
     while (asyncQueue.length > 0) {
-      const item = asyncQueue.shift()!;
+      const item = asyncQueue.shift();
+      if (!item) break;
       try {
         const result = await executeStepWithRetry(
           item.step,

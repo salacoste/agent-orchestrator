@@ -7,12 +7,14 @@ import {
   formatFailureReason,
 } from "../src/completion-handlers.js";
 import type { AgentRegistry, Notifier, CompletionEvent, FailureEvent } from "../src/types.js";
-import { writeFileSync, mkdirSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import type * as _MetadataModule from "../src/metadata.js";
+import type * as _PathsModule from "../src/paths.js";
 
 // Mock metadata functions that require actual files
 vi.mock("../src/metadata.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/metadata.js")>();
+  const actual = await importOriginal<typeof _MetadataModule>();
   return {
     ...actual,
     updateMetadata: vi.fn(),
@@ -22,7 +24,7 @@ vi.mock("../src/metadata.js", async (importOriginal) => {
 
 // Mock getSessionsDir to avoid realpathSync on non-existent files
 vi.mock("../src/paths.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/paths.js")>();
+  const actual = await importOriginal<typeof _PathsModule>();
   return {
     ...actual,
     getSessionsDir: vi.fn(() => "/tmp/test-sessions"),
@@ -87,7 +89,6 @@ describe("Completion Handlers", () => {
 
       // Verify audit file was created
       const auditFile = join(auditDir, "agent-lifecycle.jsonl");
-      const { existsSync } = require("node:fs");
       expect(existsSync(auditFile)).toBe(true);
     });
 
@@ -138,7 +139,13 @@ development_status:
 
   describe("createCompletionHandler", () => {
     it("should update registry and sprint status on completion", async () => {
-      const handler = createCompletionHandler(mockRegistry, projectPath, configPath, auditDir, mockNotifier);
+      const handler = createCompletionHandler(
+        mockRegistry,
+        projectPath,
+        configPath,
+        auditDir,
+        mockNotifier,
+      );
 
       const event: CompletionEvent = {
         agentId: "test-agent-1",
@@ -174,7 +181,13 @@ development_status:
 
   describe("createFailureHandler", () => {
     it("should update registry and sprint status on failure", async () => {
-      const handler = createFailureHandler(mockRegistry, projectPath, configPath, auditDir, mockNotifier);
+      const handler = createFailureHandler(
+        mockRegistry,
+        projectPath,
+        configPath,
+        auditDir,
+        mockNotifier,
+      );
 
       const event: FailureEvent = {
         agentId: "test-agent-1",
@@ -192,7 +205,13 @@ development_status:
     });
 
     it("should send notification on failure", async () => {
-      const handler = createFailureHandler(mockRegistry, projectPath, configPath, auditDir, mockNotifier);
+      const handler = createFailureHandler(
+        mockRegistry,
+        projectPath,
+        configPath,
+        auditDir,
+        mockNotifier,
+      );
 
       const event: FailureEvent = {
         agentId: "test-agent-1",
@@ -210,7 +229,13 @@ development_status:
     });
 
     it("should not send notification for manual termination", async () => {
-      const handler = createFailureHandler(mockRegistry, projectPath, configPath, auditDir, mockNotifier);
+      const handler = createFailureHandler(
+        mockRegistry,
+        projectPath,
+        configPath,
+        auditDir,
+        mockNotifier,
+      );
 
       const event: FailureEvent = {
         agentId: "test-agent-1",
@@ -227,7 +252,13 @@ development_status:
     });
 
     it("should send urgent notification for crashes", async () => {
-      const handler = createFailureHandler(mockRegistry, projectPath, configPath, auditDir, mockNotifier);
+      const handler = createFailureHandler(
+        mockRegistry,
+        projectPath,
+        configPath,
+        auditDir,
+        mockNotifier,
+      );
 
       const event: FailureEvent = {
         agentId: "test-agent-1",

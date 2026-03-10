@@ -86,15 +86,16 @@ export function CfdChart({
   const areas: Array<{ column: string; path: string }> = [];
 
   for (let ci = 0; ci < reversedCols.length; ci++) {
-    const col = reversedCols[ci]!;
+    const col = reversedCols[ci] ?? "";
     const points: string[] = [];
 
     // Top edge (current column cumulative)
     for (let i = 0; i < n; i++) {
-      const dp = data.dataPoints[i]!;
+      const dp = data.dataPoints[i];
+      if (!dp) continue;
       let cumulative = 0;
       for (let j = 0; j <= ci; j++) {
-        cumulative += dp.columns[reversedCols[j]!] ?? 0;
+        cumulative += dp.columns[reversedCols[j] ?? ""] ?? 0;
       }
       const x = padding.left + (i / Math.max(n - 1, 1)) * chartW;
       const y = padding.top + chartH - (cumulative / maxTotal) * chartH;
@@ -103,10 +104,11 @@ export function CfdChart({
 
     // Bottom edge (previous column cumulative, reversed)
     for (let i = n - 1; i >= 0; i--) {
-      const dp = data.dataPoints[i]!;
+      const dp = data.dataPoints[i];
+      if (!dp) continue;
       let cumulative = 0;
       for (let j = 0; j < ci; j++) {
-        cumulative += dp.columns[reversedCols[j]!] ?? 0;
+        cumulative += dp.columns[reversedCols[j] ?? ""] ?? 0;
       }
       const x = padding.left + (i / Math.max(n - 1, 1)) * chartW;
       const y = padding.top + chartH - (cumulative / maxTotal) * chartH;

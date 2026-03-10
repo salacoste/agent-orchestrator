@@ -177,7 +177,8 @@ export function computeRetrospective(
 
       // Compute cycle time: first non-backlog transition to this done transition
       const firstNonBacklog = entries.find((e) => e.fromStatus === BACKLOG);
-      const startEntry = firstNonBacklog ?? entries[0]!;
+      const startEntry = firstNonBacklog ?? entries[0];
+      if (!startEntry) continue;
       const cycleTimeMs = Math.max(0, doneTs.getTime() - new Date(startEntry.timestamp).getTime());
 
       const data = weekData.get(weekKey) ?? {
@@ -203,7 +204,8 @@ export function computeRetrospective(
   const periods: SprintPeriod[] = [];
 
   for (const weekKey of sortedWeeks) {
-    const data = weekData.get(weekKey)!;
+    const data = weekData.get(weekKey);
+    if (!data) continue;
     const monday = new Date(weekKey + "T00:00:00.000Z");
     const sunday = getSunday(monday);
 

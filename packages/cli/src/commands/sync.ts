@@ -8,7 +8,12 @@
 import chalk from "chalk";
 import ora from "ora";
 import type { Command } from "commander";
-import { loadConfig, createStateManager, createSyncService } from "@composio/ao-core";
+import {
+  loadConfig,
+  createStateManager,
+  createSyncService,
+  type EventBus,
+} from "@composio/ao-core";
 
 /**
  * Display sync status
@@ -75,12 +80,7 @@ export function registerSync(program: Command): void {
 
       // Create SyncService
       const syncService = createSyncService({
-        eventBus: stateManager as unknown as {
-          name: string;
-          publish: () => Promise<void>;
-          subscribe: () => Promise<() => void>;
-          close: () => Promise<void>;
-        },
+        eventBus: stateManager as unknown as EventBus,
         stateManager,
         bmadTracker,
       });
@@ -253,9 +253,10 @@ function createFileSystemBMADTracker(yamlPath: string) {
       const yaml = parse(content);
       const stories = new Map();
 
-      for (const [storyId, story] of Object.entries(yaml.development_status || {})) {
+      for (const [storyId, rawStory] of Object.entries(yaml.development_status || {})) {
         if (storyId.startsWith("epic-")) continue;
 
+        const story = rawStory as Record<string, unknown>;
         stories.set(storyId, {
           id: storyId,
           status: story.status,

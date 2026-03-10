@@ -112,7 +112,7 @@ export function create(): Runtime {
           const text = partial + data.toString("utf-8");
           const lines = text.split("\n");
           // Last element is either "" (if text ended with \n) or a partial line
-          partial = lines.pop()!;
+          partial = lines.pop() ?? "";
           for (const line of lines) {
             entry.outputBuffer.push(line);
           }

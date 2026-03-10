@@ -8,12 +8,9 @@ import type { ProjectConfig, OrchestratorEvent, EventType } from "@composio/ao-c
 import { computeSprintHealth } from "./sprint-health.js";
 import { computeForecast } from "./forecast.js";
 import { computeStoryAging } from "./story-aging.js";
-import { computeTeamWorkload } from "./team-workload.js";
-import { computeThroughput } from "./throughput.js";
 import { computeDependencyGraph } from "./dependencies.js";
 import { computeRework } from "./rework.js";
 import { computeVelocityComparison } from "./velocity-comparison.js";
-import { readHistory } from "./history.js";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -53,7 +50,7 @@ export interface SprintNotification {
     | "sprint.column_aging"
     | "sprint.dependency_circular"
     | "sprint.dependency_blocked"
-    | "sprint.velocity_declining"
+    | "sprint.velocity_declining";
   severity: "warning" | "critical" | "info";
   title: string;
   message: string;
@@ -169,7 +166,6 @@ export function checkSprintNotifications(
     });
   }
 
-
   // 6. Rework rate alerts
   try {
     const rework = computeRework(project);
@@ -197,7 +193,7 @@ export function checkSprintNotifications(
           title: `Story Bouncing: ${story.storyId}`,
           message: `${story.storyId} has bounced ${story.reworkCount} times`,
           details: story.events.map(
-            (e) => `${e.fromStatus} → ${e.toStatus} (${e.timestamp.slice(0, 10)})`
+            (e) => `${e.fromStatus} → ${e.toStatus} (${e.timestamp.slice(0, 10)})`,
           ),
           timestamp: now,
         });
@@ -211,11 +207,11 @@ export function checkSprintNotifications(
   try {
     const aging = computeStoryAging(project);
     const thresholdMs = merged.columnAgingHours * 60 * 60 * 1000;
-    
+
     for (const [column, colStats] of Object.entries(aging.columns)) {
       // Skip backlog and done columns - only alert on active columns
       if (column === "backlog" || column === "done") continue;
-      
+
       const stuckStories = colStats.stories.filter((s) => s.ageMs > thresholdMs);
       if (stuckStories.length > 0) {
         notifications.push({
@@ -252,7 +248,7 @@ export function checkSprintNotifications(
       if (blockedStories.length > 0) {
         notifications.push({
           type: "sprint.dependency_blocked",
-          "severity": "warning",
+          severity: "warning",
           title: "Stories Blocked by Dependencies",
           message: `${blockedStories.length} ${blockedStories.length === 1 ? "story" : "stories"} blocked`,
           details: blockedStories.map((n) => `${n.storyId} blocked by: ${n.blockedBy.join(", ")}`),
@@ -264,7 +260,7 @@ export function checkSprintNotifications(
     // Non-fatal — reuses dep graph data if already computed in other sections
   }
 
-    // 12. Velocity declining trend
+  // 12. Velocity declining trend
   try {
     if (merged.velocityDecliningEnabled) {
       const velocityComp = computeVelocityComparison(project);
@@ -282,7 +278,9 @@ export function checkSprintNotifications(
             `Trend slope: ${velocityComp.trendSlope.toFixed(2)} stories/week²`,
             `Confidence: ${Math.round(velocityComp.trendConfidence * 100)}%`,
             `Next week estimate: ${velocityComp.nextWeekEstimate.toFixed(1)} stories`,
-            ...velocityComp.weeks.slice(-4).map((w) => `${w.weekStart}: ${w.completedCount} stories`),
+            ...velocityComp.weeks
+              .slice(-4)
+              .map((w) => `${w.weekStart}: ${w.completedCount} stories`),
           ],
           timestamp: now,
         });

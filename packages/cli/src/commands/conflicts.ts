@@ -1,6 +1,6 @@
 import chalk from "chalk";
 import type { Command } from "commander";
-import * as Table from "cli-table3";
+import Table from "cli-table3";
 import {
   loadConfig,
   createConflictDetectionService,
@@ -119,7 +119,7 @@ export function registerConflicts(program: Command): void {
         if (!byStory.has(conflict.storyId)) {
           byStory.set(conflict.storyId, []);
         }
-        byStory.get(conflict.storyId)!.push(conflict);
+        byStory.get(conflict.storyId)?.push(conflict);
       }
 
       // Display each story's conflicts

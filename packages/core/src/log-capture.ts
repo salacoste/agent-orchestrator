@@ -102,8 +102,8 @@ export async function storeLogPathInMetadata(
   // Import here to avoid circular dependency
   const { updateMetadata } = await import("./metadata.js");
 
-  // Type assertion without using import() for type annotation
-  updateMetadata(sessionsDir, sessionId as any, {
+  // sessionId is typed as string which matches SessionId
+  updateMetadata(sessionsDir, sessionId, {
     previousLogsPath: logFilePath,
   });
 }

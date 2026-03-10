@@ -205,8 +205,8 @@ async function batchMove(
   project: ReturnType<typeof loadConfig>["projects"][string],
   opts: MoveOpts,
 ): Promise<void> {
-  const fromCol = opts.from!;
-  const toCol = opts.to!;
+  const fromCol = opts.from ?? "";
+  const toCol = opts.to ?? "";
   const validCols = getColumns(project);
 
   if (!isValidColumn(project, fromCol)) {

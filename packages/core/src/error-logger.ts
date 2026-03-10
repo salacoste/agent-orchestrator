@@ -302,7 +302,7 @@ class ErrorLoggerImpl implements ErrorLogger {
     try {
       writeFileSync(filePath, JSON.stringify(entry, null, 2), "utf-8");
     } catch (writeError) {
-      // Log to stderr - do not fail silently as this causes data loss
+      // eslint-disable-next-line no-console -- This IS the error logger; console.error is the last-resort output when file write fails
       console.error(`Failed to write error log to ${filePath}:`, writeError);
     }
 
@@ -332,11 +332,12 @@ class ErrorLoggerImpl implements ErrorLogger {
       results = results.filter((e) => isErrorLogEntry(e) && e.agentId === filter.agentId);
     }
     if (filter?.errorId) {
+      const filterErrorId = filter.errorId;
       results = results.filter((e) => {
         if (!isErrorLogEntry(e)) return false;
         const eid = e.errorId;
         if (eid === undefined) return false;
-        return eid.startsWith(filter.errorId!);
+        return eid.startsWith(filterErrorId);
       });
     }
     if (filter?.startTime || filter?.endTime) {
@@ -470,7 +471,7 @@ class ErrorLoggerImpl implements ErrorLogger {
   private redactString(key: string, value: string): string {
     // Extract the final part of the key path for pattern matching
     // e.g., "credentials.accessToken" → "accessToken"
-    const finalKey = key.includes(".") ? key.split(".").pop()! : key;
+    const finalKey = key.includes(".") ? (key.split(".").pop() ?? key) : key;
     const keyLower = finalKey.toLowerCase();
 
     // Check for specific key patterns first (more specific than generic patterns)
@@ -577,7 +578,7 @@ class ErrorLoggerImpl implements ErrorLogger {
     try {
       writeFileSync(filePath, JSON.stringify(summary, null, 2), "utf-8");
     } catch (writeError) {
-      // Log to stderr - do not fail silently as this causes data loss
+      // eslint-disable-next-line no-console -- This IS the error logger; console.error is the last-resort output when file write fails
       console.error(`Failed to write error rate summary to ${filePath}:`, writeError);
     }
   }

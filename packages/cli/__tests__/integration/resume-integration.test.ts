@@ -482,7 +482,7 @@ ADDITIONAL CONTEXT FROM USER:
 
 function stringify(obj: unknown): string {
   // Simple YAML stringifier for test data
-  const lines: string[] = [];
+  const _lines: string[] = [];
 
   function stringifyValue(value: unknown, indent = 0): string {
     const spaces = " ".repeat(indent);

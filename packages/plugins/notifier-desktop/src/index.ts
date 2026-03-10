@@ -84,6 +84,7 @@ function sendNotification(
         else resolve();
       });
     } else {
+      // eslint-disable-next-line no-console -- notifier plugin: logging unsupported platform is the only feedback mechanism
       console.warn(`[notifier-desktop] Desktop notifications not supported on ${os}`);
       resolve();
     }

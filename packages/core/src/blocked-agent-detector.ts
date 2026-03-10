@@ -164,6 +164,7 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
 
     this.detectionTimer = setInterval(() => {
       void this.checkBlocked().catch((error) => {
+        // eslint-disable-next-line no-console -- Background interval has no logger; stderr is the only output channel
         console.error("[BlockedAgentDetector] Error checking blocked agents:", error);
       });
     }, this.checkInterval);
@@ -223,7 +224,7 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
         },
       });
     } catch (error) {
-      // Log but don't throw - detection continues
+      // eslint-disable-next-line no-console -- No logger available; stderr is the only output channel for event publish failures
       console.error(`[BlockedAgentDetector] Failed to publish agent.blocked event:`, error);
     }
   }
@@ -245,7 +246,7 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
         },
       });
     } catch (error) {
-      // Log but don't throw
+      // eslint-disable-next-line no-console -- No logger available; stderr is the only output channel for event publish failures
       console.error(`[BlockedAgentDetector] Failed to publish agent.resumed event:`, error);
     }
   }

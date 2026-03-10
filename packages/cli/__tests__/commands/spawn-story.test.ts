@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
 import { writeFileSync, unlinkSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 
@@ -257,7 +257,7 @@ so that spawn commands complete quickly.
     writeFileSync(storyPath, storyContent, "utf-8");
 
     const startTime = Date.now();
-    const content = readFileSync(storyPath, "utf-8");
+    const _content = readFileSync(storyPath, "utf-8");
     const endTime = Date.now();
 
     expect(endTime - startTime).toBeLessThan(100);

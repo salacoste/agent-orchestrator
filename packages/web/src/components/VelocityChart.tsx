@@ -135,11 +135,11 @@ export function VelocityChart({
           {data.weeks.length >= 2 && (
             <line
               x1={10 + barWidth / 2}
-              y1={chartHeight - (data.weeks[0]!.completedCount / maxCount) * chartHeight}
+              y1={chartHeight - ((data.weeks[0]?.completedCount ?? 0) / maxCount) * chartHeight}
               x2={(data.weeks.length - 1) * (barWidth + 4) + 10 + barWidth / 2}
               y2={
                 chartHeight -
-                (data.weeks[data.weeks.length - 1]!.completedCount / maxCount) * chartHeight
+                ((data.weeks[data.weeks.length - 1]?.completedCount ?? 0) / maxCount) * chartHeight
               }
               stroke="var(--color-text-muted)"
               strokeWidth={1}

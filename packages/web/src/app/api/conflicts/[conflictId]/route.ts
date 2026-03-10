@@ -8,8 +8,12 @@ import { NextResponse } from "next/server";
  * - action: "keep-existing" | "replace-with-new" | "manual"
  * - reason?: string (optional, for manual resolutions)
  */
-export async function POST(request: Request, { params }: { params: { conflictId: string } }) {
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ conflictId: string }> },
+) {
   try {
+    const { conflictId } = await params;
     const body = await request.json();
     const { action, reason } = body;
 
@@ -23,7 +27,7 @@ export async function POST(request: Request, { params }: { params: { conflictId:
     // For now, return mock response since we don't have real conflict resolution wired up
     // In a real implementation, this would call ConflictResolutionService.resolve()
     const resolution = {
-      conflictId: params.conflictId,
+      conflictId,
       action,
       keptAgent:
         action === "keep-existing"

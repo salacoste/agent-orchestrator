@@ -44,7 +44,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ err
     if (handler) {
       // Use the registered replay handler
       try {
-        const result = await replayEntry(entry);
+        const result = await replayEntry(entry, {});
 
         if (result.success) {
           // Remove the entry from DLQ on successful replay

@@ -123,7 +123,7 @@ export function ConflictHistoryTable({ projectId }: ConflictHistoryTableProps) {
       case "low":
         return "LOW";
       default:
-        return severity.toUpperCase();
+        return (severity as string).toUpperCase();
     }
   };
 

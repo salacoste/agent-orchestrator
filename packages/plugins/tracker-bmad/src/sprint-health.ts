@@ -334,10 +334,11 @@ export function computeSprintHealth(
     // -----------------------------------------------------------------------
     if (stats.averageColumnDwells.length >= 2) {
       const sorted = [...stats.averageColumnDwells].sort((a, b) => b.dwellMs - a.dwellMs);
-      const highest = sorted[0]!;
-      const secondHighest = sorted[1]!;
-
+      const highest = sorted[0];
+      const secondHighest = sorted[1];
       if (
+        highest &&
+        secondHighest &&
         secondHighest.dwellMs > 0 &&
         highest.dwellMs >= BOTTLENECK_RATIO * secondHighest.dwellMs
       ) {

@@ -102,7 +102,7 @@ function canonicalizeCycle(cycle: string[]): string[] {
   if (cycle.length === 0) return cycle;
   let minIdx = 0;
   for (let i = 1; i < cycle.length; i++) {
-    if (cycle[i]! < cycle[minIdx]!) minIdx = i;
+    if ((cycle[i] ?? "") < (cycle[minIdx] ?? "")) minIdx = i;
   }
   return [...cycle.slice(minIdx), ...cycle.slice(0, minIdx)];
 }

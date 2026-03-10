@@ -62,9 +62,9 @@ function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   if (sorted.length % 2 === 0) {
-    return (sorted[mid - 1]! + sorted[mid]!) / 2;
+    return ((sorted[mid - 1] ?? 0) + (sorted[mid] ?? 0)) / 2;
   }
-  return sorted[mid]!;
+  return sorted[mid] ?? 0;
 }
 
 /** Simple linear regression slope. */
@@ -77,8 +77,8 @@ function linearSlope(values: number[]): number {
   let sumX2 = 0;
   for (let i = 0; i < n; i++) {
     sumX += i;
-    sumY += values[i]!;
-    sumXY += i * values[i]!;
+    sumY += values[i] ?? 0;
+    sumXY += i * (values[i] ?? 0);
     sumX2 += i * i;
   }
   const denom = n * sumX2 - sumX * sumX;
@@ -167,8 +167,9 @@ export function computeThroughput(project: ProjectConfig, epicFilter?: string): 
   for (const [storyId, entries] of byStory) {
     // Find last done transition
     for (let i = entries.length - 1; i >= 0; i--) {
-      if (entries[i]!.toStatus === DONE) {
-        const day = entries[i]!.timestamp.slice(0, 10);
+      const doneEntry = entries[i];
+      if (doneEntry?.toStatus === DONE) {
+        const day = doneEntry.timestamp.slice(0, 10);
         const dayStories = dailyStorySet.get(day) ?? new Set();
         if (!dayStories.has(storyId)) {
           dayStories.add(storyId);
@@ -208,17 +209,20 @@ export function computeThroughput(project: ProjectConfig, epicFilter?: string): 
     // Find last done transition
     let lastDoneIdx = -1;
     for (let i = entries.length - 1; i >= 0; i--) {
-      if (entries[i]!.toStatus === DONE) {
+      if (entries[i]?.toStatus === DONE) {
         lastDoneIdx = i;
         break;
       }
     }
     if (lastDoneIdx === -1) continue;
 
-    const completedAt = new Date(entries[lastDoneIdx]!.timestamp).getTime();
+    const doneEntry = entries[lastDoneIdx];
+    if (!doneEntry) continue;
+    const completedAt = new Date(doneEntry.timestamp).getTime();
 
     // Lead time: first entry → done
-    const firstEntry = entries[0]!;
+    const firstEntry = entries[0];
+    if (!firstEntry) continue;
     const leadTimeMs = Math.max(0, completedAt - new Date(firstEntry.timestamp).getTime());
 
     // Cycle time: first non-backlog entry → done
@@ -251,7 +255,7 @@ export function computeThroughput(project: ProjectConfig, epicFilter?: string): 
   for (const [_storyId, entries] of byStory) {
     let lastDoneIdx = -1;
     for (let i = entries.length - 1; i >= 0; i--) {
-      if (entries[i]!.toStatus === DONE) {
+      if (entries[i]?.toStatus === DONE) {
         lastDoneIdx = i;
         break;
       }
@@ -259,8 +263,9 @@ export function computeThroughput(project: ProjectConfig, epicFilter?: string): 
     if (lastDoneIdx === -1) continue;
 
     for (let i = 0; i < lastDoneIdx; i++) {
-      const current = entries[i]!;
-      const next = entries[i + 1]!;
+      const current = entries[i];
+      const next = entries[i + 1];
+      if (!current || !next) continue;
       const dwell = new Date(next.timestamp).getTime() - new Date(current.timestamp).getTime();
       if (dwell >= 0) {
         totalDwell += dwell;
@@ -280,7 +285,7 @@ export function computeThroughput(project: ProjectConfig, epicFilter?: string): 
   for (const [_storyId, entries] of byStory) {
     let lastDoneIdx = -1;
     for (let i = entries.length - 1; i >= 0; i--) {
-      if (entries[i]!.toStatus === DONE) {
+      if (entries[i]?.toStatus === DONE) {
         lastDoneIdx = i;
         break;
       }
@@ -288,14 +293,16 @@ export function computeThroughput(project: ProjectConfig, epicFilter?: string): 
     if (lastDoneIdx === -1) continue;
 
     for (let i = 0; i < lastDoneIdx; i++) {
-      const current = entries[i]!;
-      const next = entries[i + 1]!;
+      const current = entries[i];
+      const next = entries[i + 1];
+      if (!current || !next) continue;
       const dwell = new Date(next.timestamp).getTime() - new Date(current.timestamp).getTime();
       if (dwell >= 0) {
         const col = current.toStatus;
         const ws = weekStart(current.timestamp);
         if (!columnWeekDwells.has(col)) columnWeekDwells.set(col, new Map());
-        const colMap = columnWeekDwells.get(col)!;
+        const colMap = columnWeekDwells.get(col);
+        if (!colMap) continue;
         const weekDwells = colMap.get(ws) ?? [];
         weekDwells.push(dwell);
         colMap.set(ws, weekDwells);

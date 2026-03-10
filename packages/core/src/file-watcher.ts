@@ -83,7 +83,6 @@ export class FileWatcherImpl implements FileWatcher {
     // Close all watchers synchronously (best effort)
     for (const watcher of this.watchers.values()) {
       try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         (watcher as unknown as { close: () => void }).close();
       } catch {
         // Ignore errors during sync cleanup

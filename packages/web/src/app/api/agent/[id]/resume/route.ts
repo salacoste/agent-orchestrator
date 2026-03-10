@@ -14,10 +14,10 @@ export const dynamic = "force-dynamic";
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   try {
-    const { id: agentId } = params;
+    const { id: agentId } = await params;
 
     // TODO: Implement actual resume functionality
     // - Extract story ID from agent metadata

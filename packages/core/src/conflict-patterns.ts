@@ -736,7 +736,7 @@ export function createConflictPatternAnalysis(
         resolutions.length > 0
           ? resolutions.reduce((sum, c) => {
               const detected = new Date(c.event.timestamp).getTime();
-              const resolved = new Date(c.resolution!.timestamp).getTime();
+              const resolved = c.resolution ? new Date(c.resolution.timestamp).getTime() : detected;
               return sum + (resolved - detected);
             }, 0) / resolutions.length
           : 0;

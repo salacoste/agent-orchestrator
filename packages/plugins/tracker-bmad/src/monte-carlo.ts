@@ -149,8 +149,8 @@ export function computeMonteCarloForecast(
 
   // Build the full date range to include zero-throughput weekdays
   const sortedDates = [...completionsByDate.keys()].sort();
-  const firstDateStr = sortedDates[0]!;
-  const lastDateStr = sortedDates[sortedDates.length - 1]!;
+  const firstDateStr = sortedDates[0] ?? "";
+  const lastDateStr = sortedDates[sortedDates.length - 1] ?? "";
   const firstDate = new Date(firstDateStr);
   const lastDate = new Date(lastDateStr);
 
@@ -203,7 +203,7 @@ export function computeMonteCarloForecast(
 
       // Sample from the throughput distribution
       const idx = Math.floor(randomFn() * throughput.length);
-      const dailyRate = throughput[idx]!;
+      const dailyRate = throughput[idx] ?? 0;
       storiesLeft -= dailyRate;
       day++;
     }
@@ -219,10 +219,11 @@ export function computeMonteCarloForecast(
   const p85Idx = Math.floor(simulations * 0.85);
   const p95Idx = Math.floor(simulations * 0.95);
 
+  const fallbackDate = new Date();
   const percentiles: PercentileResult = {
-    p50: toDateStr(completionDates[p50Idx]!),
-    p85: toDateStr(completionDates[p85Idx]!),
-    p95: toDateStr(completionDates[p95Idx]!),
+    p50: toDateStr(completionDates[p50Idx] ?? fallbackDate),
+    p85: toDateStr(completionDates[p85Idx] ?? fallbackDate),
+    p95: toDateStr(completionDates[p95Idx] ?? fallbackDate),
   };
 
   // Build histogram: count occurrences of each completion date
@@ -237,7 +238,7 @@ export function computeMonteCarloForecast(
   let cumulative = 0;
 
   for (const date of sortedHistDates) {
-    const count = dateCounts.get(date)!;
+    const count = dateCounts.get(date) ?? 0;
     const probability = count / simulations;
     cumulative += probability;
     histogram.push({ date, probability, cumulative });

@@ -313,6 +313,7 @@ export function createNpmPluginRegistry() {
 
     // Display warnings
     if (validation.warnings.length > 0) {
+      // eslint-disable-next-line no-console -- CLI-facing output; no logger is injected into this service
       console.log(`Warnings:\n${validation.warnings.join("\n")}`);
     }
 

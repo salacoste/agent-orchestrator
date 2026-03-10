@@ -41,7 +41,7 @@ function assignLayers(graph: DependencyGraph): Map<string, number> {
   const visited = new Set<string>();
 
   function dfs(id: string): number {
-    if (depths.has(id)) return depths.get(id)!;
+    if (depths.has(id)) return depths.get(id) ?? 0;
     if (visited.has(id)) return 0; // cycle guard
     visited.add(id);
 
@@ -89,8 +89,10 @@ function layoutNodes(graph: DependencyGraph): NodePos[] {
   for (const [depth, ids] of layerGroups) {
     ids.sort(); // deterministic order
     for (let i = 0; i < ids.length; i++) {
+      const nodeId = ids[i];
+      if (!nodeId) continue;
       positions.push({
-        id: ids[i]!,
+        id: nodeId,
         x: depth * LAYER_GAP + 20,
         y: i * NODE_GAP + 20,
       });
@@ -145,8 +147,8 @@ export function DependencyGraphView({
   const circularEdges = new Set<string>();
   for (const cycle of depGraph.circularWarnings) {
     for (let i = 0; i < cycle.length; i++) {
-      const from = cycle[i]!;
-      const to = cycle[(i + 1) % cycle.length]!;
+      const from = cycle[i] ?? "";
+      const to = cycle[(i + 1) % cycle.length] ?? "";
       circularEdges.add(`${from}->${to}`);
     }
   }

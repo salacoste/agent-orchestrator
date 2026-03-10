@@ -357,8 +357,8 @@ export function createSessionManager(deps: SessionManagerDeps): SessionManager {
     }
 
     // Pre-spawn story validation (if tracker supports it)
-    if (resolvedIssue && plugins.tracker?.validateIssue) {
-      const validation = await plugins.tracker.validateIssue(spawnConfig.issueId!, project);
+    if (resolvedIssue && spawnConfig.issueId && plugins.tracker?.validateIssue) {
+      const validation = await plugins.tracker.validateIssue(spawnConfig.issueId, project);
       if (!validation.valid) {
         throw new Error(
           `Story validation failed for ${spawnConfig.issueId}:\n  - ${validation.errors.join("\n  - ")}`,
@@ -558,13 +558,9 @@ export function createSessionManager(deps: SessionManagerDeps): SessionManager {
       }
 
       // Auto-update tracker status to in-progress when spawning with a resolved issue
-      if (resolvedIssue && plugins.tracker?.updateIssue) {
+      if (resolvedIssue && spawnConfig.issueId && plugins.tracker?.updateIssue) {
         try {
-          await plugins.tracker.updateIssue(
-            spawnConfig.issueId!,
-            { state: "in_progress" },
-            project,
-          );
+          await plugins.tracker.updateIssue(spawnConfig.issueId, { state: "in_progress" }, project);
         } catch {
           // Non-fatal — don't fail spawn if tracker update fails
         }

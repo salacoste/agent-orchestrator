@@ -108,9 +108,8 @@ export function computeSprintGoals(project: ProjectConfig): SprintGoalsResult {
         details = `${epicDone}/${epicTotal} stories done`;
         if (progress >= 100) status = "done";
         else if (epicDone > 0) status = "in-progress";
-        
+
         // Calculate confidence using epic-specific Monte Carlo
-        let confidence = 50; // Default for epic
         if (monteCarlo && epicId) {
           try {
             const epicMc = computeMonteCarloForecast(project, epicId);
@@ -146,9 +145,9 @@ export function computeSprintGoals(project: ProjectConfig): SprintGoalsResult {
         details = `${donePts}/${targetPts} points`;
         if (donePts >= targetPts && targetPts > 0) status = "done";
         else if (donePts > 0) status = "in-progress";
-        
+
         // Calculate confidence using Monte Carlo
-        let confidence = 0;
+        confidence = 0;
         if (monteCarlo && sprintEndDate) {
           const endDate = new Date(sprintEndDate);
           const bucket = monteCarlo.histogram?.find((h) => {
@@ -176,9 +175,9 @@ export function computeSprintGoals(project: ProjectConfig): SprintGoalsResult {
         details = `${doneCount}/${targetCount} stories`;
         if (doneCount >= targetCount && targetCount > 0) status = "done";
         else if (doneCount > 0) status = "in-progress";
-        
+
         // Calculate confidence using Monte Carlo
-        let confidence = 0;
+        confidence = 0;
         if (monteCarlo && sprintEndDate) {
           const endDate = new Date(sprintEndDate);
           const bucket = monteCarlo.histogram?.find((h) => {
@@ -207,9 +206,9 @@ export function computeSprintGoals(project: ProjectConfig): SprintGoalsResult {
           progress = 0;
         }
         details = `Manual: ${manualStatus}`;
-        
+
         // Static confidence based on progress
-        let confidence = progress >= 100 ? 100 : progress >= 50 ? 75 : 25;
+        confidence = progress >= 100 ? 100 : progress >= 50 ? 75 : 25;
         break;
       }
     }

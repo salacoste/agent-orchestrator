@@ -33,9 +33,8 @@ export function registerEvents(program: Command): void {
     .option("--timeout <ms>", "Timeout in milliseconds (default: 30000)", "30000")
     .option("--json", "Output as JSON")
     .action(async (opts: { force?: boolean; timeout: string; json?: boolean }) => {
-      let config: ReturnType<typeof loadConfig>;
       try {
-        config = loadConfig();
+        loadConfig();
       } catch {
         console.error(chalk.red("No config found. Run `ao init` first."));
         process.exit(1);
@@ -133,12 +132,9 @@ export function registerEvents(program: Command): void {
         }
       } else {
         // Fallback: No EventPublisher registered, show basic status
-        const eventsBackupPath = expandHome(
-          join(config.stateDir || ".ao/state", ".ao-events/degraded-events.jsonl"),
-        );
-        const syncBackupPath = expandHome(
-          join(config.stateDir || ".ao/state", ".ao-events/degraded-syncs.jsonl"),
-        );
+        const stateDir = ".ao/state";
+        const eventsBackupPath = expandHome(join(stateDir, ".ao-events/degraded-events.jsonl"));
+        const syncBackupPath = expandHome(join(stateDir, ".ao-events/degraded-syncs.jsonl"));
 
         const fallbackDegradedMode = createDegradedModeService({
           eventsBackupPath,
@@ -199,9 +195,8 @@ export function registerEvents(program: Command): void {
     .description("Show current event queue status")
     .option("--json", "Output as JSON")
     .action(async (opts: { json?: boolean }) => {
-      let config: ReturnType<typeof loadConfig>;
       try {
-        config = loadConfig();
+        loadConfig();
       } catch {
         console.error(chalk.red("No config found. Run `ao init` first."));
         process.exit(1);
@@ -276,12 +271,9 @@ export function registerEvents(program: Command): void {
         }
       } else {
         // Fallback: No EventPublisher registered, show basic status from file
-        const eventsBackupPath = expandHome(
-          join(config.stateDir || ".ao/state", ".ao-events/degraded-events.jsonl"),
-        );
-        const syncBackupPath = expandHome(
-          join(config.stateDir || ".ao/state", ".ao-events/degraded-syncs.jsonl"),
-        );
+        const stateDir = ".ao/state";
+        const eventsBackupPath = expandHome(join(stateDir, ".ao-events/degraded-events.jsonl"));
+        const syncBackupPath = expandHome(join(stateDir, ".ao-events/degraded-syncs.jsonl"));
 
         const fallbackDegradedMode = createDegradedModeService({
           eventsBackupPath,

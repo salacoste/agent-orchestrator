@@ -43,7 +43,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ proj
       try {
         const sprint = readSprintStatus(project);
         epicStoryIds = getEpicStoryIds(sprint, epicFilter);
-        entries = entries.filter((e) => epicStoryIds!.has(e.storyId));
+        entries = entries.filter((e) => epicStoryIds?.has(e.storyId));
       } catch {
         // Sprint status unavailable — skip filtering
       }

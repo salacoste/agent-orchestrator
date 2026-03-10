@@ -14,10 +14,10 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
   try {
-    const { id: agentId } = params;
+    const { id: agentId } = await params;
 
     // TODO: Implement actual log fetching
     // - Construct log file path from agent ID and logs directory

@@ -13,8 +13,10 @@ import {
   createStateManager,
   createConflictResolver,
   type Conflict,
+  type ConflictResolver,
   type MergeSelections,
   type Resolution,
+  type StoryState,
 } from "@composio/ao-core";
 
 /**
@@ -22,12 +24,7 @@ import {
  */
 async function resolveInteractive(
   conflict: Conflict,
-  resolver: {
-    resolve(
-      conflict: Conflict,
-      resolution: Resolution,
-    ): Promise<{ success: boolean; newVersion?: string; error?: string }>;
-  },
+  resolver: ConflictResolver,
 ): Promise<{ success: boolean; newVersion?: string; error?: string }> {
   console.log();
   console.log(chalk.bold(`  Interactive Merge Resolution`));
@@ -62,8 +59,10 @@ async function resolveInteractive(
 
   rl.close();
 
-  // Use the resolver's mergeInteractive with our selections
-  const result = await resolver.mergeInteractive(conflict, selections);
+  // Merge using field selections and resolve with the merged state
+  const merged: StoryState = resolver.merge(conflict.current, conflict.proposed, selections);
+  const mergedConflict: Conflict = { ...conflict, proposed: merged };
+  const result = await resolver.resolve(mergedConflict, "overwrite");
   return result;
 }
 

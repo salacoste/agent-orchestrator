@@ -117,7 +117,7 @@ development_status:
   6-4-custom-event-handlers-for-workflow-automation: done
   6-5-plugin-installation-cli: done
   6-6-community-plugin-registry: done
-  epic-6-retrospective: optional
+  epic-6-retrospective: done
 
 # Known Limitations & Feature Flags
 # Documented interface methods that don't exist but are commonly assumed

@@ -32,12 +32,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Default events.jsonl path - could be made configurable via env var
     const eventsPath = process.env.AO_AUDIT_LOG_PATH || "events.jsonl";
 
-    // Check if file exists
+    // Return empty results if audit log doesn't exist yet (fresh install)
     if (!existsSync(eventsPath)) {
-      return NextResponse.json(
-        { events: [], total: 0, error: "Audit log not found" },
-        { status: 404 },
-      );
+      return NextResponse.json({
+        events: [],
+        total: 0,
+        page,
+        limit,
+        totalPages: 0,
+      });
     }
 
     // Read and parse events

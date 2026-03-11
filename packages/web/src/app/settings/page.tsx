@@ -1,4 +1,5 @@
 import { getServices } from "@/lib/services";
+import type { OrchestratorConfig } from "@composio/ao-core";
 import type { Metadata } from "next";
 
 export const dynamic = "force-dynamic";
@@ -7,31 +8,13 @@ export const metadata: Metadata = {
   title: "Settings",
 };
 
-interface ProjectConfig {
-  name?: string;
-  repo: string;
-  path: string;
-  defaultBranch?: string;
-  sessionPrefix?: string;
-  runtime?: string;
-  agent?: string;
-  workspace?: string;
-  tracker?: { plugin: string; [key: string]: unknown };
-  scm?: { plugin: string; [key: string]: unknown };
-  symlinks?: string[];
-  postCreate?: string[];
-  agentConfig?: Record<string, unknown>;
-  agentRules?: string;
-  reactions?: Record<string, unknown>;
-}
-
 export default async function SettingsPage() {
-  let config: Record<string, unknown> | null = null;
+  let config: OrchestratorConfig | null = null;
   let error: string | null = null;
 
   try {
     const services = await getServices();
-    config = services.config as unknown as Record<string, unknown>;
+    config = services.config;
   } catch (e) {
     error = e instanceof Error ? e.message : "Failed to load config";
   }
@@ -45,42 +28,36 @@ export default async function SettingsPage() {
     );
   }
 
-  const defaults = config.defaults as Record<string, unknown> | undefined;
-  const projects = config.projects as Record<string, ProjectConfig> | undefined;
-  const reactions = config.reactions as Record<string, Record<string, unknown>> | undefined;
-  const notifiers = config.notifiers as Record<string, Record<string, unknown>> | undefined;
-  const routing = config.notificationRouting as Record<string, string[]> | undefined;
+  const { defaults, projects, reactions, notifiers, notificationRouting: routing } = config;
 
   return (
-    <div className="p-6 max-w-5xl">
+    <div className="p-6 max-w-7xl mx-auto w-full">
       <h1 className="text-2xl font-bold mb-6">Settings</h1>
 
-      {/* General */}
-      <Section title="General">
-        <Row label="Port" value={String(config.port ?? 5000)} />
-        <Row label="Config Path" value={String(config.configPath ?? "—")} />
-        <Row
-          label="Ready Threshold"
-          value={`${((config.readyThresholdMs as number) ?? 300000) / 1000}s`}
-        />
-      </Section>
-
-      {/* Defaults */}
-      {defaults && (
-        <Section title="Default Plugins">
-          <Row label="Runtime" value={String(defaults.runtime ?? "tmux")} />
-          <Row label="Agent" value={String(defaults.agent ?? "claude-code")} />
-          <Row label="Workspace" value={String(defaults.workspace ?? "worktree")} />
-          <Row
-            label="Notifiers"
-            value={Array.isArray(defaults.notifiers) ? defaults.notifiers.join(", ") : "desktop"}
-          />
+      {/* General + Defaults side by side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <Section title="General">
+          <Row label="Port" value={String(config.port ?? 5000)} />
+          <Row label="Config Path" value={String(config.configPath ?? "—")} />
+          <Row label="Ready Threshold" value={`${(config.readyThresholdMs ?? 300000) / 1000}s`} />
         </Section>
-      )}
+
+        {defaults && (
+          <Section title="Default Plugins">
+            <Row label="Runtime" value={String(defaults.runtime ?? "tmux")} />
+            <Row label="Agent" value={String(defaults.agent ?? "claude-code")} />
+            <Row label="Workspace" value={String(defaults.workspace ?? "worktree")} />
+            <Row
+              label="Notifiers"
+              value={Array.isArray(defaults.notifiers) ? defaults.notifiers.join(", ") : "desktop"}
+            />
+          </Section>
+        )}
+      </div>
 
       {/* Projects */}
       {projects && (
-        <Section title={`Projects (${Object.keys(projects).length})`}>
+        <Section title={`Projects (${Object.keys(projects).length})`} className="mb-8">
           <div className="space-y-4">
             {Object.entries(projects).map(([id, project]) => (
               <div key={id} className="bg-gray-800/50 rounded-lg p-4 border border-gray-700">
@@ -95,7 +72,7 @@ export default async function SettingsPage() {
                     </span>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-1 text-sm overflow-hidden">
                   <Row label="Repo" value={project.repo} />
                   <Row label="Path" value={project.path} />
                   <Row label="Branch" value={project.defaultBranch ?? "main"} />
@@ -131,9 +108,7 @@ export default async function SettingsPage() {
                 {project.agentRules && (
                   <div className="mt-2">
                     <span className="text-gray-400 text-xs">Agent Rules:</span>
-                    <pre className="text-xs text-gray-300 bg-gray-900 rounded p-2 mt-1 whitespace-pre-wrap">
-                      {project.agentRules.trim()}
-                    </pre>
+                    <AgentRulesBlock rules={project.agentRules} />
                   </div>
                 )}
               </div>
@@ -142,62 +117,72 @@ export default async function SettingsPage() {
         </Section>
       )}
 
-      {/* Reactions */}
-      {reactions && (
-        <Section title="Reactions">
-          <div className="grid grid-cols-1 gap-2">
-            {Object.entries(reactions).map(([event, cfg]) => (
-              <div
-                key={event}
-                className="flex items-center gap-4 text-sm bg-gray-800/30 rounded px-3 py-2"
-              >
-                <span className="font-mono text-yellow-300 w-48">{event}</span>
-                <span className={cfg.auto ? "text-green-400" : "text-gray-500"}>
-                  {cfg.auto ? "auto" : "manual"}
-                </span>
-                <span className="text-gray-300">{String(cfg.action ?? "—")}</span>
-                {cfg.retries && (
-                  <span className="text-gray-500">retries: {String(cfg.retries)}</span>
-                )}
-                {cfg.escalateAfter && (
-                  <span className="text-gray-500">escalate: {String(cfg.escalateAfter)}</span>
-                )}
-                {cfg.threshold && (
-                  <span className="text-gray-500">threshold: {String(cfg.threshold)}</span>
-                )}
-                {cfg.priority && (
-                  <span className="text-gray-500">priority: {String(cfg.priority)}</span>
-                )}
-              </div>
-            ))}
-          </div>
-        </Section>
-      )}
+      {/* Reactions + Notifiers + Routing */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {reactions && (
+          <Section title="Reactions" className="lg:col-span-2">
+            <div className="grid grid-cols-1 gap-2">
+              {Object.entries(reactions).map(([event, cfg]) => (
+                <div
+                  key={event}
+                  className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm bg-gray-800/30 rounded px-3 py-2"
+                >
+                  <span className="font-mono text-yellow-300 w-48">{event}</span>
+                  <span className={cfg.auto ? "text-green-400" : "text-gray-500"}>
+                    {cfg.auto ? "auto" : "manual"}
+                  </span>
+                  <span className="text-gray-300">{cfg.action ?? "—"}</span>
+                  {cfg.retries !== undefined && (
+                    <span className="text-gray-500">retries: {cfg.retries}</span>
+                  )}
+                  {cfg.escalateAfter !== undefined && (
+                    <span className="text-gray-500">escalate: {String(cfg.escalateAfter)}</span>
+                  )}
+                  {cfg.threshold !== undefined && (
+                    <span className="text-gray-500">threshold: {cfg.threshold}</span>
+                  )}
+                  {cfg.priority !== undefined && (
+                    <span className="text-gray-500">priority: {cfg.priority}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </Section>
+        )}
 
-      {/* Notifiers */}
-      {notifiers && Object.keys(notifiers).length > 0 && (
-        <Section title="Notifiers">
-          {Object.entries(notifiers).map(([name, cfg]) => (
-            <Row key={name} label={name} value={`plugin: ${cfg.plugin ?? name}`} />
-          ))}
-        </Section>
-      )}
+        <div className="space-y-6">
+          {notifiers && Object.keys(notifiers).length > 0 && (
+            <Section title="Notifiers">
+              {Object.entries(notifiers).map(([name, cfg]) => (
+                <Row key={name} label={name} value={`plugin: ${cfg.plugin ?? name}`} />
+              ))}
+            </Section>
+          )}
 
-      {/* Notification Routing */}
-      {routing && (
-        <Section title="Notification Routing">
-          {Object.entries(routing).map(([priority, channels]) => (
-            <Row key={priority} label={priority} value={channels.join(", ")} />
-          ))}
-        </Section>
-      )}
+          {routing && (
+            <Section title="Notification Routing">
+              {Object.entries(routing).map(([priority, channels]) => (
+                <Row key={priority} label={priority} value={channels.join(", ")} />
+              ))}
+            </Section>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  children,
+  className,
+}: {
+  title: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <div className="mb-8">
+    <div className={className}>
       <h2 className="text-lg font-semibold text-gray-200 mb-3 border-b border-gray-700 pb-2">
         {title}
       </h2>
@@ -206,11 +191,24 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+function AgentRulesBlock({ rules }: { rules: string }) {
+  const lines = rules.trim().split("\n");
+  return (
+    <div className="text-xs text-gray-300 bg-gray-900 rounded p-2 mt-1 font-mono">
+      {lines.map((line) => (
+        <div key={line} className="min-h-[1.25em]">
+          {line}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex gap-2 py-0.5">
-      <span className="text-gray-400 min-w-[120px]">{label}:</span>
-      <span className="text-gray-200 font-mono text-sm">{value}</span>
+    <div className="flex gap-2 py-0.5 min-w-0">
+      <span className="text-gray-400 min-w-[120px] shrink-0">{label}:</span>
+      <span className="text-gray-200 font-mono text-sm break-all min-w-0">{value}</span>
     </div>
   );
 }

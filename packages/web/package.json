@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm:dev:next\" \"npm:dev:terminal\" \"npm:dev:direct-terminal\"",
+    "dev": "concurrently -n next,ws,dws -c blue,green,yellow \"next dev -p ${PORT:-3000}\" \"tsx watch server/terminal-websocket.ts\" \"tsx watch server/direct-terminal-ws.ts\"",
     "dev:next": "next dev -p ${PORT:-3000}",
     "dev:terminal": "tsx watch server/terminal-websocket.ts",
     "dev:direct-terminal": "tsx watch server/direct-terminal-ws.ts",

@@ -340,6 +340,33 @@ export function SprintBoard({ projectId }: { projectId: string }) {
   }
 
   if (error || !data) {
+    const isApiKeyError = error?.includes("API_KEY") || error?.includes("environment variable");
+    const envVar = error?.match(/(\w+_API_KEY)/)?.[1];
+
+    if (isApiKeyError) {
+      return (
+        <div className="rounded-[6px] border border-yellow-700/50 bg-yellow-950/20 p-6 text-center space-y-3">
+          <div className="text-yellow-400 text-[13px] font-semibold">
+            Tracker API key not configured
+          </div>
+          <p className="text-[12px] text-[var(--color-text-muted)] max-w-md mx-auto">
+            The tracker plugin for this project requires{" "}
+            <code className="px-1.5 py-0.5 rounded bg-[var(--color-bg-inset)] text-yellow-300 font-mono text-[11px]">
+              {envVar ?? "an API key"}
+            </code>{" "}
+            to be set as an environment variable. Add it to your shell profile or{" "}
+            <code className="px-1.5 py-0.5 rounded bg-[var(--color-bg-inset)] text-[var(--color-text-secondary)] font-mono text-[11px]">
+              .env
+            </code>{" "}
+            file, then restart the server.
+          </p>
+          <pre className="text-[11px] font-mono text-[var(--color-text-muted)] bg-[var(--color-bg-inset)] rounded px-4 py-2 inline-block">
+            export {envVar ?? "TRACKER_API_KEY"}=your-key-here
+          </pre>
+        </div>
+      );
+    }
+
     return <div className="text-red-400 text-sm p-4">{error || "No data"}</div>;
   }
 

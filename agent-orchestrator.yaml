@@ -3,6 +3,7 @@
 
 dataDir: ~/.ao-sessions
 worktreeDir: ~/.worktrees
+port: 5000
 
 defaults:
   runtime: tmux

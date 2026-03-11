@@ -868,7 +868,7 @@ export interface OrchestratorConfig {
    */
   configPath: string;
 
-  /** Web dashboard port (defaults to 3000) */
+  /** Web dashboard port (defaults to 5000) */
   port?: number;
 
   /** Terminal WebSocket server port (defaults to 3001) */

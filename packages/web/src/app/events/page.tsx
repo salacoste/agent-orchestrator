@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSSEConnection } from "@/hooks/useSSEConnection.js";
-import { useFlashAnimation } from "@/hooks/useFlashAnimation.js";
+import { useSSEConnection } from "@/hooks/useSSEConnection";
+import { useFlashAnimation } from "@/hooks/useFlashAnimation";
 import EventDetailModal from "@/components/EventDetailModal";
 
 interface Event {

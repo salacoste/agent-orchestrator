@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useSSEConnection } from "@/hooks/useSSEConnection.js";
-import { useFlashAnimation } from "@/hooks/useFlashAnimation.js";
+import { useSSEConnection } from "@/hooks/useSSEConnection";
+import { useFlashAnimation } from "@/hooks/useFlashAnimation";
 
 interface DailyCompletion {
   date: string;

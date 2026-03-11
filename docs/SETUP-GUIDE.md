@@ -115,9 +115,9 @@ That's it. Everything else uses sensible defaults:
 
 ```yaml
 # Server settings
-port: 3000
-terminalPort: 14800
-directTerminalPort: 14801
+port: 5000
+terminalPort: 5080
+directTerminalPort: 5081
 readyThresholdMs: 300000       # 5 min before "ready" becomes "idle"
 
 # Default plugins (apply to all projects)

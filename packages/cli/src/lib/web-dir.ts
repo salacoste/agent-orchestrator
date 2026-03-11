@@ -14,8 +14,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const require = createRequire(import.meta.url);
 
-/** Default terminal server base port (14800 range: zero IANA registrations, no dev tool conflicts) */
-const DEFAULT_TERMINAL_PORT = 14800;
+/** Default terminal server base port (5080 range: zero IANA registrations, no dev tool conflicts) */
+const DEFAULT_TERMINAL_PORT = 5080;
 
 /**
  * Check if a TCP port is available by attempting to connect to it.
@@ -30,9 +30,18 @@ export function isPortAvailable(port: number): Promise<boolean> {
   return new Promise((resolve) => {
     const s = new Socket();
     s.setTimeout(300);
-    s.once("connect", () => { s.destroy(); resolve(false); }); // something listening → in use
-    s.once("error", () => { s.destroy(); resolve(true); });    // ECONNREFUSED → free
-    s.once("timeout", () => { s.destroy(); resolve(true); });  // no response → free
+    s.once("connect", () => {
+      s.destroy();
+      resolve(false);
+    }); // something listening → in use
+    s.once("error", () => {
+      s.destroy();
+      resolve(true);
+    }); // ECONNREFUSED → free
+    s.once("timeout", () => {
+      s.destroy();
+      resolve(true);
+    }); // no response → free
     s.connect(port, "127.0.0.1");
   });
 }
@@ -104,7 +113,7 @@ async function findAvailablePortPair(base: number): Promise<[number, number]> {
  * Build environment variables for spawning the dashboard process.
  * Shared between `ao start` and `ao dashboard` to avoid duplication.
  *
- * Terminal server ports default to 14800/14801 but can be overridden via config.
+ * Terminal server ports default to 5080/5081 but can be overridden via config.
  * When no explicit port is set, auto-detects available ports to allow multiple
  * dashboard instances to run simultaneously without EADDRINUSE conflicts.
  */
@@ -125,8 +134,11 @@ export async function buildDashboardEnv(
 
   // If explicit ports provided (config or env var), use them directly.
   // Otherwise, auto-detect an available pair starting from the default.
-  const explicitTerminal = terminalPort ?? (env["TERMINAL_PORT"] ? parseInt(env["TERMINAL_PORT"], 10) : undefined);
-  const explicitDirect = directTerminalPort ?? (env["DIRECT_TERMINAL_PORT"] ? parseInt(env["DIRECT_TERMINAL_PORT"], 10) : undefined);
+  const explicitTerminal =
+    terminalPort ?? (env["TERMINAL_PORT"] ? parseInt(env["TERMINAL_PORT"], 10) : undefined);
+  const explicitDirect =
+    directTerminalPort ??
+    (env["DIRECT_TERMINAL_PORT"] ? parseInt(env["DIRECT_TERMINAL_PORT"], 10) : undefined);
 
   let resolvedTerminal: number;
   let resolvedDirect: number;

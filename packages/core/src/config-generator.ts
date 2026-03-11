@@ -182,7 +182,7 @@ export interface GenerateConfigOptions {
   parsed: ParsedRepoUrl;
   /** Local path to the cloned repo */
   repoPath: string;
-  /** Dashboard port (default: 3000) */
+  /** Dashboard port (default: 5000) */
   port?: number;
 }
 
@@ -191,7 +191,7 @@ export interface GenerateConfigOptions {
  * Returns the raw object ready for YAML serialization.
  */
 export function generateConfigFromUrl(options: GenerateConfigOptions): Record<string, unknown> {
-  const { parsed, repoPath, port = 3000 } = options;
+  const { parsed, repoPath, port = 5000 } = options;
 
   const platform = detectScmPlatform(parsed.host);
   const defaultBranch = detectDefaultBranchFromDir(repoPath);
@@ -281,7 +281,10 @@ export function isRepoAlreadyCloned(dir: string, expectedCloneUrl: string): bool
     if (sshMatch) {
       normalized = `https://${sshMatch[1]}/${sshMatch[2]}`;
     }
-    return normalized.replace(/\.git$/, "").replace(/\/$/, "").toLowerCase();
+    return normalized
+      .replace(/\.git$/, "")
+      .replace(/\/$/, "")
+      .toLowerCase();
   };
 
   const expectedNorm = normalize(expectedCloneUrl);

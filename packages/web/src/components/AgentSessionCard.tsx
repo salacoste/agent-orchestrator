@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useSSEConnection } from "@/hooks/useSSEConnection.js";
+import { useSSEConnection } from "@/hooks/useSSEConnection";
 
 interface ActivityEvent {
   timestamp: string;

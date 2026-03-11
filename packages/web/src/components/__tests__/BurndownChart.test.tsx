@@ -6,8 +6,8 @@ import { BurndownChart } from "../BurndownChart";
 global.fetch = vi.fn();
 
 // Mock SSE hooks
-import { useSSEConnection as mockUseSSEConnection } from "@/hooks/useSSEConnection.js";
-vi.mock("@/hooks/useSSEConnection.js", () => ({
+import { useSSEConnection as mockUseSSEConnection } from "@/hooks/useSSEConnection";
+vi.mock("@/hooks/useSSEConnection", () => ({
   useSSEConnection: vi.fn((callbacks, _options) => {
     // Store callbacks for test invocation
     (mockUseSSEConnection as any).mockCallbacks = callbacks;
@@ -15,7 +15,7 @@ vi.mock("@/hooks/useSSEConnection.js", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useFlashAnimation.js", () => ({
+vi.mock("@/hooks/useFlashAnimation", () => ({
   useFlashAnimation: vi.fn(() => false),
 }));
 

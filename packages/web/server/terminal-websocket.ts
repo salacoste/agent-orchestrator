@@ -32,7 +32,6 @@ const availablePorts = new Set<number>(); // Pool of recycled ports
 let nextPort = 7800; // Start ttyd instances from port 7800
 const MAX_PORT = 7900; // Prevent unbounded port allocation
 
-
 /**
  * Check if ttyd is ready to accept connections by making a test request.
  * Returns a promise that resolves when ttyd is ready or rejects after timeout.
@@ -307,7 +306,7 @@ const server = createServer(async (req, res) => {
   res.end("Not found");
 });
 
-const PORT = parseInt(process.env.TERMINAL_PORT ?? "14800", 10);
+const PORT = parseInt(process.env.TERMINAL_PORT ?? "5080", 10);
 
 server.listen(PORT, () => {
   console.log(`[Terminal] Server listening on port ${PORT}`);

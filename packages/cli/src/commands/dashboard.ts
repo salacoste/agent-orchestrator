@@ -5,7 +5,12 @@ import chalk from "chalk";
 import type { Command } from "commander";
 import { loadConfig } from "@composio/ao-core";
 import { findWebDir, buildDashboardEnv, waitForPortAndOpen } from "../lib/web-dir.js";
-import { cleanNextCache, findRunningDashboardPid, findProcessWebDir, waitForPortFree } from "../lib/dashboard-rebuild.js";
+import {
+  cleanNextCache,
+  findRunningDashboardPid,
+  findProcessWebDir,
+  waitForPortFree,
+} from "../lib/dashboard-rebuild.js";
 
 export function registerDashboard(program: Command): void {
   program
@@ -16,7 +21,7 @@ export function registerDashboard(program: Command): void {
     .option("--rebuild", "Clean stale build artifacts and rebuild before starting")
     .action(async (opts: { port?: string; open?: boolean; rebuild?: boolean }) => {
       const config = loadConfig();
-      const port = opts.port ? parseInt(opts.port, 10) : (config.port ?? 3000);
+      const port = opts.port ? parseInt(opts.port, 10) : (config.port ?? 5000);
 
       if (isNaN(port) || port < 1 || port > 65535) {
         console.error(chalk.red("Invalid port number. Must be 1-65535."));
@@ -42,9 +47,7 @@ export function registerDashboard(program: Command): void {
 
         if (runningPid) {
           // Kill the running server, clean .next, then start fresh below.
-          console.log(
-            chalk.dim(`Stopping dashboard (PID ${runningPid}) on port ${port}...`),
-          );
+          console.log(chalk.dim(`Stopping dashboard (PID ${runningPid}) on port ${port}...`));
           try {
             process.kill(parseInt(runningPid, 10), "SIGTERM");
           } catch {

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { readFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { filterEvents, sortEventsByTimestamp } from "@/lib/event-filters.js";
+import { filterEvents, sortEventsByTimestamp } from "@/lib/event-filters";
 
 export const dynamic = "force-dynamic";
 

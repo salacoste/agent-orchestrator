@@ -175,7 +175,17 @@ function createGitHubTracker(): Tracker {
         args.push("--assignee", filters.assignee);
       }
 
-      const raw = await gh(args);
+      let raw: string;
+      try {
+        raw = await gh(args);
+      } catch (err) {
+        // Repos with issues disabled → return empty list instead of throwing
+        if (err instanceof Error && err.message.includes("has disabled issues")) {
+          return [];
+        }
+        throw err;
+      }
+
       const issues: Array<{
         number: number;
         title: string;

@@ -75,9 +75,11 @@ export default function EventsPage() {
       });
 
       const response = await fetch(`/api/audit/events?${params}`);
-      if (!response.ok) throw new Error("Failed to fetch events");
-
       const data: EventsResponse = await response.json();
+
+      if (!response.ok && response.status !== 404) {
+        throw new Error("Failed to fetch events");
+      }
       setEvents(data.events);
       setTotal(data.total);
       setNewEventsCount(0);

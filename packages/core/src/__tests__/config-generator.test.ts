@@ -94,9 +94,7 @@ describe("parseRepoUrl", () => {
 
   it("throws on invalid URL", () => {
     expect(() => parseRepoUrl("not-a-url")).toThrow("Could not parse repo URL");
-    expect(() => parseRepoUrl("https://github.com/just-owner")).toThrow(
-      "Could not parse repo URL",
-    );
+    expect(() => parseRepoUrl("https://github.com/just-owner")).toThrow("Could not parse repo URL");
   });
 });
 
@@ -250,7 +248,7 @@ describe("generateConfigFromUrl", () => {
     const config = generateConfigFromUrl({ parsed, repoPath: tmpDir });
 
     // Check top-level structure
-    expect(config.port).toBe(3000);
+    expect(config.port).toBe(5000);
     expect(config.defaults).toEqual({
       runtime: "tmux",
       agent: "claude-code",

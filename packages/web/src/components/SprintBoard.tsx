@@ -133,8 +133,11 @@ export function SprintBoard({ projectId }: { projectId: string }) {
 
     const fetchData = () => {
       fetch(`/api/sprint/${encodeURIComponent(projectId)}`)
-        .then((res) => {
-          if (!res.ok) throw new Error("Failed to load sprint data");
+        .then(async (res) => {
+          if (!res.ok) {
+            const body = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(body.error || `Failed to load sprint data (HTTP ${res.status})`);
+          }
           return res.json();
         })
         .then((d) => {

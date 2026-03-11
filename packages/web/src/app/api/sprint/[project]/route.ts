@@ -175,9 +175,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       },
     });
   } catch (err) {
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Unknown error" },
-      { status: 500 },
-    );
+    const message = err instanceof Error ? err.message : "Unknown error";
+    // Missing credentials → 503 (service unavailable), not 500
+    const status =
+      message.includes("environment variable") || message.includes("API_KEY") ? 503 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

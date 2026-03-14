@@ -1,6 +1,7 @@
 import { getServices } from "@/lib/services";
 import { sessionToDashboard } from "@/lib/serialize";
 import { getAttentionLevel } from "@/lib/types";
+import { subscribeWorkflowChanges } from "@/lib/workflow-watcher.js";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,21 @@ export async function GET(): Promise<Response> {
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   let updates: ReturnType<typeof setInterval> | undefined;
 
+  let unsubWorkflow: (() => void) | undefined;
+
   const stream = new ReadableStream({
     start(controller) {
+      // Subscribe to workflow file-change notifications (WD-5)
+      unsubWorkflow = subscribeWorkflowChanges(() => {
+        try {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: "workflow-change" })}\n\n`),
+          );
+        } catch {
+          // Stream closed — will be cleaned up by cancel()
+        }
+      });
+
       // Send initial snapshot
       void (async () => {
         try {
@@ -89,6 +103,7 @@ export async function GET(): Promise<Response> {
     cancel() {
       clearInterval(heartbeat);
       clearInterval(updates);
+      unsubWorkflow?.();
     },
   });
 

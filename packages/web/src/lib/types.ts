@@ -149,6 +149,11 @@ export interface SSEActivityEvent {
   timestamp: string;
 }
 
+/** SSE workflow-change event from /api/events (notification-only, no payload) */
+export interface SSEWorkflowChangeEvent {
+  type: "workflow-change";
+}
+
 /**
  * Returns true when this PR's enrichment data couldn't be fetched due to
  * API rate limiting. When true, CI status / review decision / mergeability

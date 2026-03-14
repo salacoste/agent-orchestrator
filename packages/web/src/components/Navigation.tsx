@@ -11,6 +11,7 @@ interface NavigationProps {
 const navItems = [
   { href: "/", label: "Dashboard" },
   { href: "/fleet", label: "Fleet" },
+  { href: "/workflow", label: "Workflow" },
   { href: "/events", label: "Events" },
   { href: "/settings", label: "Settings" },
 ] as const;

@@ -1,24 +1,26 @@
 # Project-Wide Retrospective: Agent Orchestrator
 
-**Date:** 2026-03-10
-**Participants:** Charlie (Senior Dev), Sam (PM), Alex (QA), R2d2 (Project Lead)
-**Scope:** Complete Project Review (Epics 1-6 + 2.1)
-**Stories:** 51 stories, all complete
-**Action Items:** 27 retrospective items, all resolved
+**Date:** 2026-03-15 (updated from 2026-03-10)
+**Participants:** Charlie (Senior Dev), Sam (PM), Alex (QA), Dana (QA Engineer), Elena (Junior Dev), Alice (Product Owner), Bob (Scrum Master), R2d2 (Project Lead)
+**Scope:** Complete Project Review (Epics 1-10 + 2.1)
+**Stories:** 66 stories, all complete
+**Action Items:** 34 retrospective items, all resolved
 
 ---
 
 ## Executive Summary
 
-The Agent Orchestrator project has been **successfully completed** with all 7 epics delivered, all 51 stories implemented, all 27 retrospective action items resolved, and 1100+ tests passing.
+The Agent Orchestrator project has been **successfully completed** with all 11 epics delivered, all 66 stories implemented, all 34 retrospective action items resolved, and 1400+ tests passing.
 
-**Key Achievement:** A complete, production-ready system for orchestrating parallel AI coding agents with plugin architecture, real-time dashboard, conflict resolution, and comprehensive error handling.
+**Key Achievement:** A complete, production-ready system for orchestrating parallel AI coding agents with plugin architecture, real-time dashboard, conflict resolution, comprehensive error handling, and Workflow Dashboard with three-layer error resilience.
 
 **Critical Success Factors:**
 - Technical debt epic (Epic 2.1) systematically addressed deferred items
 - Retrospective process drove continuous improvement
-- Plugin architecture validated across all 7 epics
-- Test coverage remained strong throughout (1100+ tests)
+- Plugin architecture validated across all 11 epics
+- Test coverage remained strong throughout (1400+ tests)
+- Workflow Dashboard architecture decisions (WD-1 through WD-8) held without revision across 4 epics and 15 stories
+- Zero debug issues across Epics 7-10 (Workflow Dashboard)
 
 ---
 
@@ -26,13 +28,14 @@ The Agent Orchestrator project has been **successfully completed** with all 7 ep
 
 | Metric | Value | Status |
 |--------|-------|--------|
-| **Total Epics** | 7 | ✅ All Complete |
-| **Total Stories** | 51 | ✅ All Delivered |
-| **Retrospective Action Items** | 27 | ✅ All Resolved |
-| **Test Coverage** | ~1100+ | ✅ All Passing |
-| **Production Code Lines** | ~20,000+ | ✅ Documented |
+| **Total Epics** | 11 | ✅ All Complete |
+| **Total Stories** | 66 | ✅ All Delivered |
+| **Retrospective Action Items** | 34 | ✅ All Resolved |
+| **Test Coverage** | ~1400+ | ✅ All Passing |
+| **Production Code Lines** | ~26,000+ | ✅ Documented |
 | **Documentation Rules** | 87 | ✅ In project-context.md |
 | **Dependencies Reviewed** | 4 | ✅ All Approved |
+| **Architecture Decisions** | WD-1 through WD-8 | ✅ All Held Without Revision |
 
 ### Epic Breakdown
 
@@ -45,6 +48,10 @@ The Agent Orchestrator project has been **successfully completed** with all 7 ep
 | 4 | Error Handling & Graceful Degradation | 8 | 200+ | Circuit breaker, DLQ |
 | 5 | Multi-Agent Conflict Resolution | 4 | 53+ | Priority scoring, auto-resolution |
 | 6 | Plugin & Workflow Extensibility | 6 | 76+ | Plugin system, triggers, workflows |
+| 7 | Workflow Dashboard: Phase Visibility | 5 | 122 | Artifact scanner, phase bar, API route |
+| 8 | Workflow Dashboard: AI-Guided Recommendations | 4 | 46 | Recommendation engine, AI guide, agents panel |
+| 9 | Workflow Dashboard: Artifact Inventory & Activity | 2 | 45 | Artifact table, last activity indicator |
+| 10 | Workflow Dashboard: Real-Time Updates & Resilience | 4 | 93 | File watcher, SSE, LKG cache, 30-scenario matrix |
 
 ---
 
@@ -83,12 +90,15 @@ The Agent Orchestrator project has been **successfully completed** with all 7 ep
 
 ### 🔴 Patterns That Need Improvement (Repeated Issues)
 
-#### 1. Code Review Skipped in Later Epics
-- Epic 5: 0 stories reviewed
-- Epic 6: 0 stories reviewed
-- Impact: Quality issues may be hidden
-- Root cause: Smaller epics perceived as lower risk
-- Prevention: Maintain code review requirement regardless of epic size
+#### 1. Code Review Inconsistency Across Project
+- Epic 5: 0 stories reviewed (0%)
+- Epic 6: 0 stories reviewed (0%)
+- Epic 7: 3/5 reviewed (60%)
+- Epic 8: 2/4 reviewed (50%)
+- Epic 9: 2/2 reviewed (100%) — gate mechanism proven
+- Epic 10: 3/4 reviewed (75%) — exception culture undermined gate
+- Root cause: Perception bias ("safe" stories don't need review) and exception culture
+- Resolution: Gate mechanism works when enforced without exceptions. Code review is permanent gate.
 
 #### 2. Deferred Features Accumulating (But Tracked)
 - Epic 1: 6 TODOs deferred
@@ -133,7 +143,21 @@ The Agent Orchestrator project has been **successfully completed** with all 7 ep
 | Enhanced Sync Strategies | Epic 2 | ✅ Story 2-1-9 |
 | Runtime.getExitCode() | Epic 1 | ✅ Added 2026-03-10 |
 
-**All 27 retrospective action items from Epics 4, 5, 6 are now DONE.**
+**All 27 retrospective action items from Epics 4, 5, 6 are DONE.**
+
+### Workflow Dashboard Action Items (Epics 7-10)
+
+| Original Action | From Epic | Resolution Status |
+|-----------------|-----------|-------------------|
+| hasType() substring false-positive fix | Epic 8 (carried to 9, 10) | ✅ Segment-start regex in recommendation-engine.ts |
+| Document vi.hoisted() mock pattern | Epic 7 | ✅ docs/TESTING-CONVENTIONS.md |
+| Document _resetForTesting() pattern | Epic 7 | ✅ docs/TESTING-CONVENTIONS.md |
+| Document describe.skipIf() pattern | Epic 7 | ✅ docs/TESTING-CONVENTIONS.md |
+| Document vi.useFakeTimers() pattern | Epic 9 | ✅ docs/TESTING-CONVENTIONS.md |
+| Document test precision standard | Epic 8 | ✅ docs/TESTING-CONVENTIONS.md |
+| Document WD-7 three-layer error resilience | Epic 10 | ✅ docs/TESTING-CONVENTIONS.md |
+
+**All 34 total retrospective action items across all epics are DONE.**
 
 ### Lessons from Action Item Resolution
 
@@ -194,6 +218,19 @@ The Agent Orchestrator project has been **successfully completed** with all 7 ep
 - Version compatibility matrix
 - Marketplace foundation
 
+### 7. Workflow Dashboard (Epics 7-10)
+- Artifact scanner with phase classification
+- Deterministic 7-rule recommendation engine (zero LLM dependency)
+- Phase visibility with computed states (pending/active/done)
+- AI-guided recommendations with contextual observations
+- Artifact inventory with semantic table and sr-only accessibility
+- Last activity indicator with fake-timer-tested relative timestamps
+- Real-time updates via file watcher + SSE subscription
+- Three-layer error resilience (WD-7): file I/O try/catch, API LKG cache, client state retention
+- 30-scenario exhaustive validation matrix (6 file states x 5 data sources)
+- 306 tests across 15 stories with zero debug issues
+- 8 architecture decisions (WD-1 through WD-8) held without revision
+
 ---
 
 ## Lessons Learned: Project-Level Insights
@@ -235,9 +272,11 @@ The Agent Orchestrator project has been **successfully completed** with all 7 ep
    - Action items tracked in sprint-status.yaml
 
 2. **Code Review Must Never Be Skipped**
-   - Epic 5 and 6 skipped reviews
-   - Quality issues may be hidden
-   - Smaller epics still benefit from review
+   - Epic 5 and 6 skipped reviews entirely
+   - Epics 7-10 showed improvement: 60% → 50% → 100% → 75%
+   - Gate mechanism proven effective in Epic 9 (100%)
+   - Exception culture undermines gates (Epic 10: 75%)
+   - Lesson: Gates work — exception culture doesn't
 
 3. **Retrospectives Drive Improvement**
    - 27 action items from Epics 4, 5, 6
@@ -295,13 +334,15 @@ The Agent Orchestrator project has been **successfully completed** with all 7 ep
 
 | Category | Metric | Target | Actual | Status |
 |----------|--------|--------|--------|--------|
-| **Delivery** | Epics Complete | 7 | 7 | ✅ |
-| **Stories** | Stories Delivered | 51 | 51 | ✅ |
-| **Quality** | Tests Passing | 1000+ | 1100+ | ✅ |
-| **Debt** | Action Items Resolved | 27 | 27 | ✅ |
-| **Coverage** | FRs Implemented | 50 | 50 | ✅ |
+| **Delivery** | Epics Complete | 11 | 11 | ✅ |
+| **Stories** | Stories Delivered | 66 | 66 | ✅ |
+| **Quality** | Tests Passing | 1000+ | 1400+ | ✅ |
+| **Debt** | Action Items Resolved | 34 | 34 | ✅ |
+| **Coverage** | FRs Implemented | 50+ | 65+ | ✅ |
 | **Security** | Dependencies Reviewed | 4 | 4 | ✅ |
 | **Documentation** | Rules Documented | 80+ | 87 | ✅ |
+| **Architecture** | WD Decisions Held | 8 | 8 | ✅ |
+| **Debug Issues** | Epics 7-10 | 0 | 0 | ✅ |
 
 ---
 
@@ -317,7 +358,12 @@ The Agent Orchestrator project has been **successfully completed** with all 7 ep
 | Epic 4 | 2026-03-10 | Error Handling & Graceful Degradation complete |
 | Epic 5 | 2026-03-10 | Multi-Agent Conflict Resolution complete |
 | Epic 6 | 2026-03-10 | Plugin & Workflow Extensibility complete |
-| Final | 2026-03-10 | All 27 action items resolved, project complete |
+| Milestone | 2026-03-10 | All 27 core action items resolved |
+| Epic 7 | 2026-03-14 | Workflow Dashboard: Phase Visibility complete |
+| Epic 8 | 2026-03-14 | Workflow Dashboard: AI-Guided Recommendations complete |
+| Epic 9 | 2026-03-14 | Workflow Dashboard: Artifact Inventory & Activity complete |
+| Epic 10 | 2026-03-14 | Workflow Dashboard: Real-Time Updates & Resilience complete |
+| Final | 2026-03-15 | All 34 action items resolved, full project complete |
 
 ---
 
@@ -325,16 +371,18 @@ The Agent Orchestrator project has been **successfully completed** with all 7 ep
 
 The Agent Orchestrator project demonstrates that:
 
-1. **Systematic retrospectives work** - Every identified issue was tracked and resolved
+1. **Systematic retrospectives work** - Every identified issue was tracked and resolved across 10 epic retrospectives
 2. **Technical debt epics are valuable** - Epic 2.1 successfully addressed accumulated debt
-3. **Plugin architecture is resilient** - Validated across 7 epics without requiring changes
-4. **Test coverage matters** - 1100+ tests provide confidence for production deployment
-5. **Process discipline is essential** - Code review, task validation, and documentation standards all contributed to quality
+3. **Plugin architecture is resilient** - Validated across 11 epics without requiring changes
+4. **Upfront architecture investment pays dividends** - WD-1 through WD-8 held without revision across 4 epics and 15 stories
+5. **Test coverage matters** - 1400+ tests provide confidence for production deployment
+6. **Process discipline is essential** - Gate mechanisms work; exception culture doesn't
+7. **Three-layer error resilience is elegant** - File I/O try/catch + API LKG cache + client state retention = zero user-visible errors
 
 **Project Status: COMPLETE AND PRODUCTION-READY**
 
 ---
 
 **Retrospective Facilitator:** Charlie (Senior Dev)
-**Document Version:** 1.0
-**Last Updated:** 2026-03-10
+**Document Version:** 2.0
+**Last Updated:** 2026-03-15

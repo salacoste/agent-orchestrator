@@ -1,4 +1,4 @@
-# generated: 2026-03-09
+# generated: 2026-03-13
 # project: agent-orchestrator
 # project_key: NOKEY
 # tracking_system: file-system
@@ -33,7 +33,7 @@
 # - SM typically creates next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
-generated: 2026-03-09
+generated: 2026-03-13
 project: agent-orchestrator
 project_key: NOKEY
 tracking_system: file-system
@@ -118,6 +118,37 @@ development_status:
   6-5-plugin-installation-cli: done
   6-6-community-plugin-registry: done
   epic-6-retrospective: done
+
+  # Epic 7: Workflow Phase Visibility (Workflow Dashboard)
+  epic-7: done
+  7-1-artifact-scanner-and-phase-computation-engine: done
+  7-2-workflow-api-route: done
+  7-3-phase-computation-unit-tests: done
+  7-4-workflow-page-shell-and-navigation: done
+  7-5-phase-bar-component: done
+  epic-7-retrospective: done
+
+  # Epic 8: AI-Guided Recommendations & Agent Discovery (Workflow Dashboard)
+  epic-8: done
+  8-1-recommendation-engine: done
+  8-2-recommendation-engine-tests: done
+  8-3-ai-guide-panel-component: done
+  8-4-agent-manifest-parser-and-agents-panel: done
+  epic-8-retrospective: done
+
+  # Epic 9: Artifact Inventory & Activity Tracking (Workflow Dashboard)
+  epic-9: done
+  9-1-artifact-inventory-panel: done
+  9-2-last-activity-indicator: done
+  epic-9-retrospective: done
+
+  # Epic 10: Real-Time Updates & Error Resilience (Workflow Dashboard)
+  epic-10: done
+  10-1-file-watcher-with-debounced-sse-notifications: done
+  10-2-client-side-sse-subscription-and-auto-refresh: done
+  10-3-lkg-state-pattern-and-error-resilience: done
+  10-4-error-resilience-tests: done
+  epic-10-retrospective: done
 
 # Known Limitations & Feature Flags
 # Documented interface methods that don't exist but are commonly assumed
@@ -733,4 +764,75 @@ action_items:
     notes: |
       ALL ACTION ITEMS COMPLETED as of 2026-03-10.
       All HIGH, MEDIUM, and LOW priority items are now done.
-      Project retrospectives complete for all 6 epics.
+      Project retrospectives complete for all 10 epics.
+
+  # ---------------------------------------------------------------------------
+  # WORKFLOW DASHBOARD ACTION ITEMS (Epics 7-10 Retrospectives)
+  # ---------------------------------------------------------------------------
+  workflow_dashboard:
+    WD-A1:
+      title: "Document vi.hoisted() mock pattern"
+      description: "Document test convention with copy-paste example"
+      epic: 7
+      owner: "Charlie (Senior Dev)"
+      status: done
+      completed_at: "2026-03-15"
+      notes: "Documented in docs/TESTING-CONVENTIONS.md"
+
+    WD-A2:
+      title: "Establish test precision standard"
+      description: "Standard covers differentiated mock states, realistic error types, shape assertions"
+      epic: 7
+      owner: "Dana (QA Engineer)"
+      status: done
+      completed_at: "2026-03-15"
+      notes: "Documented in docs/TESTING-CONVENTIONS.md — Test Precision Standard section"
+
+    WD-A3:
+      title: "Document describe.skipIf integration test pattern"
+      description: "Pattern for environment-dependent tests"
+      epic: 7
+      owner: "Charlie (Senior Dev)"
+      status: done
+      completed_at: "2026-03-15"
+      notes: "Documented in docs/TESTING-CONVENTIONS.md"
+
+    WD-A4:
+      title: "Document component pattern from PhaseBar"
+      description: "Props-only pattern, semantic HTML, ARIA labels, loading/empty states"
+      epic: 7
+      owner: "Elena (Junior Dev)"
+      status: done
+      completed_at: "2026-03-15"
+      notes: "Documented in docs/TESTING-CONVENTIONS.md — Component Test Patterns section"
+
+    WD-A5:
+      title: "Fix hasType() substring false-positive"
+      description: "buildContext() uses segment-start regex instead of .includes()"
+      epic: 8
+      owner: "Charlie (Senior Dev)"
+      status: done
+      completed_at: "2026-03-15"
+      notes: |
+        Changed hasType() in recommendation-engine.ts from .includes() to
+        segment-start regex: (?:^|[._\-\s])pattern (case-insensitive).
+        Prevents "debriefing" matching "brief" while allowing "epics" to match "epic".
+        All 19 recommendation engine tests pass.
+
+    WD-A6:
+      title: "Document 'count your columns' verification"
+      description: "DOM structure verification for table components"
+      epic: 9
+      owner: "Dana (QA Engineer)"
+      status: done
+      completed_at: "2026-03-15"
+      notes: "Documented in docs/TESTING-CONVENTIONS.md — DOM Structure Verification section"
+
+    WD-A7:
+      title: "Document WD-7 three-layer error resilience pattern"
+      description: "Reusable architecture pattern for dashboards backed by file system reads"
+      epic: 10
+      owner: "Charlie (Senior Dev)"
+      status: done
+      completed_at: "2026-03-15"
+      notes: "Documented in docs/TESTING-CONVENTIONS.md — Architecture section"

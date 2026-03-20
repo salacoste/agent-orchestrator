@@ -2,7 +2,7 @@
 
 ## System Overview
 
-Agent Orchestrator is a stateless system for orchestrating parallel AI coding agents. It is agent-agnostic (Claude Code, Codex, Aider, OpenCode, GLM), runtime-agnostic (tmux, child processes), tracker-agnostic (GitHub, Linear, BMAD), and manages the full session lifecycle from spawn through PR merge. The core design principle is **push, not pull**: spawn agents, walk away, get notified when human judgment is needed.
+Agent Orchestrator is a stateless system for orchestrating parallel AI coding agents. It is agent-agnostic (Claude Code, Codex, Aider, OpenCode, GLM), runtime-agnostic (tmux, process), tracker-agnostic (GitHub, Linear, BMAD), and manages the full session lifecycle from spawn through PR merge. The core design principle is **push, not pull**: spawn agents, walk away, get notified when human judgment is needed.
 
 **Tech stack**: TypeScript (ESM), Node 20+, pnpm workspaces, Next.js 15 (App Router) + Tailwind, Commander.js CLI, YAML + Zod config, Server-Sent Events for real-time, flat metadata files + JSONL event log.
 
@@ -31,6 +31,8 @@ export default { manifest, create } satisfies PluginModule<Runtime>;
 
 Plugin source locations: `packages/plugins/{slot}-{name}/src/index.ts`
 
+> **Note:** The `PluginSlot` TypeScript union type defines 7 values (`runtime | agent | workspace | tracker | scm | notifier | terminal`). EventBus is loaded separately via its own interface, not through the standard `PluginRegistry.get<T>(slot, name)` API. It is documented as an "8th slot" for conceptual simplicity.
+
 ### 2. Service Layer
 
 Core services built on top of plugins, located in `packages/core/src/`:
@@ -51,10 +53,24 @@ Core services built on top of plugins, located in `packages/core/src/`:
 - **AgentRegistry** (`agent-registry.ts`) — Agent-to-story assignment tracking with zombie detection.
 - **AgentCompletionDetector** (`agent-completion-detector.ts`) — Monitors agents for completion/failure events.
 - **BlockedAgentDetector** (`blocked-agent-detector.ts`) — Detects agents stuck due to inactivity.
-- **HealthCheck** (`health-check.ts`) — Service health monitoring with configurable rules.
-- **WorkflowEngine** (`workflow-engine.ts`) — Workflow orchestration for multi-step operations.
+- **HealthCheck** (`health-check.ts`) — Service health monitoring with configurable rules and thresholds.
+- **WorkflowEngine** (`workflow-engine.ts`) — Infrastructure service for multi-step workflow execution with conditional branching and retry.
 
-### 3. Metadata Layer
+### 3. AI Intelligence Layer (Cycle 3)
+
+Services providing learning, smart assignment, and collaboration capabilities:
+
+- **LearningStore** (`learning-store.ts`) — Persistent JSONL knowledge base for session outcomes. Append-only storage with query by agent, story domain, date range. 90-day retention by default.
+- **SessionLearning** (`session-learning.ts`) — Captures structured session outcomes (success/failure/blocked, duration, key decisions) when agents complete stories.
+- **LearningPatterns** (`learning-patterns.ts`) — Identifies patterns in agent failures (repeated errors, common blockers), surfaces preventive guidance.
+- **AssignmentScorer** (`assignment-scorer.ts`) — Scores agent-story affinity based on past performance (domain, complexity, technology). Pluggable scoring functions via plugin API.
+- **AssignmentService** (`assignment-service.ts`) — Smart auto-assignment mode. Factors success rate, average completion time, and retry count into decisions. Supports `auto-assign: smart` config.
+- **CollaborationService** (`collaboration-service.ts`) — Cross-agent context sharing, handoff protocol for sequential story execution, file-level conflict prevention.
+- **DependencyResolver** (`dependency-resolver.ts`) — Detects story dependency chains, schedules dependent stories for sequential execution.
+- **ReviewFindingsStore** (`review-findings-store.ts`) — Captures code review findings in structured format linked to story and agent. Tracks finding categories, resolution rates.
+- **PromptBuilder** (`prompt-builder.ts`) — Composes agent prompts with story context, injects relevant past learnings, review findings, and preventive guidance.
+
+### 4. Metadata Layer
 
 Flat-file key=value session metadata stored at:
 ```
@@ -65,15 +81,15 @@ Each session file contains fields like: `worktree`, `branch`, `status`, `tmuxNam
 
 The hash-based directory structure isolates multiple projects sharing the same machine. An `.origin` file in each project directory maps back to the config file.
 
-### 4. Event Layer
+### 5. Event Layer
 
 Two event systems serve different purposes:
 
 **OrchestratorEvents** (lifecycle-manager): Session lifecycle events with priority-based notification routing. Event types span session.*, pr.*, ci.*, review.*, merge.*, reaction.*, summary.*, tracker.*, agent.* categories. Priority levels: urgent, action, warning, info.
 
-**EventBus** (event-publisher + event-bus-redis): Pub/sub for story state changes across processes. Supports in-memory and Redis backends. Events: story.completed, story.started, story.blocked, story.assigned, agent.resumed, state.external_update.
+**EventBus** (event-publisher + event-bus-redis): Pub/sub for story state changes across processes. Supports in-memory and Redis backends. Events: story.completed, story.started, story.blocked, story.unblocked, story.assigned, agent.resumed, state.external_update.
 
-### 5. Reaction Layer
+### 6. Reaction Layer
 
 Configurable automatic responses to lifecycle events:
 
@@ -93,7 +109,7 @@ Configurable automatic responses to lifecycle events:
 
 Each reaction supports: retry counts, escalation thresholds (count or duration), per-project overrides.
 
-### 6. Degradation Layer
+### 7. Degradation Layer
 
 Graceful operation when services are unavailable:
 
@@ -107,7 +123,7 @@ Graceful operation when services are unavailable:
 
 ## Plugin Slot Interfaces
 
-### Runtime (7 required + 3 optional methods)
+### Runtime (5 required + 4 optional methods)
 
 Where and how agent sessions execute.
 
@@ -123,7 +139,7 @@ Where and how agent sessions execute.
 | `getExitCode(handle)` | No | Exit code of main process |
 | `getSignal(handle)` | No | Signal that terminated process |
 
-### Agent (9 required + 3 optional methods)
+### Agent (6 required + 3 optional methods)
 
 Adapter for a specific AI coding tool.
 
@@ -131,7 +147,7 @@ Adapter for a specific AI coding tool.
 |--------|----------|-------------|
 | `getLaunchCommand(config)` | Yes | Shell command to start the agent |
 | `getEnvironment(config)` | Yes | Environment variables for agent process |
-| `detectActivity(output)` | Yes | Detect activity from terminal output (deprecated) |
+| `detectActivity(output)` | Yes | Detect activity from terminal output (**@deprecated** — use `getActivityState` instead) |
 | `getActivityState(session, threshold?)` | Yes | Activity state via native mechanism (JSONL, SQLite) |
 | `isProcessRunning(handle)` | Yes | Check if agent process is alive |
 | `getSessionInfo(session)` | Yes | Extract summary, cost, session ID |
@@ -154,7 +170,7 @@ Code isolation for each session.
 | `exists(path)` | No | Check if workspace exists and is valid |
 | `restore(config, path)` | No | Recreate workspace for existing branch |
 
-### Tracker (6 required + 9 optional methods)
+### Tracker (5 required + 10 optional methods)
 
 Issue/task tracker integration.
 
@@ -356,6 +372,50 @@ Next.js 15 App Router with React 19, located in `packages/web/`.
 
 ---
 
+## AI Intelligence Architecture (Cycle 3)
+
+### Session Learning Pipeline
+
+```
+Agent completes story
+  → SessionLearning captures outcome (success/failure/blocked, duration, decisions)
+  → LearningStore appends to JSONL knowledge base
+  → LearningPatterns analyzes for failure patterns
+  → PromptBuilder injects learnings into future agent prompts
+```
+
+### Smart Assignment Flow
+
+```
+Story ready for assignment
+  → AssignmentScorer queries LearningStore for agent history
+  → Scores affinity: domain match + complexity match + success rate + avg time
+  → AssignmentService ranks candidates
+  → ao assign-suggest shows scored candidates
+  → auto-assign: smart mode auto-picks best fit
+```
+
+### Code Review Intelligence
+
+```
+Code review completed (via BMAD workflow)
+  → ReviewFindingsStore captures findings (category, severity, resolution)
+  → PromptBuilder injects past findings for same domain/codebase area
+  → ao review-stats shows common issues, resolution rates, agent performance
+```
+
+### Multi-Agent Collaboration
+
+```
+Multiple agents working on related stories
+  → DependencyResolver detects story dependency chains
+  → CollaborationService manages handoff protocol
+  → File-level conflict prevention across git worktrees
+  → ao collab-graph visualizes agent dependencies and handoff status
+```
+
+---
+
 ## Key Files Reference
 
 | File | Purpose |
@@ -375,4 +435,18 @@ Next.js 15 App Router with React 19, located in `packages/web/`.
 | `packages/core/src/paths.ts` | Path generation and hash-based directories |
 | `packages/core/src/plugin-registry.ts` | Plugin discovery and hot-reload |
 | `packages/core/src/prompt-builder.ts` | Agent prompt composition |
+| `packages/core/src/learning-store.ts` | JSONL knowledge base for session outcomes |
+| `packages/core/src/learning-patterns.ts` | Failure pattern detection and preventive guidance |
+| `packages/core/src/session-learning.ts` | Session outcome capture |
+| `packages/core/src/assignment-scorer.ts` | Agent-story affinity scoring |
+| `packages/core/src/assignment-service.ts` | Smart auto-assignment |
+| `packages/core/src/collaboration-service.ts` | Cross-agent context sharing and handoffs |
+| `packages/core/src/dependency-resolver.ts` | Story dependency chain detection |
+| `packages/core/src/review-findings-store.ts` | Code review findings capture |
+| `packages/core/src/notification-adapter.ts` | Notification routing channel configuration |
+| `packages/core/src/burndown-service.ts` | Sprint burndown calculation |
+| `packages/core/src/sync-bridge.ts` | Orchestrates StateManager + FileWatcher + SyncService lifecycle |
+| `packages/core/src/state-conflict-reconciler.ts` | State conflict reconciliation |
+| `packages/core/src/dlq-auto-replay.ts` | Dead letter queue auto-replay |
+| `packages/core/src/eventbus-backlog-monitor.ts` | Event bus backlog monitoring |
 | `agent-orchestrator.yaml.example` | Config format reference |

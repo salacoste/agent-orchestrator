@@ -426,7 +426,7 @@ ao stop                # Stop all sessions
 | `No agent-orchestrator.yaml found` | Run `ao init` or set `AO_CONFIG_PATH` |
 | `tmux: command not found` | `brew install tmux` |
 | `gh: not authenticated` | `gh auth login` |
-| Port already in use | Change `port:` in config or `lsof -ti:3000 \| xargs kill` |
+| Port already in use | Change `port:` in config or `lsof -ti:5000 \| xargs kill` |
 | Workspace creation failed | Check disk space and `~/.worktrees` permissions |
 | Agent stuck | `ao send <session> "status"` or `ao session kill <session>` |
 | YAML parse error | Validate with `yamllint` — use 2-space indentation |

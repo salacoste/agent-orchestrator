@@ -14,7 +14,7 @@ packages/core/          @composio/ao-core
 
 packages/cli/           @composio/ao-cli
   ├── Depends on: @composio/ao-core, all @composio/ao-plugin-* packages
-  ├── Commander.js command tree (60+ commands)
+  ├── Commander.js command tree (66 commands)
   └── Statically imports plugin packages for bundling
 
 packages/web/           @composio/ao-web
@@ -36,18 +36,19 @@ packages/plugins/       @composio/ao-plugin-*
 
 ### Plugin Slots
 
-Eight abstraction slots, seven of which are pluggable:
+Eight pluggable plugin slots plus core lifecycle (not pluggable):
 
 | Slot | Interface | Default | Implementations |
 |------|-----------|---------|-----------------|
 | Runtime | `Runtime` | tmux | tmux, process |
-| Agent | `Agent` | claude-code | claude-code, glm, codex, aider |
+| Agent | `Agent` | claude-code | claude-code, codex, aider, opencode, glm |
 | Workspace | `Workspace` | worktree | worktree, clone |
 | Tracker | `Tracker` | github | github, linear, bmad |
 | SCM | `SCM` | github | github |
 | Notifier | `Notifier` | desktop | desktop, composio, slack, webhook |
 | Terminal | `Terminal` | iterm2 | iterm2, web |
-| Lifecycle | (core) | -- | Not pluggable |
+| EventBus | `EventBus` | (in-memory) | redis |
+| Lifecycle | (core) | — | Not pluggable |
 
 ### Plugin Module Contract
 
@@ -136,6 +137,8 @@ interface EventBus {
 interface EventBusConfig {
   host: string;           // Redis host
   port: number;           // Redis port
+  db?: number;            // Redis database index
+  password?: string;      // Redis password
   channel?: string;       // Pub/Sub channel name
   retryDelays?: number[]; // Exponential backoff
   queueMaxSize?: number;  // Disconnected-mode queue cap
@@ -153,7 +156,7 @@ Supports Redis-backed or in-memory implementations. When disconnected, events ar
 - **Queue with backpressure**: When EventBus is unavailable, events queue in memory (oldest dropped when full).
 - **JSONL backup log**: Queued events also append to a backup file with automatic rotation at 10MB.
 - **Degraded mode integration**: Registers health checks and recovery callbacks; auto-flushes on reconnection with exponential backoff (up to 3 retries).
-- **Typed publish methods**: `publishStoryCompleted()`, `publishStoryStarted()`, `publishStoryBlocked()`, `publishStoryAssigned()`, `publishAgentResumed()`.
+- **Typed publish methods**: `publishStoryCompleted()`, `publishStoryStarted()`, `publishStoryBlocked()`, `publishStoryAssigned()`, `publishStoryUnblocked()`, `publishAgentResumed()`.
 
 ### EventSubscription
 
@@ -185,7 +188,7 @@ Supports Redis-backed or in-memory implementations. When disconnected, events ar
 - Registers `TriggerDefinition` objects that evaluate conditions against incoming events.
 - When triggers fire, associated workflows execute via the `WorkflowEngine`.
 - Supports debouncing (default 100ms) and concurrent workflow limits (default 5).
-- Event types: `story.started`, `story.completed`, `story.blocked`, `story.assigned`, `agent.resumed`, `state.changed`, `conflict.detected`, `conflict.resolved`, `plugin.loaded`, `plugin.unloaded`.
+- Trigger system event types: `story.started`, `story.completed`, `story.blocked`, `story.assigned`, `agent.resumed`, `state.changed`, `conflict.detected`, `conflict.resolved`, `plugin.loaded`, `plugin.unloaded`. Note: `story.unblocked` and `state.external_update` exist only on the EventBus (see Event Layer above), not in the trigger system.
 
 ---
 
@@ -413,11 +416,11 @@ Response headers: `Content-Type: text/event-stream`, `Cache-Control: no-cache`, 
 YAML file
   |
   +- findConfigFile()
-  |    Search order:
+  |    Search order (checks both .yaml and .yml at each step):
   |    1. AO_CONFIG_PATH environment variable
   |    2. Walk up directory tree from CWD (like git)
   |    3. Explicit startDir parameter
-  |    4. ~/.agent-orchestrator.yaml
+  |    4. ~/.agent-orchestrator.yaml / ~/.agent-orchestrator.yml
   |    5. ~/.config/agent-orchestrator/config.yaml
   |
   +- readFileSync() + parseYaml()
@@ -564,7 +567,7 @@ Each spawn step has rollback logic:
 - **Queue overflow**: Oldest events dropped with counter tracking.
 - **Backup log rotation**: Automatic at 10MB; rotation failures logged but not fatal.
 - **Flush timeout**: 30-second timeout prevents indefinite blocking.
-- **Recovery**: Exponential backoff retries (1s, 4s, 9s) on EventBus reconnection.
+- **Recovery**: Exponential backoff retries (0s, 1s, 4s, 9s — formula: `attempt² * 1000ms`, max 3 retries) on EventBus reconnection.
 
 ### Audit Trail Error Handling
 
@@ -587,3 +590,98 @@ Each spawn step has rollback logic:
 - **RetryService** (`packages/core/src/retry-service.ts`): Wraps operations with exponential backoff retry logic.
 - **CircuitBreaker** (`packages/core/src/circuit-breaker.ts`): Prevents cascading failures by tracking failure rates and switching between closed/open/half-open states.
 - **Dead Letter Queue** (`packages/core/src/dead-letter-queue.ts`): Persistent JSONL storage for operations that exhaust retries. Supports manual and automated replay via `dlq-replay-handlers.ts` with service-specific replay logic (bmad sync, event publish, state write).
+
+---
+
+## AI Intelligence Integration (Cycle 3)
+
+### Learning Pipeline Flow
+
+```
+SessionManager.spawn() completes (or agent exits)
+  |
+  +-> SessionLearning.captureOutcome()
+  |     Captures: success/failure/blocked, duration, key decisions, domain, complexity
+  |
+  +-> LearningStore.append()
+  |     Appends structured outcome to per-project JSONL: {dataDir}/{project}/learnings.jsonl
+  |     90-day retention by default (configurable via learning.retentionDays)
+  |
+  +-> LearningPatterns.analyze()
+        Scans recent outcomes for: repeated errors, common blockers, domain-specific patterns
+        Generates preventive guidance for future prompts
+```
+
+### Smart Assignment Integration
+
+```
+ao assign-suggest <story-id>
+  |
+  +-> AssignmentScorer.scoreAll(story, candidateAgents)
+  |     For each agent:
+  |       +-> LearningStore.query({ agentId }) -> past performance data
+  |       +-> Score: successRate * 0.4 + domainMatch * 0.3 + speedFactor * 0.2 - retryPenalty * 0.1 (see scoreAffinity() in assignment-scorer.ts)
+  |
+  +-> AssignmentService.recommend(scores)
+        Returns ranked candidates with scores and reasoning
+
+ao spawn --auto-assign smart
+  |
+  +-> AssignmentService.autoAssign(story)
+        Picks highest-scoring agent automatically
+```
+
+### Review Intelligence Integration
+
+```
+Code review workflow (BMAD)
+  |
+  +-> ReviewFindingsStore.capture(findings)
+  |     Stores: category, severity, file, line, description, resolution, agentId, storyId
+  |     File: {dataDir}/{project}/review-findings.jsonl
+  |
+  +-> PromptBuilder.injectReviewHistory(story)
+        Queries past findings for same domain/codebase area
+        Injects as "Past review findings to avoid: ..." in agent prompt
+```
+
+### Collaboration Protocol
+
+```
+CollaborationService
+  |
+  +-> DependencyResolver.buildGraph(stories)
+  |     Analyzes story dependencies from sprint plan
+  |     Returns topological ordering for execution
+  |
+  +-> CollaborationService.shareContext(fromAgent, toAgent)
+  |     Shares relevant context from completed prerequisite story
+  |     Includes: key decisions, files modified, patterns used
+  |
+  +-> CollaborationService.handoff(fromStory, toStory)
+  |     Notifies next agent that prerequisite is complete
+  |     Includes: completion summary, branch state, test results
+  |
+  +-> File-level conflict prevention
+        Tracks which files each agent is modifying across worktrees
+        Warns on concurrent modification attempts
+```
+
+### New API Routes (Cycle 3)
+
+| Route | Method | Purpose |
+|-------|--------|---------|
+| `/api/learning` | GET | Query learning knowledge base |
+| `/api/health` | GET | System health status |
+
+### New CLI Commands (Cycle 3)
+
+| Command | Purpose |
+|---------|---------|
+| `ao agent-history <agent-id>` | View agent learning history |
+| `ao learning-patterns` | Show failure patterns and preventive guidance |
+| `ao assign-suggest <story-id>` | Show scored agent candidates |
+| `ao assign-next` | Auto-assign next ready story |
+| `ao review-stats` | Review analytics: common issues, resolution rates |
+| `ao collab-graph` | Agent dependency and handoff visualization |
+| `ao health` | System health with DLQ depth |

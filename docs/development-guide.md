@@ -11,7 +11,7 @@ This guide consolidates and supersedes [DEVELOPMENT.md](./DEVELOPMENT.md) and [S
 | Requirement | Version | Check Command | Install (macOS) |
 |-------------|---------|---------------|-----------------|
 | Node.js | 20+ | `node --version` | `brew install node` |
-| pnpm | 9.15+ | `pnpm --version` | `corepack enable && corepack prepare pnpm@latest --activate` |
+| pnpm | 9.15.4+ | `pnpm --version` | `corepack enable && corepack prepare pnpm@latest --activate` |
 | Git | 2.25+ | `git --version` | `brew install git` |
 | tmux | any | `tmux -V` | `brew install tmux` |
 | GitHub CLI | 2.0+ | `gh --version` | `brew install gh` |
@@ -55,7 +55,7 @@ $EDITOR agent-orchestrator.yaml
 # Start the web dashboard
 cd packages/web
 pnpm dev
-# Open http://localhost:3000
+# Open http://localhost:5000
 
 # Or link the CLI globally
 npm link -g packages/cli
@@ -81,7 +81,7 @@ agent-orchestrator/
 │   │       ├── components/    # React components
 │   │       ├── hooks/         # Custom React hooks
 │   │       └── lib/           # Shared utilities
-│   ├── plugin-api/            # Plugin API package
+│   ├── plugin-api/            # @composio/ao-plugin-api — stable plugin development types
 │   ├── integration-tests/     # Cross-package integration tests
 │   └── plugins/
 │       ├── runtime-tmux/      # Runtime: tmux sessions
@@ -117,9 +117,10 @@ agent-orchestrator/
 
 | Package | npm Name | Purpose |
 |---------|----------|---------|
-| `core` | `@composio/ao-core` | All interfaces (`types.ts`), config loading (Zod), session manager, lifecycle manager, event bus |
-| `cli` | `@composio/ao-cli` | The `ao` command — spawns agents, monitors sessions, manages sprints |
-| `web` | `@composio/ao-web` | Next.js 15 dashboard with SSE real-time updates, terminal embedding |
+| `core` | `@composio/ao-core` | All interfaces (`types.ts`), config loading (Zod), session manager, lifecycle manager, event bus, AI intelligence services |
+| `cli` | `@composio/ao-cli` | The `ao` command — spawns agents, monitors sessions, manages sprints, AI insights |
+| `web` | `@composio/ao-web` | Next.js 15 dashboard with SSE real-time updates, terminal embedding, learning insights |
+| `plugin-api` | `@composio/ao-plugin-api` | Stable plugin development API — type definitions for Plugin, PluginContext, Event, Story, Agent, Trigger |
 | plugins | `@composio/ao-plugin-{slot}-{name}` | Swappable implementations for each of the 8 plugin slots |
 
 ### Plugin Slots (8 total)
@@ -133,7 +134,9 @@ agent-orchestrator/
 | SCM | `SCM` | github | PR/CI/review management |
 | Notifier | `Notifier` | desktop | Push notifications |
 | Terminal | `Terminal` | iterm2 | Human session attachment |
-| Lifecycle | (core) | -- | State machine (not pluggable) |
+| EventBus | `EventBus` | (in-memory) | Distributed event pub/sub |
+
+Lifecycle is handled by core (`lifecycle-manager.ts`) and is not pluggable.
 
 ---
 
@@ -165,8 +168,9 @@ Internal dependencies use `workspace:*` protocol:
 `pnpm build` runs `pnpm -r build` which respects the dependency graph:
 
 1. `@composio/ao-core` builds first (all other packages depend on it)
-2. Plugin packages build in parallel (each depends only on core)
-3. `@composio/ao-cli` and `@composio/ao-web` build last (depend on core + plugins)
+2. `@composio/ao-plugin-api` builds next (depends only on core types)
+3. Plugin packages build in parallel (each depends only on core)
+4. `@composio/ao-cli` and `@composio/ao-web` build last (depend on core + plugins)
 
 To build a single package:
 
@@ -278,7 +282,7 @@ pnpm dev
 Individual processes can be run separately:
 
 ```bash
-pnpm dev:next              # Next.js only (port 3000)
+pnpm dev:next              # Next.js only (port 5000)
 pnpm dev:terminal          # Terminal WebSocket server
 pnpm dev:direct-terminal   # Direct terminal WebSocket server
 ```
@@ -287,7 +291,7 @@ pnpm dev:direct-terminal   # Direct terminal WebSocket server
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `PORT` | 3000 | Next.js dev server |
+| `PORT` | 5000 | Next.js dev server |
 | `TERMINAL_PORT` / `NEXT_PUBLIC_TERMINAL_PORT` | 5080 | Terminal WebSocket |
 | `DIRECT_TERMINAL_PORT` / `NEXT_PUBLIC_DIRECT_TERMINAL_PORT` | 5081 | Direct terminal WebSocket |
 
@@ -573,7 +577,7 @@ export default { manifest, create } satisfies PluginModule<Runtime>;
   "devDependencies": {
     "@types/node": "^25.2.3",
     "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.0.0"  // note: core uses ^4.0.18, plugins use ^3.0.0
   }
 }
 ```
@@ -647,8 +651,15 @@ packages/cli/src/
     init.ts             # ao init [--auto]
     start.ts            # ao start / ao stop
     fleet.ts            # ao fleet (monitoring table)
+    health.ts           # ao health (system health + DLQ depth)
     send.ts             # ao send <session> <message>
-    ... (~55 command files)
+    agent-history.ts    # ao agent-history [agent-id] (learning history)
+    learning-patterns.ts # ao learning-patterns (failure pattern detection)
+    assign-suggest.ts   # ao assign-suggest <story-id> (optimal assignment)
+    assign-next.ts      # ao assign-next (auto-pick next story)
+    review-stats.ts     # ao review-stats (review analytics)
+    collab-graph.ts     # ao collab-graph (agent dependency graph)
+    ... (~66 command files)
 ```
 
 ### Adding a New Command
@@ -665,7 +676,7 @@ packages/cli/src/
        .description("Does something useful")
        .option("-f, --flag <value>", "An option")
        .action(async (arg: string, opts: { flag?: string }) => {
-         const config = await loadConfig();
+         const config = loadConfig(); // synchronous — readFileSync + Zod parse
          // Implementation
        });
    }
@@ -714,12 +725,19 @@ packages/web/src/
       spawn/              # Spawn API routes
       workflow/           # Workflow API routes
       events/             # SSE event streams
+      health/             # System health endpoint (Cycle 3)
+      learning/           # Learning insights endpoint (Cycle 3)
       ...
     sessions/             # Session pages
     fleet/                # Fleet monitoring page
     workflow/             # Workflow dashboard page
     settings/             # Settings pages
-  components/             # Shared React components
+  components/
+    FleetMatrix.tsx           # Fleet monitoring matrix (Cycle 3)
+    LearningInsightsPanel.tsx # AI learning insights panel (Cycle 3)
+    AgentSessionCard.tsx      # Agent session cards
+    WorkflowDashboard.tsx     # Workflow dashboard
+    ...
   hooks/                  # Custom React hooks
   lib/                    # Utilities
   __tests__/              # Component tests
@@ -735,12 +753,14 @@ server/
 ```typescript
 // app/api/sessions/route.ts
 import { NextResponse } from "next/server";
-import { loadConfig } from "@composio/ao-core";
+import { getServices } from "@/lib/services";
 
 export async function GET() {
-  const config = await loadConfig();
-  // ...
-  return NextResponse.json(data);
+  const { config, sessionManager } = await getServices();
+  // getServices() is a lazy singleton — loads config, creates plugin registry,
+  // creates session manager once, caches in globalThis
+  const sessions = await sessionManager.list();
+  return NextResponse.json({ sessions });
 }
 ```
 
@@ -776,7 +796,110 @@ pnpm --filter @composio/ao-web screenshot   # E2E screenshots (requires Playwrig
 
 ---
 
-## 11. Common Commands
+## 11. AI Intelligence Layer (Cycle 3)
+
+Cycle 3 introduced an AI intelligence layer in `@composio/ao-core` that learns from agent sessions to improve future performance.
+
+### Core Services
+
+All services live in `packages/core/src/`:
+
+| Service | File | Purpose |
+|---------|------|---------|
+| Session Learning | `session-learning.ts` | Captures structured outcome records (duration, files modified, domain tags, error categories) when agents complete stories |
+| Learning Store | `learning-store.ts` | Persistent append-only JSONL storage (`learnings.jsonl`) with file rotation (10MB default) and retention (90 days) |
+| Learning Patterns | `learning-patterns.ts` | Detects recurring failure patterns (3+ occurrences) across sessions and suggests remediation actions |
+| Assignment Scorer | `assignment-scorer.ts` | Scores agent-story affinity: `score = (successRate * 0.4) + (domainMatch * 0.3) + (speedFactor * 0.2) + (retryPenalty * -0.1)` |
+| Assignment Service | `assignment-service.ts` | Orchestrates story selection and agent assignment using scorer + dependency resolver |
+| Collaboration Service | `collaboration-service.ts` | Multi-agent coordination: dependency-aware scheduling, cross-agent context sharing, handoff protocol, file conflict detection |
+| Dependency Resolver | `dependency-resolver.ts` | Event-driven story dependency resolution with diamond dependency support and circular dependency detection |
+| Review Findings Store | `review-findings-store.ts` | JSONL storage for structured code review findings with query and analytics |
+
+### CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `ao agent-history [agent-id]` | View agent learning history and session outcomes |
+| `ao learning-patterns` | Detect and display recurring failure patterns |
+| `ao assign-suggest <story-id>` | Recommend optimal agent assignment based on affinity scoring |
+| `ao assign-next` | Auto-select next story and assign best-fit agent |
+| `ao review-stats` | View code review analytics from stored findings |
+| `ao collab-graph` | Visualize agent collaboration graph and story dependencies |
+| `ao health` | System health check including DLQ depth and service status |
+
+All commands support `--json` for machine-readable output.
+
+### Usage Examples
+
+```bash
+# View what an agent learned from past sessions
+ao agent-history agent-1
+
+# See recurring failure patterns across all agents
+ao learning-patterns
+
+# Get scored agent recommendations for a story
+ao assign-suggest 3-2-api-authentication
+# Output: ranked agents with affinity scores and reasoning
+
+# Auto-assign the next ready story to the best-fit agent
+ao assign-next
+
+# View code review analytics (common issues, resolution rates)
+ao review-stats
+
+# Visualize agent collaboration and story dependency chains
+ao collab-graph
+
+# System health check with DLQ depth
+ao health
+```
+
+### Web Dashboard Components
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `LearningInsightsPanel` | `components/LearningInsightsPanel.tsx` | Dashboard panel showing session success rates, failure patterns, and learning trends |
+| `FleetMatrix` | `components/FleetMatrix.tsx` | Fleet monitoring matrix with agent status overview |
+
+### API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/learning` | GET | Learning insights summary (session counts, success rate, top patterns) |
+| `/api/health` | GET | System health check (component status, DLQ depth, latency) |
+
+Both endpoints follow the WD-FR31 pattern: always return HTTP 200 with status in the response body.
+
+### Plugin API Package
+
+The `@composio/ao-plugin-api` package (`packages/plugin-api/`) provides stable type definitions for external plugin development:
+
+```typescript
+import type { Plugin, PluginContext, Event, Story, Agent, Trigger } from "@composio/ao-plugin-api";
+
+export function create(context: PluginContext): Plugin {
+  return {
+    name: "my-plugin",
+    version: "1.0.0",
+    async init() { /* ... */ },
+    async onEvent(event) { /* ... */ },
+    async shutdown() { /* ... */ },
+  };
+}
+```
+
+Key interfaces exported:
+- `Plugin` -- name, version, init(), onEvent(), shutdown()
+- `PluginContext` -- logger, config, events, state, agents
+- `Event` -- id, type, timestamp, data
+- `Story` -- id, title, status, acceptanceCriteria, tasks
+- `Agent` -- id, storyId, status, startTime
+- `Trigger` -- id, type (event/schedule/manual), condition, action
+
+---
+
+## 12. Common Commands
 
 ### Quick Reference
 
@@ -831,7 +954,7 @@ pnpm --filter "!@composio/ao-web" <command>          # Exclude a package
 
 ---
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
 ### Build Failures
 
@@ -906,11 +1029,11 @@ sudo apt install tmux
 **Symptom:** `EADDRINUSE` when starting the dev server.
 
 ```bash
-# Find and kill process on port 3000
-lsof -ti:3000 | xargs kill
+# Find and kill process on port 5000
+lsof -ti:5000 | xargs kill
 
 # Or use a different port
-PORT=3001 pnpm dev
+PORT=5001 pnpm dev
 ```
 
 Override terminal server ports via environment variables or config:
@@ -970,13 +1093,15 @@ pnpm install && pnpm build
 
 ## Key Files to Read First
 
-1. `packages/core/src/types.ts` -- all plugin interfaces (~2600 lines)
+1. `packages/core/src/types.ts` -- all plugin interfaces (~2800 lines)
 2. `agent-orchestrator.yaml.example` -- config format and options
 3. `CLAUDE.md` -- code conventions and architecture overview
 4. `packages/plugins/runtime-tmux/src/index.ts` -- clean Runtime plugin example
 5. `packages/plugins/tracker-github/src/index.ts` -- clean Tracker plugin example
-6. `docs/PLUGIN-DEVELOPMENT.md` -- full interface reference with example implementations
-7. `docs/TESTING-CONVENTIONS.md` -- vitest patterns and test standards
+6. `packages/plugin-api/src/index.ts` -- plugin API type definitions (Plugin, PluginContext, Event, Story, Agent, Trigger)
+7. `packages/core/src/session-learning.ts` -- AI intelligence entry point (session outcome capture)
+8. `docs/PLUGIN-DEVELOPMENT.md` -- full interface reference with example implementations
+9. `docs/TESTING-CONVENTIONS.md` -- vitest patterns and test standards
 
 ---
 

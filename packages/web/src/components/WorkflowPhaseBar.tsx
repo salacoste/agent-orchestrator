@@ -1,4 +1,4 @@
-import type { PhaseEntry, PhaseState } from "@/lib/workflow/types.js";
+import type { PhaseEntry, PhaseState } from "@/lib/workflow/types";
 
 interface WorkflowPhaseBarProps {
   phases: PhaseEntry[];
@@ -20,6 +20,14 @@ function phaseLabelClass(state: PhaseState): string {
     return "text-[12px] font-semibold text-[var(--color-text-primary)]";
   }
   return "text-[12px] text-[var(--color-text-secondary)]";
+}
+
+function connectorColor(currentState: PhaseState, nextState: PhaseState): string {
+  // Connector between two done phases or done→active = highlighted
+  if (currentState === "done" && (nextState === "done" || nextState === "active")) {
+    return "border-[var(--color-status-success)]";
+  }
+  return "border-[var(--color-border-default)]";
 }
 
 export function WorkflowPhaseBar({ phases }: WorkflowPhaseBarProps) {
@@ -48,20 +56,38 @@ export function WorkflowPhaseBar({ phases }: WorkflowPhaseBarProps) {
       <div className="flex flex-wrap items-center gap-y-2">
         {phases.map((phase, index) => (
           <div key={phase.id} className="flex items-center">
-            <div className="flex items-center gap-2">
-              <span className={`text-[14px] ${phaseIconColor(phase.state)}`} aria-hidden="true">
-                {phase.state === "done" ? "●" : phase.state === "active" ? "★" : "○"}
-              </span>
-              <span className={phaseLabelClass(phase.state)} aria-hidden="true">
-                {phase.label}
-              </span>
+            <div
+              className={`flex flex-col items-center gap-0.5 ${phase.state === "active" ? "relative" : ""}`}
+              aria-current={phase.state === "active" ? "step" : undefined}
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={`text-[14px] ${phaseIconColor(phase.state)}${phase.state === "active" ? " animate-pulse" : ""}`}
+                  aria-hidden="true"
+                >
+                  {phase.state === "done" ? "●" : phase.state === "active" ? "★" : "○"}
+                </span>
+                <span className={phaseLabelClass(phase.state)} aria-hidden="true">
+                  {phase.label}
+                </span>
+              </div>
+              {phase.state === "active" && (
+                <span
+                  className="text-[9px] font-semibold text-[var(--color-status-success)] tracking-wide"
+                  aria-hidden="true"
+                  data-testid="you-are-here-badge"
+                >
+                  YOU ARE HERE
+                </span>
+              )}
               <span className="sr-only">
                 {phase.label} phase: {phase.state === "not-started" ? "not started" : phase.state}
+                {phase.state === "active" ? " — you are here" : ""}
               </span>
             </div>
             {index < phases.length - 1 && (
               <span
-                className="mx-3 hidden w-6 border-t border-[var(--color-border-default)] md:inline-block"
+                className={`mx-3 hidden w-6 border-t md:inline-block ${connectorColor(phase.state, phases[index + 1].state)}`}
                 aria-hidden="true"
               />
             )}

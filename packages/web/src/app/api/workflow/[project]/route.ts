@@ -16,12 +16,16 @@ import { NextResponse } from "next/server";
 import type { ProjectConfig } from "@composio/ao-core";
 
 import { getServices } from "@/lib/services";
-import { computePhaseStates } from "@/lib/workflow/compute-state.js";
-import { lkgCache } from "@/lib/workflow/lkg-cache.js";
-import { parseAgentManifest } from "@/lib/workflow/parse-agents.js";
-import { getRecommendation } from "@/lib/workflow/recommendation-engine.js";
-import { buildPhasePresence, scanAllArtifacts } from "@/lib/workflow/scan-artifacts.js";
-import type { Phase, WorkflowResponse } from "@/lib/workflow/types.js";
+import { computePhaseStates } from "@/lib/workflow/compute-state";
+import { lkgCache } from "@/lib/workflow/lkg-cache";
+import { parseAgentManifest } from "@/lib/workflow/parse-agents";
+import {
+  getRecommendation,
+  getStateMachineRecommendation,
+} from "@/lib/workflow/recommendation-engine";
+import { buildPhasePresence, scanAllArtifacts } from "@/lib/workflow/scan-artifacts";
+import { createBmadStateMachine } from "@/lib/workflow/state-machine";
+import type { Phase, WorkflowResponse } from "@/lib/workflow/types";
 
 export const dynamic = "force-dynamic";
 
@@ -49,13 +53,23 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    // Resolve project root — use CWD as base, expand ~ if needed
-    const projectRoot = project.path
-      ? path.resolve(project.path.replace(/^~/, process.env.HOME ?? "~"))
-      : process.cwd();
+    // Resolve project root — expand ~ and resolve relative to projectsDir if configured
+    const expandHome = (p: string) => p.replace(/^~/, process.env.HOME ?? "~");
+    let projectRoot: string;
+    if (project.path) {
+      const expanded = expandHome(project.path);
+      projectRoot = path.isAbsolute(expanded)
+        ? path.resolve(expanded)
+        : path.resolve(expandHome(config.projectsDir ?? "."), expanded);
+    } else {
+      projectRoot = process.cwd();
+    }
 
-    // Check for BMAD presence
-    const bmadDir = path.join(projectRoot, "_bmad");
+    // Resolve BMAD paths — configurable per project (defaults: _bmad, _bmad-output)
+    const bmadConfigDir = project.bmad?.configDir ?? "_bmad";
+    const bmadOutputDir = project.bmad?.outputDir ?? "_bmad-output";
+    const bmadDir = path.resolve(projectRoot, bmadConfigDir);
+    const bmadOutput = path.resolve(projectRoot, bmadOutputDir);
     const hasBmad = await dirExists(bmadDir);
 
     if (!hasBmad) {
@@ -82,7 +96,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
     // --- Artifacts (WD-7: independent try/catch with LKG fallback) ---
     let artifacts: WorkflowResponse["artifacts"] = [];
     try {
-      artifacts = await scanAllArtifacts(projectRoot);
+      artifacts = await scanAllArtifacts(projectRoot, bmadOutput);
     } catch (err) {
       console.warn(
         `[workflow-api] artifact scan failed for ${projectId}: ${err instanceof Error ? err.message : String(err)}`,
@@ -111,7 +125,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
 
     let recommendation: WorkflowResponse["recommendation"] = null;
     try {
-      recommendation = getRecommendation(artifacts, phases, phasePresence);
+      // Prefer state-machine recommendation (includes reasoning + blockers)
+      const sm = createBmadStateMachine();
+      recommendation = getStateMachineRecommendation(artifacts, phases, sm);
+      // Fall back to legacy 7-rule engine if state machine returns null
+      if (!recommendation) {
+        recommendation = getRecommendation(artifacts, phases, phasePresence);
+      }
     } catch (err) {
       console.warn(
         `[workflow-api] recommendation failed for ${projectId}: ${err instanceof Error ? err.message : String(err)}`,
@@ -131,6 +151,29 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
         `[workflow-api] agent manifest failed for ${projectId}: ${err instanceof Error ? err.message : String(err)}`,
       );
       agents = lkgCache.get(projectId, "agents") ?? null;
+    }
+
+    // --- Readiness (Story 17.4: state machine transition readiness) ---
+    let readiness: WorkflowResponse["readiness"];
+    try {
+      const sm = createBmadStateMachine();
+      const activePhase = phases.find((p) => p.state === "active");
+      if (activePhase) {
+        const ctx = { phasePresence, artifacts };
+        const raw = sm.getTransitionReadiness(activePhase.id, ctx);
+        readiness = raw.map((r) => ({
+          from: r.transition.from,
+          to: r.transition.to,
+          score: r.score,
+          satisfied: r.satisfied.map((g) => ({ guardId: g.guardId, description: g.description })),
+          unsatisfied: r.unsatisfied.map((g) => ({
+            guardId: g.guardId,
+            description: g.description,
+          })),
+        }));
+      }
+    } catch {
+      // Readiness is optional — skip on error
     }
 
     // --- LastActivity (derived from artifacts — pure computation) ---
@@ -154,6 +197,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
       recommendation,
       artifacts,
       lastActivity,
+      readiness,
     };
     lkgCache.setAll(projectId, response);
 
@@ -161,8 +205,23 @@ export async function GET(_request: Request, { params }: { params: Promise<{ pro
   } catch (error) {
     // Outer catch — check LKG cache before returning error (AC3, AC4)
     if (!projectId) {
-      const message = error instanceof Error ? error.message : "Internal server error";
-      return NextResponse.json({ error: message }, { status: 500 });
+      // WD-FR31: always return 200 with well-formed JSON, never 500 for BMAD states
+      const emptyFallback: WorkflowResponse = {
+        projectId: "",
+        projectName: "Unknown",
+        hasBmad: false,
+        phases: computePhaseStates({
+          analysis: false,
+          planning: false,
+          solutioning: false,
+          implementation: false,
+        }),
+        agents: null,
+        recommendation: null,
+        artifacts: [],
+        lastActivity: null,
+      };
+      return NextResponse.json(emptyFallback);
     }
     const projectName = project?.name ?? projectId;
     const cached = lkgCache.getFullResponse(projectId, projectName);

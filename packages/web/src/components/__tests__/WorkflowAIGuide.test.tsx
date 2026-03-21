@@ -1,7 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { WorkflowAIGuide } from "../WorkflowAIGuide";
-import type { Phase, Recommendation } from "@/lib/workflow/types.js";
+import type { Phase, Recommendation } from "@/lib/workflow/types";
+// Recommendation type now includes optional blockers[] field (Story 17.3)
 
 function makeRecommendation(
   tier: 1 | 2,
@@ -146,8 +147,8 @@ describe("WorkflowAIGuide", () => {
       const { container } = render(<WorkflowAIGuide recommendation={rec} />);
 
       const ariaHiddenSpans = container.querySelectorAll('[aria-hidden="true"]');
-      // 2 spans: tier badge + phase badge
-      expect(ariaHiddenSpans).toHaveLength(2);
+      // 3 spans: tier badge + phase badge + button arrow (→)
+      expect(ariaHiddenSpans).toHaveLength(3);
     });
 
     it("tier badge uses text label not color alone (NFR-A3)", () => {
@@ -158,6 +159,139 @@ describe("WorkflowAIGuide", () => {
       const tierBadge = screen.getByText("Tier 1");
       expect(tierBadge).toBeInTheDocument();
       expect(tierBadge.textContent).toBe("Tier 1");
+    });
+  });
+
+  describe("next step button (Story 17.2)", () => {
+    it("renders 'Next Step' button when recommendation exists", () => {
+      const rec = makeRecommendation(1, "No brief found", "Create a product brief", "analysis");
+      render(<WorkflowAIGuide recommendation={rec} />);
+
+      const button = screen.getByTestId("next-step-button");
+      expect(button).toBeInTheDocument();
+      expect(button).toHaveTextContent("Create Brief");
+    });
+
+    it("does not render button when recommendation is null", () => {
+      render(<WorkflowAIGuide recommendation={null} />);
+
+      expect(screen.queryByTestId("next-step-button")).not.toBeInTheDocument();
+    });
+
+    it.each([
+      ["analysis", "Create Brief"],
+      ["planning", "Create PRD"],
+      ["solutioning", "Design Architecture"],
+      ["implementation", "Start Sprint"],
+    ] as [Phase, string][])("renders '%s' action as '%s' button", (phase, expectedLabel) => {
+      const rec = makeRecommendation(1, `Obs for ${phase}`, `Impl for ${phase}`, phase);
+      render(<WorkflowAIGuide recommendation={rec} />);
+
+      const button = screen.getByTestId("next-step-button");
+      expect(button).toHaveTextContent(expectedLabel);
+    });
+
+    it("button has accessible aria-label", () => {
+      const rec = makeRecommendation(1, "No PRD found", "Create a PRD", "planning");
+      render(<WorkflowAIGuide recommendation={rec} />);
+
+      const button = screen.getByTestId("next-step-button");
+      expect(button).toHaveAttribute("aria-label", "Next step: Create PRD");
+    });
+
+    it("button includes arrow indicator", () => {
+      const rec = makeRecommendation(1, "Observation", "Implication", "analysis");
+      render(<WorkflowAIGuide recommendation={rec} />);
+
+      const button = screen.getByTestId("next-step-button");
+      expect(button.textContent).toContain("→");
+    });
+  });
+
+  describe("recommendation reasoning display (Story 17.5)", () => {
+    it("renders reasoning section when blockers are present", () => {
+      const rec: Recommendation = {
+        tier: 1,
+        observation: "Architecture present but no epics",
+        implication: "Create epics to proceed",
+        phase: "solutioning",
+        reasoning: "Transition 50% ready",
+        blockers: [
+          {
+            guardId: "has-architecture",
+            description: "Architecture document exists",
+            satisfied: true,
+          },
+          {
+            guardId: "has-epics",
+            description: "Epics & stories document exists",
+            satisfied: false,
+          },
+        ],
+      };
+      render(<WorkflowAIGuide recommendation={rec} />);
+
+      const details = screen.getByTestId("reasoning-details");
+      expect(details).toBeInTheDocument();
+      expect(screen.getByText("Show reasoning (2 checks)")).toBeInTheDocument();
+    });
+
+    it("does not render reasoning when no blockers", () => {
+      const rec = makeRecommendation(1, "Observation", "Implication", "analysis");
+      render(<WorkflowAIGuide recommendation={rec} />);
+
+      expect(screen.queryByTestId("reasoning-details")).not.toBeInTheDocument();
+    });
+
+    it("shows pass/fail icons for each guard", () => {
+      const rec: Recommendation = {
+        tier: 2,
+        observation: "Obs",
+        implication: "Impl",
+        phase: "solutioning",
+        blockers: [
+          {
+            guardId: "has-architecture",
+            description: "Architecture document exists",
+            satisfied: true,
+          },
+          {
+            guardId: "has-epics",
+            description: "Epics & stories document exists",
+            satisfied: false,
+          },
+        ],
+      };
+      render(<WorkflowAIGuide recommendation={rec} />);
+
+      expect(screen.getByText("Architecture document exists")).toBeInTheDocument();
+      expect(screen.getByText("Epics & stories document exists")).toBeInTheDocument();
+    });
+
+    it("has accessible sr-only text for pass/fail status", () => {
+      const rec: Recommendation = {
+        tier: 1,
+        observation: "Obs",
+        implication: "Impl",
+        phase: "analysis",
+        blockers: [{ guardId: "has-brief", description: "Product brief exists", satisfied: true }],
+      };
+      render(<WorkflowAIGuide recommendation={rec} />);
+
+      expect(screen.getByText("Satisfied:")).toBeInTheDocument();
+    });
+
+    it("uses singular 'check' for single blocker", () => {
+      const rec: Recommendation = {
+        tier: 1,
+        observation: "Obs",
+        implication: "Impl",
+        phase: "planning",
+        blockers: [{ guardId: "has-prd", description: "PRD exists", satisfied: false }],
+      };
+      render(<WorkflowAIGuide recommendation={rec} />);
+
+      expect(screen.getByText("Show reasoning (1 check)")).toBeInTheDocument();
     });
   });
 });

@@ -10,7 +10,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ClassifiedArtifact, PhaseEntry, Recommendation } from "@/lib/workflow/types.js";
+import type { ClassifiedArtifact, PhaseEntry, Recommendation } from "@/lib/workflow/types";
 
 // --- Shared test data ---
 
@@ -111,6 +111,7 @@ const { mockGetRecommendation } = vi.hoisted(() => ({
 
 vi.mock("@/lib/workflow/recommendation-engine.js", () => ({
   getRecommendation: mockGetRecommendation,
+  getStateMachineRecommendation: vi.fn().mockReturnValue(null),
 }));
 
 const { mockParseAgentManifest } = vi.hoisted(() => ({
@@ -130,8 +131,8 @@ vi.mock("@/lib/workflow/parse-agents.js", () => ({
 }));
 
 // Import after mocks
-import { GET } from "./route.js";
-import { lkgCache } from "@/lib/workflow/lkg-cache.js";
+import { GET } from "./route";
+import { lkgCache } from "@/lib/workflow/lkg-cache";
 
 function makeParams(project: string) {
   return { params: Promise.resolve({ project }) };

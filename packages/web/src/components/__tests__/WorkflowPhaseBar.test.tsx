@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { WorkflowPhaseBar } from "../WorkflowPhaseBar";
-import type { PhaseEntry, PhaseState } from "@/lib/workflow/types.js";
+import type { PhaseEntry, PhaseState } from "@/lib/workflow/types";
 
 function makePhases(states: [PhaseState, PhaseState, PhaseState, PhaseState]): PhaseEntry[] {
   const ids = ["analysis", "planning", "solutioning", "implementation"] as const;
@@ -93,7 +93,7 @@ describe("WorkflowPhaseBar", () => {
       render(<WorkflowPhaseBar phases={phases} />);
 
       expect(screen.getByText("Analysis phase: done")).toBeInTheDocument();
-      expect(screen.getByText("Planning phase: active")).toBeInTheDocument();
+      expect(screen.getByText("Planning phase: active — you are here")).toBeInTheDocument();
       expect(screen.getByText("Solutioning phase: not started")).toBeInTheDocument();
       expect(screen.getByText("Implementation phase: not started")).toBeInTheDocument();
     });
@@ -103,8 +103,8 @@ describe("WorkflowPhaseBar", () => {
       const { container } = render(<WorkflowPhaseBar phases={phases} />);
 
       const ariaHiddenSpans = container.querySelectorAll('[aria-hidden="true"]');
-      // 4 icon spans + 4 label spans + 3 connector spans = 11
-      expect(ariaHiddenSpans).toHaveLength(11);
+      // 4 icon spans + 4 label spans + 3 connector spans + 1 "YOU ARE HERE" badge = 12
+      expect(ariaHiddenSpans).toHaveLength(12);
     });
 
     it("has aria-hidden on label spans", () => {
@@ -193,6 +193,59 @@ describe("WorkflowPhaseBar", () => {
       // connectors should be exactly phases.length - 1
       const connectors = container.querySelectorAll(".border-t");
       expect(connectors).toHaveLength(phases.length - 1);
+    });
+
+    it("highlights connectors between completed phases with success color", () => {
+      const phases = makePhases(["done", "done", "active", "not-started"]);
+      const { container } = render(<WorkflowPhaseBar phases={phases} />);
+
+      const connectors = container.querySelectorAll(".border-t");
+      // First connector (done→done) should be highlighted
+      expect(connectors[0].className).toContain("color-status-success");
+      // Second connector (done→active) should be highlighted
+      expect(connectors[1].className).toContain("color-status-success");
+      // Third connector (active→not-started) should be default
+      expect(connectors[2].className).toContain("color-border-default");
+    });
+  });
+
+  describe("you are here indicator (Story 17.1)", () => {
+    it("renders 'YOU ARE HERE' badge on the active phase", () => {
+      const phases = makePhases(["done", "done", "active", "not-started"]);
+      render(<WorkflowPhaseBar phases={phases} />);
+
+      const badge = screen.getByTestId("you-are-here-badge");
+      expect(badge).toBeInTheDocument();
+      expect(badge).toHaveTextContent("YOU ARE HERE");
+    });
+
+    it("does not render badge when no phase is active", () => {
+      const phases = makePhases(["done", "done", "done", "done"]);
+      render(<WorkflowPhaseBar phases={phases} />);
+
+      expect(screen.queryByTestId("you-are-here-badge")).not.toBeInTheDocument();
+    });
+
+    it("does not render badge on not-started phases", () => {
+      const phases = makePhases(["not-started", "not-started", "not-started", "not-started"]);
+      render(<WorkflowPhaseBar phases={phases} />);
+
+      expect(screen.queryByTestId("you-are-here-badge")).not.toBeInTheDocument();
+    });
+
+    it("adds aria-current=step to the active phase", () => {
+      const phases = makePhases(["done", "active", "not-started", "not-started"]);
+      const { container } = render(<WorkflowPhaseBar phases={phases} />);
+
+      const currentStep = container.querySelector('[aria-current="step"]');
+      expect(currentStep).toBeInTheDocument();
+    });
+
+    it("includes 'you are here' in sr-only text for active phase", () => {
+      const phases = makePhases(["done", "active", "not-started", "not-started"]);
+      render(<WorkflowPhaseBar phases={phases} />);
+
+      expect(screen.getByText("Planning phase: active — you are here")).toBeInTheDocument();
     });
   });
 });

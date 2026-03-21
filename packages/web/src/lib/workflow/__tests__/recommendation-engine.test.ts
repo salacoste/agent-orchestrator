@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { getRecommendation } from "../recommendation-engine.js";
-import type { ClassifiedArtifact, Phase, PhaseEntry, PhaseState } from "../types.js";
+import { getRecommendation, getStateMachineRecommendation } from "../recommendation-engine";
+import { createBmadStateMachine } from "../state-machine";
+import type { ClassifiedArtifact, Phase, PhaseEntry, PhaseState } from "../types";
 
 function makeArtifact(filename: string, phase: Phase | null): ClassifiedArtifact {
   return {
@@ -483,5 +484,154 @@ describe("getRecommendation", () => {
       );
       expect(result).toBeNull();
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// State-machine-based recommendation engine (Story 17.3)
+// ---------------------------------------------------------------------------
+
+function makeTypedArtifact(
+  phase: Phase | null,
+  type: string,
+  filename?: string,
+): ClassifiedArtifact {
+  const name = filename ?? `${type.toLowerCase().replace(/\s+/g, "-")}.md`;
+  return {
+    filename: name,
+    path: `_bmad-output/planning-artifacts/${name}`,
+    modifiedAt: "2026-03-21T00:00:00.000Z",
+    phase,
+    type,
+  };
+}
+
+describe("getStateMachineRecommendation", () => {
+  const sm = createBmadStateMachine();
+
+  it("recommends analysis when no artifacts exist", () => {
+    const result = getStateMachineRecommendation(
+      [],
+      makePhases(["not-started", "not-started", "not-started", "not-started"]),
+      sm,
+    );
+    expect(result).not.toBeNull();
+    expect(result?.phase).toBe("analysis");
+    expect(result?.tier).toBe(1);
+    expect(result?.reasoning).toContain("No artifacts");
+    expect(result?.blockers).toEqual([]);
+  });
+
+  it("recommends planning when brief exists but no PRD", () => {
+    const artifacts = [makeTypedArtifact("analysis", "Product Brief", "product-brief.md")];
+    const result = getStateMachineRecommendation(
+      artifacts,
+      makePhases(["active", "not-started", "not-started", "not-started"]),
+      sm,
+    );
+    expect(result).not.toBeNull();
+    expect(result?.phase).toBe("planning");
+    expect(result?.blockers?.some((b) => b.guardId === "has-brief" && b.satisfied)).toBe(true);
+  });
+
+  it("recommends solutioning when PRD exists but no architecture", () => {
+    const artifacts = [
+      makeTypedArtifact("analysis", "Product Brief", "product-brief.md"),
+      makeTypedArtifact("planning", "PRD", "prd.md"),
+    ];
+    const result = getStateMachineRecommendation(
+      artifacts,
+      makePhases(["done", "active", "not-started", "not-started"]),
+      sm,
+    );
+    expect(result).not.toBeNull();
+    expect(result?.phase).toBe("solutioning");
+  });
+
+  it("shows 50% readiness when architecture exists but epics missing", () => {
+    const artifacts = [
+      makeTypedArtifact("analysis", "Product Brief", "product-brief.md"),
+      makeTypedArtifact("planning", "PRD", "prd.md"),
+      makeTypedArtifact("solutioning", "Architecture", "architecture.md"),
+    ];
+    const result = getStateMachineRecommendation(
+      artifacts,
+      makePhases(["done", "done", "active", "not-started"]),
+      sm,
+    );
+    expect(result).not.toBeNull();
+    expect(result?.phase).toBe("implementation");
+    expect(result?.reasoning).toContain("50%");
+    expect(result?.blockers?.find((b) => b.guardId === "has-epics")?.satisfied).toBe(false);
+    expect(result?.blockers?.find((b) => b.guardId === "has-architecture")?.satisfied).toBe(true);
+  });
+
+  it("recommends implementation when all solutioning artifacts exist", () => {
+    const artifacts = [
+      makeTypedArtifact("analysis", "Product Brief", "product-brief.md"),
+      makeTypedArtifact("planning", "PRD", "prd.md"),
+      makeTypedArtifact("solutioning", "Architecture", "architecture.md"),
+      makeTypedArtifact("solutioning", "Epics & Stories", "epics.md"),
+    ];
+    const result = getStateMachineRecommendation(
+      artifacts,
+      makePhases(["done", "done", "active", "not-started"]),
+      sm,
+    );
+    expect(result).not.toBeNull();
+    expect(result?.phase).toBe("implementation");
+    expect(result?.reasoning).toContain("satisfied");
+    expect(result?.blockers?.every((b) => b.satisfied)).toBe(true);
+  });
+
+  it("returns implementation recommendation when implementation is active", () => {
+    const artifacts = [
+      makeTypedArtifact("analysis", "Product Brief", "product-brief.md"),
+      makeTypedArtifact("planning", "PRD", "prd.md"),
+      makeTypedArtifact("solutioning", "Architecture", "architecture.md"),
+      makeTypedArtifact("solutioning", "Epics & Stories", "epics.md"),
+      makeTypedArtifact("implementation", "Sprint Plan", "sprint-status.yaml"),
+    ];
+    const result = getStateMachineRecommendation(
+      artifacts,
+      makePhases(["done", "done", "done", "active"]),
+      sm,
+    );
+    expect(result).not.toBeNull();
+    expect(result?.phase).toBe("implementation");
+    expect(result?.tier).toBe(2);
+  });
+
+  it("is deterministic — same input always produces same output", () => {
+    const artifacts = [makeTypedArtifact("analysis", "Product Brief", "product-brief.md")];
+    const phases = makePhases(["active", "not-started", "not-started", "not-started"]);
+
+    const r1 = getStateMachineRecommendation(artifacts, phases, sm);
+    const r2 = getStateMachineRecommendation(artifacts, phases, sm);
+    expect(r1?.phase).toBe(r2?.phase);
+    expect(r1?.observation).toBe(r2?.observation);
+    expect(r1?.reasoning).toBe(r2?.reasoning);
+  });
+
+  it("returns null when all phases are done", () => {
+    const result = getStateMachineRecommendation(
+      [],
+      makePhases(["done", "done", "done", "done"]),
+      sm,
+    );
+    expect(result).toBeNull();
+  });
+
+  it("completes in <50ms for 100 artifacts", () => {
+    const artifacts: ClassifiedArtifact[] = Array.from({ length: 100 }, (_, i) =>
+      makeTypedArtifact(i % 2 === 0 ? "planning" : "solutioning", "Test", `test-${i}.md`),
+    );
+    const phases = makePhases(["done", "active", "not-started", "not-started"]);
+
+    const start = performance.now();
+    getStateMachineRecommendation(artifacts, phases, sm);
+    const elapsed = performance.now() - start;
+
+    expect(elapsed).toBeLessThan(50);
   });
 });

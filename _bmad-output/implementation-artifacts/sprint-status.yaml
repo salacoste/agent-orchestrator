@@ -355,10 +355,10 @@ previous_cycle:
   # Epic 27: Multi-User Collaboration (MVP)
   # FRs: Brainstorm #111, #112, #115
   # Parallel with 26
-  epic-27: backlog
-  27-1-team-presence: backlog
-  27-2-review-claim-system: backlog
-  27-3-decision-log: backlog
+  epic-27: done
+  27-1-team-presence: done
+  27-2-review-claim-system: done
+  27-3-decision-log: done
   epic-27-retrospective: optional
 
   # Epic 28: SDK & Headless Mode

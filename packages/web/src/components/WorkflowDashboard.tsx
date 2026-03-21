@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 
+import { CascadeAlert } from "@/components/CascadeAlert";
 import { WorkflowAIGuide } from "@/components/WorkflowAIGuide";
 import { WorkflowAgentsPanel } from "@/components/WorkflowAgentsPanel";
 import { WorkflowArtifactInventory } from "@/components/WorkflowArtifactInventory";
@@ -38,6 +39,9 @@ export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div className="md:col-span-3">
         <WorkflowPhaseBar phases={data.phases} />
+      </div>
+      <div className="md:col-span-3">
+        <CascadeAlert status={null} />
       </div>
       {nudges.length > 0 && (
         <div className="md:col-span-3 space-y-2" data-testid="anti-pattern-nudges">

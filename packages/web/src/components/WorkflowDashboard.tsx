@@ -1,12 +1,16 @@
 import { useMemo } from "react";
 
 import { CascadeAlert } from "@/components/CascadeAlert";
+import { ConflictCheckpointPanel } from "@/components/ConflictCheckpointPanel";
+import { ProjectChatPanel } from "@/components/ProjectChatPanel";
+import { SprintCostPanel } from "@/components/SprintCostPanel";
 import { WorkflowAIGuide } from "@/components/WorkflowAIGuide";
 import { WorkflowAgentsPanel } from "@/components/WorkflowAgentsPanel";
 import { WorkflowArtifactInventory } from "@/components/WorkflowArtifactInventory";
 import { WorkflowLastActivity } from "@/components/WorkflowLastActivity";
 import { WorkflowPhaseBar } from "@/components/WorkflowPhaseBar";
 import { detectAntiPatterns } from "@/lib/workflow/anti-patterns";
+import { generateInsights } from "@/lib/workflow/project-context-aggregator";
 import type { Phase, WorkflowResponse } from "@/lib/workflow/types";
 
 interface WorkflowDashboardProps {
@@ -35,11 +39,19 @@ export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
     [data.artifacts, data.phases],
   );
 
+  const insights = useMemo(
+    () => generateInsights(0, 0, 0, 0), // Placeholder — wire to real sprint data
+    [],
+  );
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {/* Row 1: Phase pipeline (full width) */}
       <div className="md:col-span-3">
         <WorkflowPhaseBar phases={data.phases} />
       </div>
+
+      {/* Row 2: Alerts (full width, conditional) */}
       <div className="md:col-span-3">
         <CascadeAlert status={null} />
       </div>
@@ -61,17 +73,34 @@ export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
           ))}
         </div>
       )}
+
+      {/* Row 3: AI Guide + Cost & Schedule */}
       <div className="md:col-span-2">
         <WorkflowAIGuide recommendation={data.recommendation} />
       </div>
       <div>
-        <WorkflowLastActivity lastActivity={data.lastActivity} />
+        <SprintCostPanel cost={null} clock={null} />
       </div>
+
+      {/* Row 4: Artifacts + Last Activity */}
       <div className="md:col-span-2">
         <WorkflowArtifactInventory artifacts={data.artifacts} />
       </div>
       <div>
+        <WorkflowLastActivity lastActivity={data.lastActivity} />
+      </div>
+
+      {/* Row 5: Conflicts + Agents */}
+      <div className="md:col-span-2">
+        <ConflictCheckpointPanel conflicts={[]} timeline={null} />
+      </div>
+      <div>
         <WorkflowAgentsPanel agents={data.agents} />
+      </div>
+
+      {/* Row 6: Chat panel (full width) */}
+      <div className="md:col-span-3">
+        <ProjectChatPanel insights={insights} />
       </div>
     </div>
   );

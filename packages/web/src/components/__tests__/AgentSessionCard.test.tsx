@@ -40,7 +40,11 @@ describe("AgentSessionCard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     // Reset clipboard mock
-    global.navigator.clipboard = { writeText: vi.fn().mockResolvedValue(undefined) } as any;
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      writable: true,
+      configurable: true,
+    });
   });
 
   it("renders modal when open", async () => {
@@ -474,5 +478,121 @@ describe("AgentSessionCard", () => {
       },
       { timeout: 10000 },
     );
+  });
+
+  describe("agent narrative (Story 18.2)", () => {
+    it("renders narrative text when summary is present", async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: "ao-test-narrative",
+            issueLabel: null,
+            issueTitle: null,
+            status: "working",
+            activity: "active",
+            summary: "Implementing auth endpoint. Working on test suite.",
+            createdAt: "2026-03-21T00:00:00Z",
+            lastActivityAt: "2026-03-21T00:05:00Z",
+          }),
+        }),
+      ) as unknown as typeof fetch;
+
+      render(<AgentSessionCard agentId="ao-test-narrative" onClose={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("agent-narrative")).toBeInTheDocument();
+        expect(screen.getByTestId("agent-narrative")).toHaveTextContent(
+          "Implementing auth endpoint. Working on test suite.",
+        );
+      });
+    });
+
+    it("renders help request with options when present (Story 18.3)", async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: "ao-test-help",
+            issueLabel: null,
+            issueTitle: null,
+            status: "blocked",
+            activity: "blocked",
+            helpRequest: {
+              question: "Which API endpoint should I use?",
+              options: [
+                { id: "A", label: "REST /api/v2", description: "Standard REST endpoint" },
+                { id: "B", label: "GraphQL /graphql", description: "GraphQL endpoint" },
+              ],
+              raisedAt: "2026-03-21T00:00:00Z",
+              selectedOption: null,
+            },
+            createdAt: "2026-03-21T00:00:00Z",
+            lastActivityAt: "2026-03-21T00:05:00Z",
+          }),
+        }),
+      ) as unknown as typeof fetch;
+
+      render(<AgentSessionCard agentId="ao-test-help" onClose={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("help-request")).toBeInTheDocument();
+        expect(screen.getByText("Which API endpoint should I use?")).toBeInTheDocument();
+        expect(screen.getByTestId("help-option-A")).toHaveTextContent("A: REST /api/v2");
+        expect(screen.getByTestId("help-option-B")).toHaveTextContent("B: GraphQL /graphql");
+      });
+    });
+
+    it("renders recovery action buttons for blocked agents (Story 19.2)", async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: "ao-test-blocked",
+            issueLabel: null,
+            issueTitle: null,
+            status: "blocked",
+            activity: "blocked",
+            severity: "red",
+            createdAt: "2026-03-21T00:00:00Z",
+            lastActivityAt: "2026-03-21T00:05:00Z",
+          }),
+        }),
+      ) as unknown as typeof fetch;
+
+      render(<AgentSessionCard agentId="ao-test-blocked" onClose={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("recovery-actions")).toBeInTheDocument();
+        expect(screen.getByTestId("recovery-ping")).toHaveTextContent("Ping");
+        expect(screen.getByTestId("recovery-restart")).toHaveTextContent("Restart");
+        expect(screen.getByTestId("recovery-reassign")).toHaveTextContent("Reassign");
+      });
+    });
+
+    it("does not render narrative when summary is null", async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: "ao-test-no-narrative",
+            issueLabel: null,
+            issueTitle: null,
+            status: "working",
+            activity: "active",
+            summary: null,
+            createdAt: "2026-03-21T00:00:00Z",
+            lastActivityAt: "2026-03-21T00:05:00Z",
+          }),
+        }),
+      ) as unknown as typeof fetch;
+
+      render(<AgentSessionCard agentId="ao-test-no-narrative" onClose={vi.fn()} />);
+
+      await waitFor(() => {
+        expect(screen.getByText("working")).toBeInTheDocument();
+      });
+      expect(screen.queryByTestId("agent-narrative")).not.toBeInTheDocument();
+    });
   });
 });

@@ -154,6 +154,25 @@ export interface SSEWorkflowChangeEvent {
   type: "workflow-change";
 }
 
+/** SSE event: a BMAD artifact was created or updated on disk (Story 16.5). */
+export interface SSEWorkflowArtifactEvent {
+  type: "workflow.artifact";
+  filename: string;
+  phase: string | null;
+  artifactType: string;
+  action: "created" | "updated";
+  timestamp: string;
+}
+
+/** SSE event: a BMAD workflow phase changed state (Story 16.5). */
+export interface SSEWorkflowPhaseEvent {
+  type: "workflow.phase";
+  phase: string;
+  previousState: "not-started" | "done" | "active";
+  newState: "not-started" | "done" | "active";
+  timestamp: string;
+}
+
 /**
  * Returns true when this PR's enrichment data couldn't be fetched due to
  * API rate limiting. When true, CI status / review decision / mergeability

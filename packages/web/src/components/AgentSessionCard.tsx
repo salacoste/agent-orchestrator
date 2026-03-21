@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useSSEConnection } from "@/hooks/useSSEConnection";
+import { formatTimeAgo } from "@/lib/format";
 
 interface ActivityEvent {
   timestamp: string;
@@ -21,6 +22,17 @@ interface AgentData {
   status: string;
   activity: string;
   blockReason?: string;
+  /** Severity of blocked/stuck state: amber (warning) or red (critical) (Story 19.1). */
+  severity?: "none" | "amber" | "red" | null;
+  /** Human-readable narrative of what the agent is doing (Story 18.2). */
+  summary?: string | null;
+  /** Structured help request when agent is stuck (Story 18.3). */
+  helpRequest?: {
+    question: string;
+    options: Array<{ id: string; label: string; description?: string }>;
+    raisedAt: string;
+    selectedOption?: string | null;
+  } | null;
   createdAt: string;
   lastActivityAt: string;
 }
@@ -133,18 +145,6 @@ export default function AgentSessionCard({ agentId, onClose }: AgentSessionCardP
         });
     }
   };
-
-  // Format time ago
-  function formatTimeAgo(dateStr: string): string {
-    const date = new Date(dateStr);
-    const now = new Date();
-    const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-
-    if (seconds < 60) return `${seconds}s ago`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-    return `${Math.floor(seconds / 86400)}d ago`;
-  }
 
   // Calculate session duration
   function calculateDuration(createdAt: string): string {
@@ -312,8 +312,97 @@ export default function AgentSessionCard({ agentId, onClose }: AgentSessionCardP
                     <span className="ml-2">{formatTimeAgo(agentData.lastActivityAt)}</span>
                   </div>
                 </div>
-                {isBlocked && agentData.blockReason && (
-                  <div className="text-sm text-red-400 mt-2">⚠️ {agentData.blockReason}</div>
+                {isBlocked && (
+                  <div className="mt-2">
+                    <div
+                      className={`text-sm ${agentData.severity === "red" ? "text-red-400" : "text-amber-400"}`}
+                      data-testid="agent-blocked-indicator"
+                    >
+                      {agentData.severity === "red" ? "🔴" : "🟡"}{" "}
+                      {agentData.blockReason ?? "Agent appears stuck — no recent activity"}
+                    </div>
+                    <div className="flex gap-2 mt-2" data-testid="recovery-actions">
+                      <button
+                        type="button"
+                        className="px-2.5 py-1 text-[11px] font-medium rounded border border-[var(--color-border-default)] hover:bg-[var(--color-bg-hover)] transition-colors"
+                        data-testid="recovery-ping"
+                        onClick={() => {
+                          fetch(`/api/agent/${agentId}/ping`, { method: "POST" }).catch(() => {});
+                        }}
+                      >
+                        Ping
+                      </button>
+                      <button
+                        type="button"
+                        className="px-2.5 py-1 text-[11px] font-medium rounded border border-[var(--color-status-attention)] text-[var(--color-status-attention)] hover:bg-[var(--color-status-attention)]/10 transition-colors"
+                        data-testid="recovery-restart"
+                        onClick={() => {
+                          fetch(`/api/agent/${agentId}/restart`, { method: "POST" }).catch(
+                            () => {},
+                          );
+                        }}
+                      >
+                        Restart
+                      </button>
+                      <button
+                        type="button"
+                        className="px-2.5 py-1 text-[11px] font-medium rounded border border-red-400 text-red-400 hover:bg-red-400/10 transition-colors"
+                        data-testid="recovery-reassign"
+                        onClick={() => {
+                          fetch(`/api/agent/${agentId}/reassign`, { method: "POST" }).catch(
+                            () => {},
+                          );
+                        }}
+                      >
+                        Reassign
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {agentData.summary && (
+                  <div
+                    className="text-[12px] text-[var(--color-text-secondary)] mt-2 italic"
+                    data-testid="agent-narrative"
+                  >
+                    {agentData.summary}
+                  </div>
+                )}
+                {agentData.helpRequest && !agentData.helpRequest.selectedOption && (
+                  <div
+                    className="mt-3 p-3 rounded-md border border-[var(--color-status-attention)] bg-[var(--color-bg-surface)]"
+                    data-testid="help-request"
+                  >
+                    <p className="text-[12px] font-semibold text-[var(--color-status-attention)] mb-2">
+                      🤚 Agent needs your input
+                    </p>
+                    <p className="text-[12px] text-[var(--color-text-primary)] mb-2">
+                      {agentData.helpRequest.question}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {agentData.helpRequest.options.map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          className="px-3 py-1.5 text-[11px] font-medium rounded-md border border-[var(--color-border-default)] hover:bg-[var(--color-bg-hover)] transition-colors"
+                          data-testid={`help-option-${opt.id}`}
+                          title={opt.description}
+                          onClick={() => {
+                            // Record the selected option and update UI
+                            setAgentData((prev) =>
+                              prev?.helpRequest
+                                ? {
+                                    ...prev,
+                                    helpRequest: { ...prev.helpRequest, selectedOption: opt.id },
+                                  }
+                                : prev,
+                            );
+                          }}
+                        >
+                          {opt.id}: {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </>
             ) : (

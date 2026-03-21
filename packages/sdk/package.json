@@ -1,0 +1,19 @@
+{
+  "name": "@composio/ao-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK for Agent Orchestrator — spawn agents, subscribe to events, get recommendations",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["agent-orchestrator", "sdk", "ai-agents", "bmad"],
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

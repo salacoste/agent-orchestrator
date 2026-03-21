@@ -420,6 +420,40 @@ previous_cycle:
   33-4-collaboration-integration-test: done
   epic-33-retrospective: optional
 
+  # ==========================================================================
+  # CYCLE 7 — Production Wiring, IDE Integrations, DX Conventions
+  # Source: epics-cycle-7.md (10 retro action items)
+  # ==========================================================================
+
+  # Epic 34: SDK Package & Production Wiring
+  epic-34: backlog
+  34-1-create-packages-sdk-workspace: backlog
+  34-2-sdk-integration-tests: backlog
+  34-3-sdk-readme-quickstart: backlog
+  epic-34-retrospective: optional
+
+  # Epic 35: IDE & CI Production Integrations
+  epic-35: backlog
+  35-1-vscode-extension-scaffold: backlog
+  35-2-vscode-extension-sprint-sidebar: backlog
+  35-3-github-action-orchestration-commands: backlog
+  35-4-git-hook-integration-commit-tagging: backlog
+  epic-35-retrospective: optional
+
+  # Epic 36: Collaboration Production Features
+  epic-36: backlog
+  36-1-shared-annotation-ui-component: backlog
+  36-2-role-based-agent-ownership-ui: backlog
+  36-3-handoff-protocol-implementation: backlog
+  epic-36-retrospective: optional
+
+  # Epic 37: DX Conventions & Lint Rules
+  epic-37: backlog
+  37-1-dead-button-lint-rule: backlog
+  37-2-test-per-story-convention-enforcement: backlog
+  37-3-renders-in-parent-ac-convention: backlog
+  epic-37-retrospective: optional
+
 # Known Limitations & Feature Flags
 limitations:
   runtime-exit-code-detection:

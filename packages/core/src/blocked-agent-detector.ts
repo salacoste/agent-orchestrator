@@ -3,7 +3,7 @@
  *
  * Provides:
  * - Activity tracking per agent (last activity timestamp)
- * - Configurable inactivity timeout (default: 10 minutes)
+ * - Configurable inactivity timeout (default: 30 minutes)
  * - Agent-type specific timeouts (claude-code: 10m, codex: 5m, aider: 15m)
  * - Automatic blocked detection with periodic checks
  * - Pause functionality to suppress blocked detection for intentional pauses
@@ -23,8 +23,8 @@ import type {
 /** Default check interval (60 seconds) */
 const DEFAULT_CHECK_INTERVAL = 60_000;
 
-/** Default timeout (10 minutes) */
-const DEFAULT_TIMEOUT = 10 * 60 * 1000;
+/** Default timeout (30 minutes) — used for unknown/new agent types */
+const DEFAULT_TIMEOUT = 30 * 60 * 1000;
 
 /** Minimum timeout (1 minute) */
 const MIN_TIMEOUT = 1 * 60 * 1000;
@@ -125,13 +125,25 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
 
     for (const [agentId, status] of this.agentStatus.entries()) {
       // Skip paused agents
-      if (status.isPaused) continue;
-
-      // Skip already blocked agents
-      if (status.isBlocked) continue;
+      if (status.isPaused) {
+        status.severity = "none";
+        continue;
+      }
 
       const inactiveMs = now - status.lastActivity.getTime();
       const timeout = this.getTimeoutForAgent(agentId);
+
+      // Compute severity tiers (Story 19.1): amber at 1x, red at 2x threshold
+      if (inactiveMs > timeout * 2) {
+        status.severity = "red";
+      } else if (inactiveMs > timeout) {
+        status.severity = "amber";
+      } else {
+        status.severity = "none";
+      }
+
+      // Skip already blocked agents for event publishing
+      if (status.isBlocked) continue;
 
       if (inactiveMs > timeout) {
         await this.blockAgent(agentId, inactiveMs);

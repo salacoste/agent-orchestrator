@@ -88,12 +88,51 @@ const DefaultPluginsSchema = z.object({
   notifiers: z.array(z.string()).default(["composio", "desktop"]),
 });
 
+const HealthThresholdsSchema = z.object({
+  maxLatencyMs: z.number().nonnegative().optional(),
+  maxQueueDepth: z.number().nonnegative().optional(),
+  agentInactiveThresholdMs: z.number().nonnegative().optional(),
+  syncLatencyWarningMs: z.number().nonnegative().optional(),
+});
+
+const PerComponentThresholdsSchema = z.object({
+  maxLatencyMs: z.number().nonnegative().optional(),
+  maxQueueDepth: z.number().nonnegative().optional(),
+});
+
+const HealthConfigSchema = z.object({
+  checkIntervalMs: z.number().nonnegative().optional(),
+  alertOnTransition: z.boolean().optional(),
+  thresholds: HealthThresholdsSchema.optional(),
+  perComponent: z.record(PerComponentThresholdsSchema).optional(),
+});
+
+const WorkflowGuardSchema = z.object({
+  id: z.string(),
+  description: z.string(),
+  artifactType: z.string(),
+});
+
+const WorkflowTransitionDefinitionSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  description: z.string(),
+  guards: z.array(WorkflowGuardSchema),
+});
+
+const WorkflowConfigSchema = z.object({
+  phases: z.array(z.string()).optional(),
+  transitions: z.array(WorkflowTransitionDefinitionSchema),
+});
+
 const OrchestratorConfigSchema = z.object({
-  port: z.number().default(5000),
+  port: z.number().default(5_000),
   terminalPort: z.number().optional(),
   directTerminalPort: z.number().optional(),
   readyThresholdMs: z.number().nonnegative().default(300_000),
   defaults: DefaultPluginsSchema.default({}),
+  health: HealthConfigSchema.optional(),
+  workflow: WorkflowConfigSchema.optional(),
   projects: z.record(ProjectConfigSchema),
   notifiers: z.record(NotifierConfigSchema).default({}),
   notificationRouting: z.record(z.array(z.string())).default({

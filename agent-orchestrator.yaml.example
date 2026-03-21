@@ -15,6 +15,54 @@ port: 5000
 # terminalPort: 5080
 # directTerminalPort: 5081
 
+# Health monitoring (optional — sensible defaults used when omitted)
+# health:
+#   checkIntervalMs: 30000          # How often to run health checks (default: 30s)
+#   alertOnTransition: true         # Publish event when status changes (default: true)
+#   thresholds:
+#     maxLatencyMs: 1000            # Global latency threshold (default: 1000ms)
+#     maxQueueDepth: 100            # Global queue depth threshold (default: 100)
+#   perComponent:                   # Override thresholds per component
+#     event-bus:
+#       maxLatencyMs: 500
+#       maxQueueDepth: 200
+#     bmad-tracker:
+#       maxLatencyMs: 2000
+
+# BMAD Workflow configuration (optional — omit for standard BMAD workflow)
+# Only customize if you use a non-standard development methodology.
+# workflow:
+#   phases:
+#     - analysis
+#     - planning
+#     - solutioning
+#     - implementation
+#   transitions:
+#     - from: analysis
+#       to: planning
+#       description: Begin planning with PRD and UX design
+#       guards:
+#         - id: has-brief
+#           description: Product brief exists
+#           artifactType: Product Brief
+#     - from: planning
+#       to: solutioning
+#       description: Design architecture and break into epics
+#       guards:
+#         - id: has-prd
+#           description: PRD exists
+#           artifactType: PRD
+#     - from: solutioning
+#       to: implementation
+#       description: Start sprint execution with agents
+#       guards:
+#         - id: has-architecture
+#           description: Architecture document exists
+#           artifactType: Architecture
+#         - id: has-epics
+#           description: Epics & stories document exists
+#           artifactType: Epics & Stories
+
 # Default plugins (these are the defaults — you can omit this section)
 defaults:
   runtime: tmux           # tmux | process | docker | kubernetes | ssh | e2b
@@ -22,14 +70,22 @@ defaults:
   workspace: worktree     # worktree | clone | copy
   notifiers: [desktop]    # desktop | slack | discord | webhook | email
 
+# Base directory for project paths (project.path resolved relative to this if not absolute)
+# projectsDir: ~/Code
+
 # Projects — at minimum, specify repo and path
 projects:
   my-app:
     name: My App
     repo: org/my-app
-    path: ~/my-app
+    path: ~/my-app                # absolute path, or relative to projectsDir
     defaultBranch: main
     sessionPrefix: app
+
+    # BMAD directory paths (optional — defaults shown)
+    # bmad:
+    #   configDir: _bmad           # BMAD config directory (relative to project path)
+    #   outputDir: _bmad-output    # BMAD artifacts directory (relative to project path)
 
     # Issue tracker (defaults to github issues)
     # tracker:

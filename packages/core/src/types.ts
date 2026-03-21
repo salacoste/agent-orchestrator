@@ -196,6 +196,8 @@ export interface SessionSpawnConfig {
   prompt?: string;
   /** Override the agent plugin for this session (e.g. "codex", "claude-code") */
   agent?: string;
+  /** Pre-formatted story context from sprint-status.yaml + story file (routed to prompt builder Layer 2) */
+  storyContext?: string;
 }
 
 /** Config for creating an orchestrator session */
@@ -880,6 +882,9 @@ export interface OrchestratorConfig {
   /** Milliseconds before a "ready" session becomes "idle" (default: 300000 = 5 min) */
   readyThresholdMs: number;
 
+  /** Base directory for project paths (project.path resolved relative to this if not absolute) */
+  projectsDir?: string;
+
   /** Default plugin selections */
   defaults: DefaultPlugins;
 
@@ -894,6 +899,31 @@ export interface OrchestratorConfig {
 
   /** Default reaction configs */
   reactions: Record<string, ReactionConfig>;
+
+  /** Health monitoring configuration (Story 4.4) */
+  health?: HealthYamlConfig;
+
+  /** BMAD workflow configuration (Story 16.3). Omit for default BMAD workflow. */
+  workflow?: WorkflowConfig;
+}
+
+/**
+ * Health monitoring YAML configuration
+ */
+export interface HealthYamlConfig {
+  /** Health check interval in ms (default: 30000) */
+  checkIntervalMs?: number;
+  /** Whether to publish events on health status transitions (default: true) */
+  alertOnTransition?: boolean;
+  /** Global health check thresholds */
+  thresholds?: {
+    maxLatencyMs?: number;
+    maxQueueDepth?: number;
+    agentInactiveThresholdMs?: number;
+    syncLatencyWarningMs?: number;
+  };
+  /** Per-component threshold overrides */
+  perComponent?: Record<string, { maxLatencyMs?: number; maxQueueDepth?: number }>;
 }
 
 export interface DefaultPlugins {
@@ -954,6 +984,24 @@ export interface ProjectConfig {
 
   /** Rules for the orchestrator agent (stored, reserved for future use) */
   orchestratorRules?: string;
+
+  /** BMAD directory paths (defaults: _bmad/ and _bmad-output/) */
+  bmad?: {
+    /** Path to _bmad/ config directory (relative to project path, default: "_bmad") */
+    configDir?: string;
+    /** Path to _bmad-output/ artifacts directory (relative to project path, default: "_bmad-output") */
+    outputDir?: string;
+  };
+
+  /** AI learning configuration (Cycle 3) */
+  learning?: {
+    /** Inject past learnings into agent prompts when spawning (default: false) */
+    injectInPrompts?: boolean;
+    /** Inject past review findings into agent prompts (default: false) */
+    injectFindings?: boolean;
+    /** Retention period in days for learning data (default: 90) */
+    retentionDays?: number;
+  };
 }
 
 export interface TrackerConfig {
@@ -1238,6 +1286,8 @@ export interface AgentAssignment {
   status: AgentStatus;
   /** SHA-256 hash of story context (for conflict detection) */
   contextHash: string;
+  /** Priority for assignment queue. Higher = more priority. Resumed stories get +10 boost. */
+  priority?: number;
 }
 
 /**
@@ -1273,6 +1323,12 @@ export interface AgentRegistry {
    * List all assignments.
    */
   list(): AgentAssignment[];
+
+  /**
+   * Update the status of an agent assignment.
+   * Used by lifecycle manager and completion/blocked detectors.
+   */
+  updateStatus(agentId: string, status: AgentStatus): void;
 
   /**
    * Remove an assignment (when agent completes or errors).
@@ -1363,6 +1419,62 @@ export interface FailureEvent {
 }
 
 /**
+ * Session learning record — captured when agents complete stories (Story 11.1)
+ */
+export interface SessionLearning {
+  /** Session/agent identifier */
+  sessionId: string;
+  /** Agent identifier (same as sessionId) */
+  agentId: string;
+  /** Story being worked on */
+  storyId: string;
+  /** Project identifier */
+  projectId: string;
+  /** Outcome of the session */
+  outcome: "completed" | "failed" | "blocked" | "abandoned";
+  /** Duration in milliseconds */
+  durationMs: number;
+  /** Number of retry attempts */
+  retryCount: number;
+  /** Files modified (paths only, no contents — NFR-AI-S1) */
+  filesModified: string[];
+  /** Number of test files added/modified */
+  testsAdded: number;
+  /** Error categories (for failures) */
+  errorCategories: string[];
+  /** Domain tags inferred from file extensions */
+  domainTags: string[];
+  /** When the session completed (ISO 8601) */
+  completedAt: string;
+  /** When this learning record was captured (ISO 8601) */
+  capturedAt: string;
+}
+
+/**
+ * Code review finding — captured from adversarial code review (Story 14.1)
+ */
+export interface ReviewFinding {
+  /** Unique finding identifier */
+  findingId: string;
+  /** Story that was reviewed */
+  storyId: string;
+  /** Agent that implemented the story */
+  agentId: string;
+  /** Finding severity */
+  severity: "high" | "medium" | "low";
+  /** Finding category (e.g., "type-safety", "input-guard", "test-quality") */
+  category: string;
+  /** Description of the finding */
+  description: string;
+  /** File where the issue was found */
+  file?: string;
+  /** Resolution status */
+  resolution: "fixed" | "accepted" | "deferred";
+  /** When the finding was captured (ISO 8601) */
+  capturedAt: string;
+}
+
+/**
  * Blocked agent detector interfaces
  */
 
@@ -1408,6 +1520,8 @@ export interface BlockedAgentStatus {
   isPaused: boolean;
   blockedAt?: Date;
   inactiveDuration?: number;
+  /** Severity level: amber at 1x threshold, red at 2x threshold (Story 19.1). */
+  severity?: "none" | "amber" | "red";
 }
 
 // =============================================================================
@@ -1508,6 +1622,9 @@ export interface EventPublisher {
   /** Publish agent resumed event */
   publishAgentResumed(params: AgentResumedEvent): Promise<void>;
 
+  /** Publish story unblocked event */
+  publishStoryUnblocked(params: StoryUnblockedEvent): Promise<void>;
+
   /** Flush queued events */
   flush(timeoutMs?: number): Promise<void>;
 
@@ -1562,12 +1679,19 @@ export interface AgentResumedEvent {
   userMessage?: string;
 }
 
+export interface StoryUnblockedEvent {
+  storyId: string;
+  unblockedBy: string;
+  previousStatus: "blocked";
+  newStatus: "ready-for-dev";
+}
+
 // =============================================================================
 // NOTIFICATION SERVICE
 // =============================================================================
 
 /** Notification priority levels */
-export type NotificationPriority = "critical" | "warning" | "info";
+export type NotificationPriority = "critical" | "warning" | "medium" | "info";
 
 /** Notification sent to plugins */
 export interface Notification {
@@ -1607,6 +1731,8 @@ export interface NotificationStatus {
   queueDepth: number;
   /** Number of duplicates deduplicated */
   dedupCount: number;
+  /** Last notification delivery latency in ms */
+  lastLatencyMs?: number;
   /** Dead letter queue size */
   dlqSize: number;
   /** Last processed notification timestamp */
@@ -1653,8 +1779,19 @@ export interface NotificationService {
   /** Retry failed notification from DLQ */
   retryDLQ(notificationId: string): Promise<void>;
 
+  /** Get notification history */
+  getHistory(filter?: NotificationHistoryFilter): NotificationHistoryEntry[];
+
   /** Close service */
   close(): Promise<void>;
+}
+
+/** Notification trigger definition for event-to-notification mapping */
+export interface NotificationTrigger {
+  /** Notification priority for this event type */
+  priority: NotificationPriority;
+  /** Human-readable title for notifications of this event type */
+  title: string;
 }
 
 /** Notification service configuration */
@@ -1671,6 +1808,16 @@ export interface NotificationServiceConfig {
   dedupWindowMs?: number;
   /** Notification preferences per event type pattern */
   preferences?: NotificationPreferences;
+  /** Event type to notification trigger mapping (overrides defaults) */
+  triggerMap?: Record<string, NotificationTrigger>;
+  /** Per-type dedup windows in milliseconds (overrides global dedupWindowMs) */
+  dedupWindowByType?: Record<string, number>;
+  /** Digest flush interval in milliseconds (default: 1800000 = 30 min) */
+  digestIntervalMs?: number;
+  /** Maximum notification history entries (default: 1000) */
+  historyMaxEntries?: number;
+  /** Notification history retention in days (default: 7) */
+  historyRetentionDays?: number;
 }
 
 /** Notification preferences for routing by event type */
@@ -1688,6 +1835,26 @@ export interface NotificationPreferences {
    *   - "all" → route to all available plugins (default)
    */
   [eventTypePattern: string]: string | undefined;
+}
+
+/** Notification history entry */
+export interface NotificationHistoryEntry {
+  /** The notification that was delivered */
+  notification: Notification;
+  /** ISO 8601 timestamp when notification was delivered */
+  deliveredAt: string;
+  /** Plugins that successfully delivered this notification */
+  deliveredPlugins: string[];
+}
+
+/** Filter for querying notification history */
+export interface NotificationHistoryFilter {
+  /** Only return entries delivered after this date */
+  since?: Date;
+  /** Filter by event type */
+  eventType?: string;
+  /** Filter by priority */
+  priority?: string;
 }
 
 // =============================================================================
@@ -1816,6 +1983,42 @@ export interface StoryState {
   assignedAgent?: string;
   version: string;
   updatedAt: string;
+}
+
+// =============================================================================
+// SPRINT PLAN VIEW (CLI view models — presentation-layer types for `ao plan`)
+// These are NOT domain types. Domain types live in tracker-bmad
+// (PlannableStory, SprintPlanningResult). These are lightweight
+// projections for CLI rendering only.
+// =============================================================================
+
+/** Parsed sprint plan for CLI display */
+export interface SprintPlanView {
+  projectName: string;
+  summary: SprintSummary;
+  actionable: ActionableStory[];
+  blocked: ActionableStory[];
+  inProgress: ActionableStory[];
+  review: ActionableStory[];
+  done: ActionableStory[];
+  epicGroups: Record<string, ActionableStory[]>;
+}
+
+/** Status breakdown summary */
+export interface SprintSummary {
+  totalStories: number;
+  byStatus: Record<StoryStatus, number>;
+  completionPercentage: number;
+}
+
+/** Story projected for CLI display */
+export interface ActionableStory {
+  id: string;
+  title: string;
+  status: StoryStatus;
+  dependencies: string[];
+  isBlocked: boolean;
+  blockingReason?: string;
 }
 
 /** Result of a set/update operation */
@@ -2202,6 +2405,26 @@ export interface HealthCheckConfig {
   dataDir?: string;
   /** Lifecycle manager for session health checks */
   lifecycleManager?: LifecycleManager;
+  /** Circuit breaker manager for service resilience status — use BreakerStateSnapshot map */
+  circuitBreakerStates?: Record<
+    string,
+    {
+      state: "closed" | "open" | "half-open";
+      failureCount: number;
+      lastFailureTime?: number;
+      openedAt?: number;
+    }
+  >;
+  /** Dead Letter Queue service for DLQ depth health checks (Story 4.4) */
+  dlq?: {
+    getStats(): Promise<{
+      totalEntries: number;
+      atCapacity: boolean;
+      byOperation: Record<string, number>;
+      oldestEntry: string | null;
+      newestEntry: string | null;
+    }>;
+  };
   thresholds?: HealthCheckThresholds;
   checkIntervalMs?: number;
   /** Rate limiting: minimum interval between health checks (ms) */
@@ -2210,6 +2433,22 @@ export interface HealthCheckConfig {
   rateLimitWindowMs?: number;
   /** Rate limiting: maximum checks allowed per time window */
   maxChecksPerWindow?: number;
+  /** Whether to publish events on health status transitions (default: true) */
+  alertOnTransition?: boolean;
+  /** Optional rules engine for weighted aggregation and custom health checks */
+  rulesEngine?: {
+    runCustomChecks(): Promise<ComponentHealth[]>;
+    aggregateWithWeights(components: ComponentHealth[]): HealthCheckResult & {
+      score: number;
+      componentScores: Array<{
+        component: string;
+        score: number;
+        weight: number;
+        weightedScore: number;
+      }>;
+      customChecks: ComponentHealth[];
+    };
+  };
 }
 
 /**
@@ -2600,4 +2839,215 @@ export interface ConflictResolutionService {
    * @returns Validation result with errors and warnings
    */
   validateConfig(config: ConflictResolutionConfig): ConfigValidationResult;
+}
+
+// =============================================================================
+// AGENT HELP REQUEST (Story 18.3)
+// =============================================================================
+
+/**
+ * A structured help request raised by an agent when stuck.
+ * Provides clear decision points instead of vague "blocked" states.
+ */
+export interface HelpRequest {
+  /** The question the agent needs answered. */
+  question: string;
+  /** Available options for the human to choose from. */
+  options: HelpRequestOption[];
+  /** When the help request was raised (ISO 8601). */
+  raisedAt: string;
+  /** The chosen option (null until human decides). */
+  selectedOption?: string | null;
+}
+
+/** A single option in a help request. */
+export interface HelpRequestOption {
+  /** Option identifier (e.g., "A", "B", "C"). */
+  id: string;
+  /** Human-readable label for the option. */
+  label: string;
+  /** Additional context about what this option means. */
+  description?: string;
+}
+
+// =============================================================================
+// BMAD WORKFLOW CONFIGURATION (YAML-serializable data shapes)
+// =============================================================================
+
+/**
+ * Guard condition definition — YAML-serializable.
+ * Maps to a runtime TransitionGuard by matching artifactType against ClassifiedArtifact.type.
+ */
+export interface WorkflowGuardDefinition {
+  /** Unique guard identifier (e.g., "has-brief"). */
+  id: string;
+  /** Human-readable prerequisite description (e.g., "Product brief exists"). */
+  description: string;
+  /** Artifact type string to check for (matched against ClassifiedArtifact.type). */
+  artifactType: string;
+}
+
+/**
+ * Transition definition — YAML-serializable.
+ * Describes a directed edge in the workflow graph with guard prerequisites.
+ */
+export interface WorkflowTransitionDefinition {
+  /** Source phase name. */
+  from: string;
+  /** Target phase name. */
+  to: string;
+  /** Human-readable description of the transition. */
+  description: string;
+  /** Guard conditions that must ALL be satisfied. */
+  guards: WorkflowGuardDefinition[];
+}
+
+/**
+ * Workflow configuration — loaded from `workflow:` section in agent-orchestrator.yaml.
+ * When absent, the default BMAD 4-phase workflow is used.
+ */
+export interface WorkflowConfig {
+  /** Ordered list of workflow phases. Defaults to BMAD phases when omitted. */
+  phases?: string[];
+  /** Transitions between phases with guard conditions. */
+  transitions: WorkflowTransitionDefinition[];
+}
+
+// =============================================================================
+// BMAD WORKFLOW EVENTS
+// =============================================================================
+
+/** Event emitted when a BMAD artifact is created or updated on disk. */
+export interface WorkflowArtifactEvent {
+  /** Artifact filename (e.g., "prd.md"). */
+  filename: string;
+  /** Relative path from project root. */
+  path: string;
+  /** BMAD phase the artifact belongs to, or null if unclassified. */
+  phase: string | null;
+  /** Human-readable artifact type (e.g., "PRD", "Architecture"). */
+  artifactType: string;
+  /** Whether the artifact was newly created or updated. */
+  action: "created" | "updated";
+  /** ISO 8601 timestamp. */
+  timestamp: string;
+}
+
+/** Event emitted when a BMAD workflow phase changes state. */
+export interface WorkflowPhaseEvent {
+  /** Phase that changed (e.g., "planning"). */
+  phase: string;
+  /** Previous phase state. */
+  previousState: "not-started" | "done" | "active";
+  /** New phase state. */
+  newState: "not-started" | "done" | "active";
+  /** ISO 8601 timestamp. */
+  timestamp: string;
+}
+
+/** Event emitted when the recommendation engine produces a new suggestion. */
+export interface WorkflowRecommendationEvent {
+  /** Phase the recommendation relates to. */
+  phase: string;
+  /** What was observed (e.g., "PRD exists but no architecture"). */
+  observation: string;
+  /** What the user should do next. */
+  implication: string;
+  /** ISO 8601 timestamp. */
+  timestamp: string;
+}
+
+// =============================================================================
+// BMAD WORKFLOW ARTIFACTS
+// =============================================================================
+
+/**
+ * BMAD workflow phases.
+ * Artifacts are classified into one of four phases that represent
+ * the stages of the BMAD development methodology.
+ */
+export const PHASES = ["analysis", "planning", "solutioning", "implementation"] as const;
+
+/** BMAD workflow phase identifier. */
+export type Phase = (typeof PHASES)[number];
+
+/** State of a workflow phase: not yet started, currently active, or completed. */
+export type PhaseState = "not-started" | "done" | "active";
+
+/** Human-readable labels for each BMAD workflow phase. */
+export const PHASE_LABELS: Record<Phase, string> = {
+  analysis: "Analysis",
+  planning: "Planning",
+  solutioning: "Solutioning",
+  implementation: "Implementation",
+};
+
+/**
+ * BMAD artifact type — categorizes the kind of document or deliverable.
+ */
+export type ArtifactType =
+  | "prd"
+  | "architecture"
+  | "epic"
+  | "story"
+  | "sprint-plan"
+  | "review"
+  | "retrospective"
+  | "ux-design"
+  | "research"
+  | "project-context"
+  | "brainstorming";
+
+/**
+ * Constant object mapping artifact type names to their values.
+ * Use for programmatic reference: `ARTIFACT_TYPES.PRD` → `"prd"`.
+ */
+export const ARTIFACT_TYPES = {
+  PRD: "prd" as const,
+  ARCHITECTURE: "architecture" as const,
+  EPIC: "epic" as const,
+  STORY: "story" as const,
+  SPRINT_PLAN: "sprint-plan" as const,
+  REVIEW: "review" as const,
+  RETROSPECTIVE: "retrospective" as const,
+  UX_DESIGN: "ux-design" as const,
+  RESEARCH: "research" as const,
+  PROJECT_CONTEXT: "project-context" as const,
+  BRAINSTORMING: "brainstorming" as const,
+} satisfies Record<string, ArtifactType>;
+
+/**
+ * Rule for classifying a scanned file into a BMAD workflow phase.
+ * Used by the artifact scanner to map filenames to phases.
+ */
+export interface ArtifactRule {
+  /** Glob-like pattern matched against filename (case-insensitive). */
+  pattern: string;
+  /** BMAD phase this artifact belongs to. */
+  phase: Phase;
+  /** Human-readable type for UI display (e.g., "PRD", "Architecture"). */
+  type: string;
+}
+
+/**
+ * Raw file metadata from disk, before classification.
+ */
+export interface ScannedFile {
+  /** Basename only (e.g., "prd.md"). */
+  filename: string;
+  /** Relative path from project root. */
+  path: string;
+  /** ISO 8601 timestamp of last modification. */
+  modifiedAt: string;
+}
+
+/**
+ * A scanned file that has been classified into a BMAD workflow phase.
+ * Extends ScannedFile with phase and type classification results.
+ */
+export interface ClassifiedArtifact extends ScannedFile {
+  /** Classified phase, or null if the artifact could not be categorized. */
+  phase: Phase | null;
+  /** Human-readable classification result (e.g., "PRD", "Story Spec"). */
+  type: string;
 }

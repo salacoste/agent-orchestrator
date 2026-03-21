@@ -1,7 +1,10 @@
 import { getServices } from "@/lib/services";
 import { sessionToDashboard } from "@/lib/serialize";
 import { getAttentionLevel } from "@/lib/types";
-import { subscribeWorkflowChanges } from "@/lib/workflow-watcher.js";
+import { subscribeWorkflowChanges } from "@/lib/workflow-watcher";
+import { buildPhasePresence, scanAllArtifacts } from "@/lib/workflow/scan-artifacts";
+import { computePhaseStates } from "@/lib/workflow/compute-state";
+import type { PhaseEntry } from "@/lib/workflow/types";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +13,7 @@ export const dynamic = "force-dynamic";
  *
  * Sends session state updates to connected clients.
  * Polls SessionManager.list() on an interval (no SSE push from core yet).
+ * Also emits typed workflow events (Story 16.5).
  */
 export async function GET(): Promise<Response> {
   const encoder = new TextEncoder();
@@ -18,18 +22,67 @@ export async function GET(): Promise<Response> {
 
   let unsubWorkflow: (() => void) | undefined;
 
+  // Track previous phase states for transition detection (Story 16.5)
+  let prevPhases: PhaseEntry[] | null = null;
+
   const stream = new ReadableStream({
     start(controller) {
-      // Subscribe to workflow file-change notifications (WD-5)
+      // Subscribe to workflow file-change notifications (WD-5 + Story 16.5)
       unsubWorkflow = subscribeWorkflowChanges(() => {
         try {
+          // 1. Backward-compatible generic signal
           controller.enqueue(
             encoder.encode(`data: ${JSON.stringify({ type: "workflow-change" })}\n\n`),
           );
+
+          // 2. Typed workflow events (Story 16.5) — detect phase transitions
+          void emitWorkflowEvents(controller, encoder);
         } catch {
           // Stream closed — will be cleaned up by cancel()
         }
       });
+
+      /**
+       * Emit typed workflow events by comparing current phase states
+       * with previous states. Runs asynchronously after the generic signal.
+       */
+      async function emitWorkflowEvents(
+        ctrl: ReadableStreamDefaultController,
+        enc: TextEncoder,
+      ): Promise<void> {
+        try {
+          const projectRoot = process.cwd();
+          const artifacts = await scanAllArtifacts(projectRoot);
+          const presence = buildPhasePresence(artifacts);
+          const phases = computePhaseStates(presence);
+          const now = new Date().toISOString();
+
+          // Detect phase transitions
+          if (prevPhases) {
+            for (let i = 0; i < phases.length; i++) {
+              const prev = prevPhases[i];
+              const curr = phases[i];
+              if (prev && curr && prev.state !== curr.state) {
+                ctrl.enqueue(
+                  enc.encode(
+                    `data: ${JSON.stringify({
+                      type: "workflow.phase",
+                      phase: curr.id,
+                      previousState: prev.state,
+                      newState: curr.state,
+                      timestamp: now,
+                    })}\n\n`,
+                  ),
+                );
+              }
+            }
+          }
+
+          prevPhases = phases;
+        } catch {
+          // Scan failed — skip typed events, generic signal was already sent
+        }
+      }
 
       // Send initial snapshot
       void (async () => {

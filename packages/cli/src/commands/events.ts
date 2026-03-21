@@ -1,13 +1,16 @@
 import chalk from "chalk";
 import type { Command } from "commander";
 import { join } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
 import {
   createDegradedModeService,
   expandHome,
   loadConfig,
   getDegradedModeService,
   getEventPublisher,
+  type AuditEvent,
 } from "@composio/ao-core";
+import { parseTimeDelta, formatTimeAgo, truncate } from "../lib/format.js";
 
 /**
  * Format event count for display
@@ -22,8 +25,199 @@ function formatEventCount(count: number): string {
   return chalk.red(String(count));
 }
 
+/**
+ * Read and parse events from a JSONL audit trail file
+ */
+function readEventsFromFile(filePath: string): AuditEvent[] {
+  if (!existsSync(filePath)) {
+    return [];
+  }
+  try {
+    const content = readFileSync(filePath, "utf-8");
+    const lines = content.trim().split("\n");
+    const events: AuditEvent[] = [];
+    for (const line of lines) {
+      if (!line) continue;
+      try {
+        events.push(JSON.parse(line) as AuditEvent);
+      } catch {
+        // Skip malformed lines
+      }
+    }
+    return events;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Filter events by query parameters
+ */
+function filterEvents(
+  events: AuditEvent[],
+  opts: { type?: string; since?: string; limit: number },
+): AuditEvent[] {
+  let filtered = events;
+
+  // Filter by event type
+  if (opts.type) {
+    filtered = filtered.filter((e) => e.eventType === opts.type);
+  }
+
+  // Filter by time window
+  if (opts.since) {
+    const deltaMs = parseTimeDelta(opts.since);
+    if (deltaMs > 0) {
+      const cutoff = new Date(Date.now() - deltaMs).toISOString();
+      filtered = filtered.filter((e) => e.timestamp >= cutoff);
+    }
+  }
+
+  // Return last N events
+  return filtered.slice(-opts.limit);
+}
+
+/**
+ * Color-code event type for display
+ */
+function colorEventType(eventType: string): string {
+  if (eventType.startsWith("story.")) return chalk.green(eventType);
+  if (eventType.startsWith("conflict.")) return chalk.red(eventType);
+  if (eventType.startsWith("health.")) return chalk.yellow(eventType);
+  if (eventType.startsWith("circuit.")) return chalk.yellow(eventType);
+  return chalk.gray(eventType);
+}
+
+/**
+ * Extract entity summary from event metadata
+ */
+function extractEntity(event: AuditEvent): string {
+  const m = event.metadata;
+  if (m.storyId) return String(m.storyId);
+  if (m.agentId) return String(m.agentId);
+  if (m.serviceName) return String(m.serviceName);
+  if (m.conflictId) return String(m.conflictId);
+  return "—";
+}
+
 export function registerEvents(program: Command): void {
   const eventsCmd = program.command("events").description("Manage event publishing and queue");
+
+  // Query audit trail
+  eventsCmd
+    .command("query")
+    .description("Query event audit trail")
+    .option("--type <eventType>", "Filter by event type (e.g., story.completed)")
+    .option("--since <time>", "Filter by time window (e.g., 30m, 2h, 1d)")
+    .option("--limit <n>", "Number of events to show", "20")
+    .option("--json", "Output as JSONL for piping to jq", false)
+    .action(async (opts: { type?: string; since?: string; limit: string; json?: boolean }) => {
+      let config: ReturnType<typeof loadConfig>;
+      try {
+        config = loadConfig();
+      } catch {
+        console.error(chalk.red("No config found. Run `ao init` first."));
+        process.exit(1);
+      }
+
+      // Find events.jsonl — check project data dir
+      const cwd = process.cwd();
+      const projectId = Object.keys(config.projects).find((id) =>
+        cwd.startsWith(config.projects[id].path),
+      );
+
+      // Try common event log locations
+      const searchPaths = [
+        projectId ? join(config.projects[projectId].path, "events.jsonl") : null,
+        join(cwd, "events.jsonl"),
+        expandHome("~/.ao-sessions/events.jsonl"),
+      ].filter(Boolean) as string[];
+
+      let eventsPath: string | null = null;
+      for (const p of searchPaths) {
+        if (existsSync(p)) {
+          eventsPath = p;
+          break;
+        }
+      }
+
+      if (!eventsPath) {
+        if (opts.json) {
+          console.log(JSON.stringify({ events: [], count: 0 }));
+        } else {
+          console.log(
+            chalk.yellow(
+              "\nNo event audit trail found. Events are logged when agents are active.\n",
+            ),
+          );
+        }
+        return;
+      }
+
+      // Read and filter events
+      const allEvents = readEventsFromFile(eventsPath);
+      const limit = parseInt(opts.limit, 10) || 20;
+
+      if (opts.since) {
+        const deltaMs = parseTimeDelta(opts.since);
+        if (deltaMs === 0) {
+          console.error(chalk.red(`Invalid time format: "${opts.since}". Use: 30s, 5m, 2h, 1d`));
+          process.exit(1);
+        }
+      }
+
+      const filtered = filterEvents(allEvents, { type: opts.type, since: opts.since, limit });
+
+      // JSON output — JSONL format
+      if (opts.json) {
+        for (const event of filtered) {
+          console.log(JSON.stringify(event));
+        }
+        return;
+      }
+
+      // No events
+      if (filtered.length === 0) {
+        console.log(chalk.yellow("\nNo events found matching criteria.\n"));
+        return;
+      }
+
+      // Table output
+      console.log(chalk.bold(`\n  Event Audit Trail (${filtered.length} events)\n`));
+      console.log(
+        chalk.dim(
+          `  ${"Time".padEnd(14)} ${"Event Type".padEnd(28)} ${"Entity".padEnd(20)} Details`,
+        ),
+      );
+      console.log(
+        chalk.dim(`  ${"─".repeat(14)} ${"─".repeat(28)} ${"─".repeat(20)} ${"─".repeat(20)}`),
+      );
+
+      for (const event of filtered) {
+        const time = formatTimeAgo(event.timestamp).padEnd(14);
+        const type = truncate(event.eventType, 26);
+        const entity = truncate(extractEntity(event), 18);
+        const details = truncate(JSON.stringify(event.metadata).slice(0, 40), 40);
+
+        console.log(
+          `  ${time} ${colorEventType(type.padEnd(28))} ${entity.padEnd(20)} ${chalk.dim(details)}`,
+        );
+      }
+
+      // Summary
+      const oldest = filtered[0];
+      const newest = filtered[filtered.length - 1];
+      console.log("");
+      console.log(
+        chalk.gray(
+          `  Showing ${filtered.length} events` +
+            (oldest
+              ? ` (oldest: ${formatTimeAgo(oldest.timestamp)}, newest: ${formatTimeAgo(newest.timestamp)})`
+              : ""),
+        ),
+      );
+      console.log("");
+    });
 
   // Drain queued events
   eventsCmd

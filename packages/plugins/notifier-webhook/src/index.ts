@@ -172,4 +172,7 @@ export function create(config?: Record<string, unknown>): Notifier {
   };
 }
 
+export { createNotificationPlugin } from "./notification-plugin.js";
+export type { WebhookNotificationPluginConfig } from "./notification-plugin.js";
+
 export default { manifest, create } satisfies PluginModule<Notifier>;

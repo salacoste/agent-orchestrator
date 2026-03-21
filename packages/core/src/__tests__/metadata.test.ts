@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mkdirSync, rmSync, readFileSync, existsSync, writeFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -21,6 +21,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   rmSync(dataDir, { recursive: true, force: true });
 });
 
@@ -430,6 +431,157 @@ describe("restoredAt persistence", () => {
 
     const meta = readMetadata(dataDir, "restore-4");
     expect(meta!.restoredAt).toBe(now);
+  });
+});
+
+describe("metadata backup and corruption recovery", () => {
+  it("creates backup file on writeMetadata", () => {
+    // First write — no backup yet (no existing file)
+    writeMetadata(dataDir, "backup-1", {
+      worktree: "/tmp/w",
+      branch: "v1",
+      status: "working",
+    });
+    expect(existsSync(join(dataDir, "backup-1.backup"))).toBe(false);
+
+    // Second write — should backup the v1 file
+    writeMetadata(dataDir, "backup-1", {
+      worktree: "/tmp/w",
+      branch: "v2",
+      status: "working",
+    });
+    expect(existsSync(join(dataDir, "backup-1.backup"))).toBe(true);
+
+    const backupContent = readFileSync(join(dataDir, "backup-1.backup"), "utf-8");
+    expect(backupContent).toContain("branch=v1");
+  });
+
+  it("creates backup file on updateMetadata", () => {
+    writeMetadata(dataDir, "backup-2", {
+      worktree: "/tmp/w",
+      branch: "main",
+      status: "working",
+    });
+
+    updateMetadata(dataDir, "backup-2", { status: "blocked" });
+
+    expect(existsSync(join(dataDir, "backup-2.backup"))).toBe(true);
+    const backupContent = readFileSync(join(dataDir, "backup-2.backup"), "utf-8");
+    expect(backupContent).toContain("status=working");
+  });
+
+  it("recovers from backup when primary is corrupted", () => {
+    writeMetadata(dataDir, "corrupt-1", {
+      worktree: "/tmp/w",
+      branch: "good-branch",
+      status: "working",
+    });
+
+    // Write again to create a backup
+    writeMetadata(dataDir, "corrupt-1", {
+      worktree: "/tmp/w",
+      branch: "good-branch-v2",
+      status: "working",
+    });
+
+    // Corrupt the primary file (write garbage that has no key=value pairs)
+    writeFileSync(join(dataDir, "corrupt-1"), "!@#$%^&*()_corrupted_data\x00\x01\x02");
+
+    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const meta = readMetadata(dataDir, "corrupt-1");
+
+    expect(meta).not.toBeNull();
+    expect(meta!.branch).toBe("good-branch"); // Recovered from backup (v1)
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("corrupted"));
+    expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("restored from backup"));
+  });
+
+  it("returns null when both primary and backup are corrupted", () => {
+    writeMetadata(dataDir, "corrupt-2", {
+      worktree: "/tmp/w",
+      branch: "main",
+      status: "working",
+    });
+
+    // Create a backup by writing again
+    writeMetadata(dataDir, "corrupt-2", {
+      worktree: "/tmp/w",
+      branch: "main-v2",
+      status: "working",
+    });
+
+    // Corrupt both files
+    writeFileSync(join(dataDir, "corrupt-2"), "garbage_no_equals_here");
+    writeFileSync(join(dataDir, "corrupt-2.backup"), "more_garbage_no_equals");
+
+    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const meta = readMetadata(dataDir, "corrupt-2");
+
+    expect(meta).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("corrupted"));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("backup also corrupt"));
+  });
+
+  it("returns null when primary is corrupted and no backup exists", () => {
+    // Write a corrupted file directly (no prior writeMetadata so no backup)
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(join(dataDir, "corrupt-3"), "no_valid_key_value_pairs_here!");
+
+    const consoleSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const meta = readMetadata(dataDir, "corrupt-3");
+
+    expect(meta).toBeNull();
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("corrupted"));
+  });
+
+  it("calls onCorruptionDetected callback with recovered=true when backup succeeds", () => {
+    writeMetadata(dataDir, "cb-1", { worktree: "/tmp/w", branch: "v1", status: "working" });
+    writeMetadata(dataDir, "cb-1", { worktree: "/tmp/w", branch: "v2", status: "working" });
+
+    // Corrupt primary
+    writeFileSync(join(dataDir, "cb-1"), "corrupted_garbage_data!");
+
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
+
+    const callback = vi.fn();
+    const meta = readMetadata(dataDir, "cb-1", callback);
+
+    expect(meta).not.toBeNull();
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith(expect.stringContaining("cb-1"), true);
+  });
+
+  it("calls onCorruptionDetected callback with recovered=false when backup also fails", () => {
+    writeMetadata(dataDir, "cb-2", { worktree: "/tmp/w", branch: "v1", status: "working" });
+    writeMetadata(dataDir, "cb-2", { worktree: "/tmp/w", branch: "v2", status: "working" });
+
+    // Corrupt both
+    writeFileSync(join(dataDir, "cb-2"), "garbage");
+    writeFileSync(join(dataDir, "cb-2.backup"), "more_garbage");
+
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    const callback = vi.fn();
+    const meta = readMetadata(dataDir, "cb-2", callback);
+
+    expect(meta).toBeNull();
+    expect(callback).toHaveBeenCalledTimes(1);
+    expect(callback).toHaveBeenCalledWith(expect.stringContaining("cb-2"), false);
+  });
+
+  it("does not call callback when metadata is clean", () => {
+    writeMetadata(dataDir, "cb-3", { worktree: "/tmp/w", branch: "main", status: "working" });
+
+    const callback = vi.fn();
+    const meta = readMetadata(dataDir, "cb-3", callback);
+
+    expect(meta).not.toBeNull();
+    expect(callback).not.toHaveBeenCalled();
   });
 });
 

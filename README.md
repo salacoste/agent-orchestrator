@@ -63,7 +63,7 @@ Then spawn agents:
 ao spawn my-project 123    # GitHub issue, Linear ticket, or ad-hoc
 ```
 
-Dashboard opens at `http://localhost:3000`. Run `ao status` for the CLI view.
+Dashboard opens at `http://localhost:5000`. Run `ao status` for the CLI view.
 
 ## How It Works
 
@@ -99,7 +99,7 @@ All interfaces defined in [`packages/core/src/types.ts`](packages/core/src/types
 
 ```yaml
 # agent-orchestrator.yaml
-port: 3000
+port: 5000
 
 defaults:
   runtime: tmux

@@ -1,4 +1,4 @@
-import type { AgentInfo } from "@/lib/workflow/types.js";
+import type { AgentInfo } from "@/lib/workflow/types";
 
 interface WorkflowAgentsPanelProps {
   agents: AgentInfo[] | null;

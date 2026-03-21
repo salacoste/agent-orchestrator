@@ -3,13 +3,49 @@
  */
 
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import { mkdirSync, rmSync, readFileSync, unlinkSync, readdirSync } from "node:fs";
+import {
+  mkdirSync,
+  rmSync,
+  readFileSync,
+  unlinkSync,
+  readdirSync,
+  existsSync,
+  statSync,
+} from "node:fs";
 import { join } from "node:path";
-import { createErrorLogger, type ErrorLogger, type ErrorLoggerConfig } from "../index.js";
+import {
+  createErrorLogger,
+  registerClassificationRule,
+  clearClassificationRules,
+  type ErrorLogger,
+  type ErrorLoggerConfig,
+  type ErrorLogEntry,
+  type ErrorSeverity,
+} from "../index.js";
 
 // Test utilities
 const testLogDir = join(process.cwd(), ".test-error-logs");
+const testJsonlPath = join(testLogDir, "errors.jsonl");
 let errorLogger: ErrorLogger;
+
+/** Helper to get the first error log entry from the in-memory store */
+function getFirstEntry(logger: ErrorLogger): ErrorLogEntry {
+  const errors = logger.getErrors();
+  return errors[0] as ErrorLogEntry;
+}
+
+/** Type assertion helper for severity field */
+function assertSeverity(entry: ErrorLogEntry, expected: ErrorSeverity): void {
+  expect(entry.severity).toBe(expected);
+}
+
+/** Helper to read and parse all lines from a JSONL file */
+function readJsonlLines(path: string): unknown[] {
+  if (!existsSync(path)) return [];
+  const content = readFileSync(path, "utf-8").trim();
+  if (!content) return [];
+  return content.split("\n").map((line) => JSON.parse(line));
+}
 
 describe("ErrorLogger", () => {
   beforeEach(() => {
@@ -527,6 +563,257 @@ describe("ErrorLogger", () => {
     });
   });
 
+  describe("severity classification", () => {
+    beforeEach(() => {
+      errorLogger = createErrorLogger({ logDir: testLogDir });
+    });
+
+    it("classifies ECONNREFUSED errors as critical", async () => {
+      const error = new Error("connect ECONNREFUSED 127.0.0.1:3000");
+      await errorLogger.logError(error, { component: "SyncService" });
+
+      const entry = getFirstEntry(errorLogger);
+      assertSeverity(entry, "critical");
+    });
+
+    it("classifies ECONNRESET errors as critical", async () => {
+      const error = new Error("read ECONNRESET");
+      await errorLogger.logError(error, { component: "APIService" });
+
+      const entry = getFirstEntry(errorLogger);
+      assertSeverity(entry, "critical");
+    });
+
+    it("classifies ETIMEDOUT errors as critical", async () => {
+      const error = new Error("connect ETIMEDOUT 10.0.0.1:443");
+      await errorLogger.logError(error, { component: "APIService" });
+
+      const entry = getFirstEntry(errorLogger);
+      assertSeverity(entry, "critical");
+    });
+
+    it("classifies ENOSPC errors as fatal", async () => {
+      const error = new Error("ENOSPC: no space left on device");
+      await errorLogger.logError(error, { component: "StateManager" });
+
+      const entry = getFirstEntry(errorLogger);
+      assertSeverity(entry, "fatal");
+    });
+
+    it("classifies ENOMEM errors as fatal", async () => {
+      const error = new Error("ENOMEM: not enough memory");
+      await errorLogger.logError(error, { component: "AgentManager" });
+
+      const entry = getFirstEntry(errorLogger);
+      assertSeverity(entry, "fatal");
+    });
+
+    it("classifies ConflictError as warning", async () => {
+      const error = new Error("Version conflict detected");
+      await errorLogger.logError(error, { component: "StateManager", type: "ConflictError" });
+
+      const entry = getFirstEntry(errorLogger);
+      assertSeverity(entry, "warning");
+    });
+
+    it("classifies SyntaxError as warning", async () => {
+      const error = new SyntaxError("Unexpected token in JSON");
+      await errorLogger.logError(error, { component: "ConfigLoader" });
+
+      const entry = getFirstEntry(errorLogger);
+      assertSeverity(entry, "warning");
+    });
+
+    it("classifies unknown errors as warning (safe default)", async () => {
+      const error = new Error("Something unexpected happened");
+      await errorLogger.logError(error, { component: "Unknown" });
+
+      const entry = getFirstEntry(errorLogger);
+      assertSeverity(entry, "warning");
+    });
+
+    it("bumps event-bus component errors to critical", async () => {
+      const error = new Error("Some random error");
+      await errorLogger.logError(error, { component: "event-bus" });
+
+      const entry = getFirstEntry(errorLogger);
+      assertSeverity(entry, "critical");
+    });
+
+    it("bumps lifecycle component errors to critical", async () => {
+      const error = new Error("Lifecycle failure");
+      await errorLogger.logError(error, { component: "lifecycle" });
+
+      const entry = getFirstEntry(errorLogger);
+      assertSeverity(entry, "critical");
+    });
+
+    it("allows manual severity override via options", async () => {
+      const error = new Error("Not that bad");
+      await errorLogger.logError(error, { component: "TestService", severity: "info" });
+
+      const entry = getFirstEntry(errorLogger);
+      assertSeverity(entry, "info");
+    });
+
+    it("includes severity in persisted JSON file", async () => {
+      const error = new Error("ENOSPC: disk full");
+      await errorLogger.logError(error, { component: "StateManager" });
+
+      const files = readdirSync(testLogDir);
+      const logContent = readFileSync(join(testLogDir, files[0]), "utf-8");
+      const logEntry = JSON.parse(logContent);
+
+      expect(logEntry.severity).toBe("fatal");
+    });
+  });
+
+  describe("structured error codes", () => {
+    beforeEach(() => {
+      errorLogger = createErrorLogger({ logDir: testLogDir });
+    });
+
+    it("assigns ERR-EVENTBUS-001 for event bus connection errors", async () => {
+      const error = new Error("connect ECONNREFUSED 127.0.0.1:3000");
+      await errorLogger.logError(error, { component: "event-bus" });
+
+      const entry = getFirstEntry(errorLogger);
+      expect(entry.errorCode).toBe("ERR-EVENTBUS-001");
+    });
+
+    it("assigns ERR-CONFLICT-001 when ConflictError type takes priority over sync component", async () => {
+      const error = new Error("Version conflict detected");
+      await errorLogger.logError(error, { component: "sync", type: "ConflictError" });
+
+      const entry = getFirstEntry(errorLogger);
+      expect(entry.errorCode).toBe("ERR-CONFLICT-001");
+    });
+
+    it("assigns ERR-META-001 for metadata corruption", async () => {
+      const error = new Error("Metadata file corrupted");
+      await errorLogger.logError(error, { component: "metadata" });
+
+      const entry = getFirstEntry(errorLogger);
+      expect(entry.errorCode).toBe("ERR-META-001");
+    });
+
+    it("assigns ERR-UNKNOWN-000 for unrecognized errors", async () => {
+      const error = new Error("Something completely unknown");
+      await errorLogger.logError(error, { component: "SomeService" });
+
+      const entry = getFirstEntry(errorLogger);
+      expect(entry.errorCode).toBe("ERR-UNKNOWN-000");
+    });
+
+    it("allows manual errorCode override via options", async () => {
+      const error = new Error("Custom error");
+      await errorLogger.logError(error, { component: "TestService", errorCode: "ERR-CUSTOM-999" });
+
+      const entry = getFirstEntry(errorLogger);
+      expect(entry.errorCode).toBe("ERR-CUSTOM-999");
+    });
+
+    it("includes errorCode in persisted JSON file", async () => {
+      const error = new Error("ENOSPC: no space left on device");
+      await errorLogger.logError(error, { component: "StateManager" });
+
+      const files = readdirSync(testLogDir);
+      const logContent = readFileSync(join(testLogDir, files[0]), "utf-8");
+      const logEntry = JSON.parse(logContent);
+
+      expect(logEntry.errorCode).toBeDefined();
+      expect(logEntry.errorCode).toMatch(/^ERR-/);
+    });
+  });
+
+  describe("JSONL append-only logging", () => {
+    beforeEach(() => {
+      errorLogger = createErrorLogger({ logDir: testLogDir, jsonlPath: testJsonlPath });
+    });
+
+    it("appends error as JSON line to JSONL file", async () => {
+      await errorLogger.logError(new Error("Test"), { component: "TestService" });
+
+      const lines = readJsonlLines(testJsonlPath);
+      expect(lines.length).toBe(1);
+      expect((lines[0] as { message: string }).message).toBe("Test");
+    });
+
+    it("appends multiple errors as separate lines", async () => {
+      await errorLogger.logError(new Error("Error 1"), { component: "Svc" });
+      await errorLogger.logError(new Error("Error 2"), { component: "Svc" });
+      await errorLogger.logError(new Error("Error 3"), { component: "Svc" });
+
+      const lines = readJsonlLines(testJsonlPath);
+      expect(lines.length).toBe(3);
+    });
+
+    it("each JSONL line is valid JSON with severity and errorCode", async () => {
+      await errorLogger.logError(new Error("ECONNREFUSED"), { component: "event-bus" });
+
+      const lines = readJsonlLines(testJsonlPath);
+      const entry = lines[0] as { severity: string; errorCode: string };
+      expect(entry.severity).toBe("critical");
+      expect(entry.errorCode).toBe("ERR-EVENTBUS-001");
+    });
+
+    it("does not write JSONL when jsonlPath not configured", async () => {
+      const logger = createErrorLogger({ logDir: testLogDir });
+      await logger.logError(new Error("No JSONL"), { component: "Svc" });
+
+      expect(existsSync(testJsonlPath)).toBe(false);
+      await logger.close();
+    });
+
+    it("rotates JSONL file when size exceeds threshold", async () => {
+      const smallLogger = createErrorLogger({
+        logDir: testLogDir,
+        jsonlPath: testJsonlPath,
+        config: { maxLogFileSizeBytes: 500 },
+      });
+
+      // Write enough to exceed 500 bytes
+      for (let i = 0; i < 10; i++) {
+        await smallLogger.logError(new Error(`Error ${i} with padding`), { component: "Svc" });
+      }
+
+      // After rotation, there should be at least one rotated file
+      const files = readdirSync(testLogDir).filter(
+        (f) => f.startsWith("errors-") && f.endsWith(".jsonl"),
+      );
+      expect(files.length).toBeGreaterThanOrEqual(1);
+
+      // Current file should still exist and be smaller than threshold
+      expect(existsSync(testJsonlPath)).toBe(true);
+      const size = statSync(testJsonlPath).size;
+      expect(size).toBeLessThan(1000);
+      await smallLogger.close();
+    });
+
+    it("redacts secrets in JSONL output", async () => {
+      await errorLogger.logError(new Error("Fail"), {
+        component: "AuthSvc",
+        context: { password: "secret123" },
+      });
+
+      const lines = readJsonlLines(testJsonlPath);
+      const entry = lines[0] as { context: { password: string } };
+      expect(entry.context.password).toBe("[REDACTED: password]");
+    });
+
+    it("preserves per-file JSON logging alongside JSONL", async () => {
+      await errorLogger.logError(new Error("Both"), { component: "Svc" });
+
+      // Per-file JSON still written
+      const jsonFiles = readdirSync(testLogDir).filter((f) => f.endsWith(".json"));
+      expect(jsonFiles.length).toBe(1);
+
+      // JSONL also written
+      const lines = readJsonlLines(testJsonlPath);
+      expect(lines.length).toBe(1);
+    });
+  });
+
   describe("cleanup", () => {
     it("closes all resources gracefully", async () => {
       const logger = createErrorLogger({ logDir: testLogDir });
@@ -535,6 +822,99 @@ describe("ErrorLogger", () => {
 
       // Should not throw on close
       await expect(logger.close()).resolves.not.toThrow();
+    });
+  });
+
+  describe("custom classification rules", () => {
+    afterEach(() => {
+      clearClassificationRules();
+    });
+
+    it("custom rule matches before hardcoded patterns", async () => {
+      registerClassificationRule({
+        name: "custom-timeout",
+        messagePattern: /custom timeout/i,
+        components: ["my-service"],
+        severity: "fatal",
+        errorCode: "ERR-CUSTOM-001",
+        priority: 10,
+      });
+
+      const logger = createErrorLogger({ logDir: testLogDir });
+      await logger.logError(new Error("Custom timeout occurred"), {
+        component: "my-service",
+      });
+
+      const errors = logger.getErrors();
+      expect(errors.length).toBeGreaterThan(0);
+      const last = errors[errors.length - 1];
+      expect(last.severity).toBe("fatal");
+      expect(last.errorCode).toBe("ERR-CUSTOM-001");
+    });
+
+    it("higher priority rules checked first", async () => {
+      registerClassificationRule({
+        name: "low-priority",
+        messagePattern: /test error/i,
+        severity: "info",
+        errorCode: "ERR-LOW-001",
+        priority: 1,
+      });
+
+      registerClassificationRule({
+        name: "high-priority",
+        messagePattern: /test error/i,
+        severity: "critical",
+        errorCode: "ERR-HIGH-001",
+        priority: 10,
+      });
+
+      const logger = createErrorLogger({ logDir: testLogDir });
+      await logger.logError(new Error("test error"), { component: "any" });
+
+      const errors = logger.getErrors();
+      const last = errors[errors.length - 1];
+      expect(last.severity).toBe("critical");
+      expect(last.errorCode).toBe("ERR-HIGH-001");
+    });
+
+    it("clearClassificationRules resets to default behavior", async () => {
+      registerClassificationRule({
+        name: "custom",
+        messagePattern: /ECONNREFUSED/i,
+        severity: "info",
+        errorCode: "ERR-CUSTOM-999",
+        priority: 100,
+      });
+
+      clearClassificationRules();
+
+      const logger = createErrorLogger({ logDir: testLogDir });
+      await logger.logError(new Error("ECONNREFUSED"), { component: "event-bus" });
+
+      const errors = logger.getErrors();
+      const last = errors[errors.length - 1];
+      // Should use default classification (critical for ECONNREFUSED)
+      expect(last.severity).toBe("critical");
+      expect(last.errorCode).toBe("ERR-EVENTBUS-001");
+    });
+
+    it("falls back to hardcoded when no custom rules match", async () => {
+      registerClassificationRule({
+        name: "unrelated",
+        messagePattern: /completely different/i,
+        components: ["other-service"],
+        severity: "fatal",
+        errorCode: "ERR-OTHER-001",
+      });
+
+      const logger = createErrorLogger({ logDir: testLogDir });
+      await logger.logError(new Error("ENOSPC disk full"), {});
+
+      const errors = logger.getErrors();
+      const last = errors[errors.length - 1];
+      // Default classification: ENOSPC = fatal
+      expect(last.severity).toBe("fatal");
     });
   });
 });

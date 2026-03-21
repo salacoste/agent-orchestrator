@@ -82,6 +82,7 @@ export {
   batchWriteStoryStatus,
   findStoryForPR,
 } from "./auto-transition.js";
+export { createBMADTrackerAdapter } from "./bmad-tracker-adapter.js";
 export {
   computeDependencyGraph,
   validateDependencies,

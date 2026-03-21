@@ -1,0 +1,25 @@
+# Fixture for ao spawn --story tests
+# Snapshot: 2026-03-15
+
+generated: 2026-03-15
+project: test-project
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  # Epic 1: Core Agent Orchestration
+  epic-1: in-progress
+  1-1-sprint-plan-cli: done
+  1-2-story-aware-agent-spawning: ready-for-dev
+  1-3-agent-story-status-tracking: backlog
+  epic-1-retrospective: optional
+
+  # Epic 2: Real-Time Sprint State Sync
+  epic-2: backlog
+  2-1-bmad-tracker-sync-bridge: backlog
+
+dependencies:
+  1-2-story-aware-agent-spawning:
+    - 1-1-sprint-plan-cli
+  1-3-agent-story-status-tracking:
+    - 1-2-story-aware-agent-spawning
+    - 2-1-bmad-tracker-sync-bridge

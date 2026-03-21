@@ -1,4 +1,4 @@
-import { PHASE_LABELS, type ClassifiedArtifact, type Phase } from "@/lib/workflow/types.js";
+import { PHASE_LABELS, type ClassifiedArtifact, type Phase } from "@/lib/workflow/types";
 
 interface WorkflowArtifactInventoryProps {
   artifacts: ClassifiedArtifact[];

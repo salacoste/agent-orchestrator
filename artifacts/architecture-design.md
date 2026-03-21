@@ -559,7 +559,7 @@ Everything else uses sensible defaults:
 # agent-orchestrator.yaml
 dataDir: ~/.agent-orchestrator # metadata storage
 worktreeDir: ~/.worktrees # workspace root
-port: 3000 # web dashboard port
+port: 5000 # web dashboard port
 
 defaults:
   runtime: tmux

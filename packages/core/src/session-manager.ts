@@ -11,7 +11,7 @@
  * Reference: scripts/claude-ao-session, scripts/send-to-session
  */
 
-import { statSync, existsSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
+import { statSync, existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   isIssueNotFoundError,
@@ -48,6 +48,8 @@ import {
   reserveSessionId,
 } from "./metadata.js";
 import { buildPrompt } from "./prompt-builder.js";
+import { updateSprintStatus, logAuditEvent } from "./completion-handlers.js";
+import { getAgentRegistry } from "./agent-registry.js";
 import {
   getSessionsDir,
   getProjectBaseDir,
@@ -471,12 +473,33 @@ export function createSessionManager(deps: SessionManagerDeps): SessionManager {
       }
     }
 
+    // Inject past learnings if opt-in via config (Cycle 3 — AC-AI-3, AC4)
+    let learnings;
+    if (project.learning?.injectInPrompts) {
+      try {
+        const { getLearningStore } = await import("./service-registry.js");
+        const { selectRelevantLearnings } = await import("./session-learning.js");
+        const store = getLearningStore();
+        if (store) {
+          const allLearnings = store.query({
+            agentId: spawnConfig.agent,
+            limit: 50,
+          });
+          learnings = selectRelevantLearnings(allLearnings, []);
+        }
+      } catch {
+        // Learning injection failure must never block spawning
+      }
+    }
+
     const composedPrompt = buildPrompt({
       project,
       projectId: spawnConfig.projectId,
       issueId: spawnConfig.issueId,
       issueContext,
+      storyContext: spawnConfig.storyContext,
       userPrompt: spawnConfig.prompt,
+      learnings,
     });
 
     // Get agent launch config and create runtime — clean up workspace on failure
@@ -855,6 +878,59 @@ export function createSessionManager(deps: SessionManagerDeps): SessionManager {
           // Workspace might already be gone
         }
       }
+    }
+
+    // Story cleanup — if this session had a story assignment, mark story as blocked
+    const storyId = raw["storyId"];
+    if (storyId && project) {
+      // Clean up in-memory agent registry assignment first.
+      // remove() also clears metadata fields (storyId, agentStatus, etc.),
+      // so we call it before setting the disconnected reason below.
+      const agentRegistry = getAgentRegistry(sessionsDir, config);
+      agentRegistry.remove(sessionId);
+
+      // Store disconnected reason in metadata before archiving
+      // (after remove, since remove() clears agentStatus)
+      updateMetadata(sessionsDir, sessionId, {
+        failureReason: "disconnected",
+        agentStatus: "disconnected",
+      });
+
+      // Update sprint status to "blocked" (unless story is already done).
+      // Uses tracker.storyDir if configured, otherwise falls back to BMAD default.
+      // Non-BMAD projects without storyDir silently skip (existsSync check below).
+      const storyDir =
+        typeof project.tracker?.["storyDir"] === "string"
+          ? join(project.path, project.tracker["storyDir"] as string)
+          : join(project.path, "_bmad-output/implementation-artifacts");
+
+      // Read current story status to avoid overwriting "done"
+      try {
+        const statusPath = join(storyDir, "sprint-status.yaml");
+        if (existsSync(statusPath)) {
+          const content = readFileSync(statusPath, "utf-8");
+          // Simple regex check — avoid adding yaml dependency to session-manager
+          const escapedId = storyId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const pattern = new RegExp(`${escapedId}:\\s*(\\S+)`);
+          const match = content.match(pattern);
+          const currentStatus = match?.[1];
+          if (currentStatus && currentStatus !== "done" && currentStatus !== "review") {
+            updateSprintStatus(storyDir, storyId, "blocked");
+          }
+        }
+      } catch {
+        // Non-fatal: sprint status update failure should not block kill
+      }
+
+      // Log audit event
+      const auditDir = join(sessionsDir, "audit");
+      logAuditEvent(auditDir, {
+        timestamp: new Date().toISOString(),
+        event_type: "agent_disconnected",
+        agent_id: sessionId,
+        story_id: storyId,
+        reason: "killed",
+      });
     }
 
     // Archive metadata

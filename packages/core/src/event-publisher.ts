@@ -14,6 +14,7 @@ import type {
   StoryBlockedEvent,
   StoryAssignedEvent,
   AgentResumedEvent,
+  StoryUnblockedEvent,
 } from "./types.js";
 import type { DegradedModeService } from "./degraded-mode.js";
 import { registerEventPublisher } from "./service-registry.js";
@@ -188,6 +189,22 @@ export class EventPublisherImpl implements EventPublisher {
         newAgentId: params.newAgentId,
         retryCount: params.retryCount,
         userMessage: params.userMessage,
+      },
+    });
+  }
+
+  /**
+   * Publish a story.unblocked event
+   * @param params - Event parameters including unblocking trigger
+   */
+  async publishStoryUnblocked(params: StoryUnblockedEvent): Promise<void> {
+    await this.publish({
+      eventType: "story.unblocked",
+      metadata: {
+        storyId: params.storyId,
+        unblockedBy: params.unblockedBy,
+        previousStatus: params.previousStatus,
+        newStatus: params.newStatus,
       },
     });
   }

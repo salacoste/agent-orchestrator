@@ -4,7 +4,13 @@
 
 import chalk from "chalk";
 import type { Command } from "commander";
-import { getAgentStatusEmoji, formatTimeAgo, truncate } from "../lib/format.js";
+import {
+  getAgentStatusEmoji,
+  formatTimeAgo,
+  formatDuration,
+  truncate,
+  padCol,
+} from "../lib/format.js";
 import { loadConfig, type AgentAssignment } from "@composio/ao-core";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -186,6 +192,9 @@ function calculateIdleTime(assignment: AgentAssignment): number | null {
   return Math.floor((now - lastActivity) / 60000); // minutes
 }
 
+/** Idle threshold in minutes — agent is considered idle after this period of inactivity */
+const IDLE_THRESHOLD_MINUTES = 10;
+
 /**
  * Map assignment status to fleet agent status
  */
@@ -201,7 +210,7 @@ function mapAgentStatus(
     return "blocked";
   }
 
-  if (idleTime !== null && idleTime > 10) {
+  if (idleTime !== null && idleTime > IDLE_THRESHOLD_MINUTES) {
     return "idle";
   }
 
@@ -219,9 +228,6 @@ function getAgentNotes(assignment: AgentAssignment): string {
   return "—";
 }
 
-// IDLE_THRESHOLD_MINUTES defines when an agent is considered idle
-const IDLE_THRESHOLD_MINUTES = 10;
-
 /**
  * Register the fleet command
  */
@@ -229,8 +235,8 @@ export function registerFleet(program: Command): void {
   program
     .command("fleet")
     .description("View fleet status (htop-style agent monitoring)")
-    .option("--watch <bool>", "Continuous refresh (default: true)", "true")
-    .option("--sort-by <field>", "Sort by field (agent, story, status, activity)", "agent")
+    .option("--watch", "Continuous refresh every 5s", false)
+    .option("--sort-by <field>", "Sort by field (agent, story, status, activity)", "status")
     .option("--status <filter>", "Filter by status (active, idle, blocked, offline)")
     .option("--reverse", "Reverse sort order")
     .option("--format <format>", "Output format (table, json)", "table")
@@ -244,8 +250,8 @@ export function registerFleet(program: Command): void {
       }
 
       // Parse options
-      const watch = opts.watch !== "false";
-      const sortBy = opts.sortBy || "agent";
+      const watch = opts.watch === true;
+      const sortBy = opts.sortBy;
       const statusFilter = opts.status;
       const reverse = opts.reverse || false;
       const format = opts.format || "table";
@@ -280,17 +286,69 @@ export function registerFleet(program: Command): void {
       // Sort agents
       filteredAgents = sortAgents(filteredAgents, sortBy, reverse);
 
+      // Empty fleet check
+      if (filteredAgents.length === 0) {
+        if (format === "json") {
+          outputFleetJSON(filteredAgents);
+        } else {
+          console.log(chalk.yellow("\nNo active agents. Use `ao spawn` to start one.\n"));
+        }
+        return;
+      }
+
       // Output
       if (format === "json") {
         outputFleetJSON(filteredAgents);
-      } else {
-        outputFleetTable(filteredAgents, watch);
+        return;
+      }
+
+      outputFleetTable(filteredAgents, watch);
+
+      // Watch mode: refresh every 5 seconds
+      if (watch) {
+        const intervalId = setInterval(async () => {
+          const freshAgents = await gatherFleetData(config, sessionsDir, projectPath);
+          let filtered = freshAgents;
+          if (statusFilter) {
+            filtered = freshAgents.filter((a) => a.agentStatus === statusFilter);
+          }
+          filtered = sortAgents(filtered, sortBy, reverse);
+
+          console.clear();
+          if (filtered.length === 0) {
+            console.log(chalk.yellow("\nNo active agents. Use `ao spawn` to start one.\n"));
+            console.log(chalk.dim("Watching fleet... (Ctrl+C to stop)"));
+          } else {
+            outputFleetTable(filtered, true);
+          }
+        }, 5000);
+
+        // Clean exit on SIGINT/SIGTERM
+        const cleanup = () => {
+          clearInterval(intervalId);
+          console.log(chalk.dim("\nFleet monitoring stopped."));
+          process.exit(0);
+        };
+        process.once("SIGINT", cleanup);
+        process.once("SIGTERM", cleanup);
+
+        // Keep process alive
+        await new Promise<never>(() => {});
       }
     });
 }
 
+/** Status priority: blocked first, then idle, active, disconnected */
+const STATUS_PRIORITY: Record<string, number> = {
+  blocked: 0,
+  idle: 1,
+  active: 2,
+  disconnected: 3,
+};
+
 /**
- * Sort agents by specified field
+ * Sort agents by specified field.
+ * Default "status" sort: blocked first, then by duration descending (longest-running first).
  */
 function sortAgents(agents: FleetAgent[], sortBy: string, reverse: boolean): FleetAgent[] {
   const multiplier = reverse ? -1 : 1;
@@ -305,9 +363,19 @@ function sortAgents(agents: FleetAgent[], sortBy: string, reverse: boolean): Fle
       case "story":
         comparison = (a.storyId || "").localeCompare(b.storyId || "");
         break;
-      case "status":
-        comparison = a.agentStatus.localeCompare(b.agentStatus);
+      case "status": {
+        // Primary: status priority (blocked first)
+        const aPri = STATUS_PRIORITY[a.agentStatus] ?? 99;
+        const bPri = STATUS_PRIORITY[b.agentStatus] ?? 99;
+        comparison = aPri - bPri;
+        // Secondary: duration descending (longest-running first)
+        if (comparison === 0) {
+          const aTime = a.lastActivity?.getTime() || 0;
+          const bTime = b.lastActivity?.getTime() || 0;
+          comparison = aTime - bTime; // earlier assignedAt = longer running = first
+        }
         break;
+      }
       case "activity": {
         const aTime = a.lastActivity?.getTime() || 0;
         const bTime = b.lastActivity?.getTime() || 0;
@@ -352,47 +420,54 @@ function outputFleetJSON(agents: FleetAgent[]): void {
 }
 
 /**
- * Output fleet data as table
+ * Output fleet data as table with responsive column widths
  */
-function outputFleetTable(agents: FleetAgent[], _watch: boolean): void {
-  // Header
+function outputFleetTable(agents: FleetAgent[], watch: boolean): void {
+  const termWidth = process.stdout.columns || 120;
+
+  // Column widths: Agent(18) + Status(12) + Duration(10) + Activity(16) = 56 fixed
+  // Story gets remaining space (min 20)
+  const fixedCols = 18 + 12 + 10 + 16 + 7; // 7 for borders/padding
+  const storyWidth = Math.max(20, termWidth - fixedCols);
   console.log(
     chalk.bold(
-      "╔═══════════════════╤════════════════════════╤════════════╤══════════════════╤═════════════════╤══════════════════╗",
+      `╔${"═".repeat(18)}╤${"═".repeat(storyWidth)}╤${"═".repeat(12)}╤${"═".repeat(10)}╤${"═".repeat(16)}╗`,
     ),
   );
   console.log(
     chalk.bold(
-      "║ Agent            │ Story                  │ Status    │ Last Activity    │ Story Status  │ Notes           ║",
+      `║${padCol(" Agent", 18)}│${padCol(" Story", storyWidth)}│${padCol(" Status", 12)}│${padCol(" Duration", 10)}│${padCol(" Last Activity", 16)}║`,
     ),
   );
   console.log(
     chalk.bold(
-      "╠═══════════════════╪════════════════════════╪════════════╪══════════════════╪═════════════════╪══════════════════╣",
+      `╠${"═".repeat(18)}╪${"═".repeat(storyWidth)}╪${"═".repeat(12)}╪${"═".repeat(10)}╪${"═".repeat(16)}╣`,
     ),
   );
 
   // Rows
   for (const agent of agents) {
     const statusEmoji = getAgentStatusEmoji(agent.agentStatus);
-    const agentId = truncate(agent.agentId, 17);
+    const agentId = padCol(` ${truncate(agent.agentId, 16)}`, 18);
     const story = agent.storyId
-      ? truncate(`${agent.storyId}${agent.storyTitle ? ` ${agent.storyTitle}` : ""}`, 24)
-      : "—";
-    const status = formatStatus(agent.agentStatus, statusEmoji);
-    const activity = formatActivity(agent);
-    const storyStatus = agent.storyStatus;
-    const notes = truncate(agent.notes, 15);
+      ? padCol(
+          ` ${truncate(`${agent.storyId}${agent.storyTitle ? ` ${agent.storyTitle}` : ""}`, storyWidth - 2)}`,
+          storyWidth,
+        )
+      : padCol(" —", storyWidth);
+    const status = padCol(` ${formatStatus(agent.agentStatus, statusEmoji)}`, 12);
+    const duration = agent.lastActivity
+      ? padCol(` ${formatDuration(agent.lastActivity)}`, 10)
+      : padCol(" —", 10);
+    const activity = padCol(` ${formatActivity(agent)}`, 16);
 
-    console.log(
-      `║ ${agentId} │ ${story} │ ${status} │ ${activity} │ ${storyStatus.padEnd(14)} │ ${notes.padEnd(15)} ║`,
-    );
+    console.log(`║${agentId}│${story}│${status}│${duration}│${activity}║`);
   }
 
   // Footer
   console.log(
     chalk.bold(
-      "╚═══════════════════╧════════════════════════╧════════════╧══════════════════╧═════════════════╧══════════════════╝",
+      `╚${"═".repeat(18)}╧${"═".repeat(storyWidth)}╧${"═".repeat(12)}╧${"═".repeat(10)}╧${"═".repeat(16)}╝`,
     ),
   );
 
@@ -410,8 +485,9 @@ function outputFleetTable(agents: FleetAgent[], _watch: boolean): void {
       chalk.gray(`Offline: ${summary.disconnected}`),
   );
 
-  // Note: Watch mode is deferred to future story (keyboard interaction)
-  // Press Ctrl+C to exit
+  if (watch) {
+    console.log(chalk.dim("\nWatching fleet... (Ctrl+C to stop)"));
+  }
 }
 
 /**
@@ -438,20 +514,20 @@ function formatStatus(status: string, emoji: string): string {
  */
 function formatActivity(agent: FleetAgent): string {
   if (!agent.lastActivity) {
-    return "—".padEnd(18);
+    return "—".padEnd(14);
   }
 
   const timeAgo = formatTimeAgo(agent.lastActivity);
 
   if (agent.agentStatus === "active" && agent.idleTime !== null && agent.idleTime < 2) {
-    return chalk.green("working now".padEnd(18));
+    return chalk.green("working now".padEnd(14));
   }
 
   if (agent.idleTime !== null && agent.idleTime > IDLE_THRESHOLD_MINUTES) {
-    return chalk.yellow(timeAgo.padEnd(18));
+    return chalk.yellow(timeAgo.padEnd(14));
   }
 
-  return timeAgo.padEnd(18);
+  return timeAgo.padEnd(14);
 }
 
 /**

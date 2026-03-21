@@ -5,7 +5,7 @@
  * handling. No external CSV library — ~20 lines of parsing logic.
  */
 
-import type { AgentInfo } from "./types.js";
+import type { AgentInfo } from "./types";
 
 /**
  * Parse a single CSV line, handling quoted fields with embedded commas.

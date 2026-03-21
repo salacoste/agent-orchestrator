@@ -15,7 +15,7 @@ import type {
   OrchestratorConfig,
   PluginRegistry,
 } from "@composio/ao-core";
-import type { DashboardSession, DashboardPR, DashboardStats } from "./types.js";
+import type { DashboardSession, DashboardPR, DashboardStats } from "./types";
 import { TTLCache, prCache, prCacheKey, type PREnrichmentData } from "./cache";
 
 /** Cache for issue titles (5 min TTL — issue titles rarely change) */

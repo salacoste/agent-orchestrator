@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { createHealthCheckService } from "../health-check.js";
 import type {
   HealthCheckConfig,
+  ComponentHealth,
   BMADTracker,
   AgentRegistry,
   StateManager,
@@ -570,6 +571,232 @@ describe("HealthCheckService", () => {
       };
 
       expect(() => createHealthCheckService(config)).not.toThrow();
+    });
+  });
+
+  describe("DLQ health check", () => {
+    function createMockDLQ(stats: {
+      totalEntries: number;
+      atCapacity: boolean;
+      byOperation?: Record<string, number>;
+    }) {
+      return {
+        getStats: vi.fn().mockResolvedValue({
+          totalEntries: stats.totalEntries,
+          atCapacity: stats.atCapacity,
+          byOperation: stats.byOperation ?? {},
+          oldestEntry: null,
+          newestEntry: null,
+        }),
+      };
+    }
+
+    it("should report healthy when DLQ is empty", async () => {
+      const dlq = createMockDLQ({ totalEntries: 0, atCapacity: false });
+      const service = createHealthCheckService({ dlq });
+      const result = await service.check();
+
+      const dlqComponent = result.components.find((c) => c.component === "Dead Letter Queue");
+      expect(dlqComponent).toBeDefined();
+      expect(dlqComponent!.status).toBe("healthy");
+      expect(dlqComponent!.message).toBe("Empty");
+    });
+
+    it("should report degraded when DLQ has entries", async () => {
+      const dlq = createMockDLQ({
+        totalEntries: 5,
+        atCapacity: false,
+        byOperation: { bmad_sync: 3, event_publish: 2 },
+      });
+      const service = createHealthCheckService({ dlq });
+      const result = await service.check();
+
+      const dlqComponent = result.components.find((c) => c.component === "Dead Letter Queue");
+      expect(dlqComponent!.status).toBe("degraded");
+      expect(dlqComponent!.message).toBe("5 entries pending");
+      expect(dlqComponent!.details).toContain("bmad_sync: 3");
+    });
+
+    it("should report unhealthy when DLQ is at capacity", async () => {
+      const dlq = createMockDLQ({ totalEntries: 10000, atCapacity: true });
+      const service = createHealthCheckService({ dlq });
+      const result = await service.check();
+
+      const dlqComponent = result.components.find((c) => c.component === "Dead Letter Queue");
+      expect(dlqComponent!.status).toBe("unhealthy");
+      expect(dlqComponent!.message).toContain("At capacity");
+    });
+
+    it("should skip DLQ check when not configured", async () => {
+      const service = createHealthCheckService({});
+      const result = await service.check();
+
+      const dlqComponent = result.components.find((c) => c.component === "Dead Letter Queue");
+      expect(dlqComponent).toBeUndefined();
+    });
+
+    it("should handle DLQ getStats failure gracefully", async () => {
+      const dlq = {
+        getStats: vi.fn().mockRejectedValue(new Error("DLQ disk error")),
+      };
+      const service = createHealthCheckService({ dlq });
+      const result = await service.check();
+
+      const dlqComponent = result.components.find((c) => c.component === "Dead Letter Queue");
+      expect(dlqComponent!.status).toBe("unhealthy");
+      expect(dlqComponent!.message).toContain("DLQ disk error");
+    });
+  });
+
+  describe("health status transition notifications", () => {
+    it("should publish event when status transitions from healthy to degraded", async () => {
+      const publishMock = vi.fn().mockResolvedValue(undefined);
+      const isDegradedMock = vi.fn().mockReturnValue(false);
+      const eventBus = createMockEventBus({ publish: publishMock, isDegraded: isDegradedMock });
+      const service = createHealthCheckService({
+        eventBus,
+        alertOnTransition: true,
+        minCheckIntervalMs: 0,
+        maxChecksPerWindow: 1000,
+      });
+
+      // First check: healthy (establishes baseline)
+      await service.check();
+      expect(publishMock).not.toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: "health.status_changed" }),
+      );
+
+      // Make event bus degraded
+      isDegradedMock.mockReturnValue(true);
+
+      // Second check: degraded → should publish transition event
+      await service.check();
+      expect(publishMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventType: "health.status_changed",
+          metadata: expect.objectContaining({
+            from: "healthy",
+            to: "degraded",
+          }),
+        }),
+      );
+    });
+
+    it("should not publish event when status stays the same", async () => {
+      const publishMock = vi.fn().mockResolvedValue(undefined);
+      const eventBus = createMockEventBus({ publish: publishMock });
+      const service = createHealthCheckService({
+        eventBus,
+        alertOnTransition: true,
+        minCheckIntervalMs: 0,
+        maxChecksPerWindow: 1000,
+      });
+
+      await service.check();
+      publishMock.mockClear();
+      await service.check();
+
+      // No transition event — status unchanged
+      expect(publishMock).not.toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: "health.status_changed" }),
+      );
+    });
+
+    it("should not publish event when alertOnTransition is false", async () => {
+      const publishMock = vi.fn().mockResolvedValue(undefined);
+      const isDegradedMock = vi.fn().mockReturnValue(false);
+      const eventBus = createMockEventBus({ publish: publishMock, isDegraded: isDegradedMock });
+      const service = createHealthCheckService({
+        eventBus,
+        alertOnTransition: false,
+        minCheckIntervalMs: 0,
+        maxChecksPerWindow: 1000,
+      });
+
+      // First check: healthy
+      await service.check();
+      // Make degraded
+      isDegradedMock.mockReturnValue(true);
+      await service.check();
+
+      expect(publishMock).not.toHaveBeenCalledWith(
+        expect.objectContaining({ eventType: "health.status_changed" }),
+      );
+    });
+
+    it("should not publish event when no eventBus configured", async () => {
+      const service = createHealthCheckService({});
+
+      // Should not throw
+      await service.check();
+      await service.check();
+    });
+  });
+
+  describe("rules engine integration", () => {
+    it("should include custom checks from rules engine", async () => {
+      const customCheck: ComponentHealth = {
+        component: "Custom Check",
+        status: "healthy",
+        message: "All good",
+        timestamp: new Date(),
+      };
+
+      const rulesEngine = {
+        runCustomChecks: vi.fn().mockResolvedValue([customCheck]),
+        aggregateWithWeights: vi.fn().mockImplementation((components: ComponentHealth[]) => ({
+          overall: "healthy" as const,
+          components,
+          timestamp: new Date(),
+          exitCode: 0,
+          score: 1.0,
+          componentScores: components.map((c) => ({
+            component: c.component,
+            score: 1.0,
+            weight: 1.0,
+            weightedScore: 1.0,
+          })),
+          customChecks: [customCheck],
+        })),
+      };
+
+      const service = createHealthCheckService({ rulesEngine });
+      const result = await service.check();
+
+      expect(rulesEngine.runCustomChecks).toHaveBeenCalled();
+      expect(rulesEngine.aggregateWithWeights).toHaveBeenCalled();
+      expect(result.components).toContainEqual(
+        expect.objectContaining({ component: "Custom Check" }),
+      );
+    });
+
+    it("should fallback to simple aggregation when no rules engine", async () => {
+      const service = createHealthCheckService({ eventBus: createMockEventBus() });
+      const result = await service.check();
+
+      // Simple aggregation — no score field
+      expect(result.overall).toBe("healthy");
+      expect("score" in result).toBe(false);
+    });
+
+    it("should handle rules engine runCustomChecks failure gracefully", async () => {
+      const rulesEngine = {
+        runCustomChecks: vi.fn().mockRejectedValue(new Error("Custom check failed")),
+        aggregateWithWeights: vi.fn().mockImplementation((components: ComponentHealth[]) => ({
+          overall: "healthy" as const,
+          components,
+          timestamp: new Date(),
+          exitCode: 0,
+          score: 1.0,
+          componentScores: [],
+          customChecks: [],
+        })),
+      };
+
+      const service = createHealthCheckService({ rulesEngine });
+      // Should not throw
+      const result = await service.check();
+      expect(result.overall).toBeDefined();
     });
   });
 });

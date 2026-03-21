@@ -2,7 +2,7 @@ import chalk from "chalk";
 import ora from "ora";
 import type { Command } from "commander";
 import { createInterface } from "node:readline";
-import { existsSync, readFileSync, appendFileSync, mkdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "yaml";
 import {
@@ -10,12 +10,14 @@ import {
   getAgentRegistry,
   computeStoryContextHash,
   getSessionsDir,
+  getEventPublisher,
   type AgentStatus,
   type OrchestratorConfig,
 } from "@composio/ao-core";
 
 import { header } from "../lib/format.js";
 import { getSessionManager } from "../lib/create-session-manager.js";
+import { logAuditEvent } from "../lib/story-context.js";
 
 interface SprintStatus {
   project: string;
@@ -258,29 +260,6 @@ function validateDependencies(
 /**
  * Log assignment to audit trail (JSONL)
  */
-function logAssignment(
-  auditDir: string,
-  event: {
-    timestamp: string;
-    event_type: string;
-    agent_id: string;
-    story_id: string;
-    previous_story_id?: string;
-    forced: boolean;
-  },
-): void {
-  try {
-    // Ensure audit directory exists
-    if (!existsSync(auditDir)) {
-      mkdirSync(auditDir, { recursive: true });
-    }
-
-    const auditFile = join(auditDir, "assignments.jsonl");
-    appendFileSync(auditFile, JSON.stringify(event) + "\n");
-  } catch {
-    // Non-fatal: logging failure should not block assignment
-  }
-}
 
 /**
  * Get project ID from current directory
@@ -393,7 +372,7 @@ export function registerAssign(program: Command): void {
 
         // Log to audit trail
         const auditDir = join(sessionsDir, "audit");
-        logAssignment(auditDir, {
+        logAuditEvent(auditDir, {
           timestamp: new Date().toISOString(),
           event_type: "unassign",
           agent_id: agentId,
@@ -526,6 +505,9 @@ export function registerAssign(program: Command): void {
       console.log(`  ${chalk.dim("Story ID:")} ${chalk.green(normalizedStoryId)}`);
       console.log(`  ${chalk.dim("Epic:")}    ${storyContext.epic ?? "N/A"}`);
       console.log(`  ${chalk.dim("Status:")}  ${storyStatus}`);
+      console.log(
+        `  ${chalk.dim("Priority:")} ${sprintStatus.priorities?.[normalizedStoryId] ?? 0}`,
+      );
       if (storyContext.dependencies?.length) {
         console.log(`  ${chalk.dim("Deps:")}    ${storyContext.dependencies.join(", ")}`);
       }
@@ -538,17 +520,30 @@ export function registerAssign(program: Command): void {
         storyContext.acceptanceCriteria,
       );
 
+      const priority = sprintStatus.priorities?.[normalizedStoryId] ?? 0;
+
       registry.register({
         agentId,
         storyId: normalizedStoryId,
         assignedAt: new Date(),
         status: "active" as AgentStatus,
         contextHash,
+        priority,
       });
+
+      // Publish story lifecycle event (non-fatal)
+      try {
+        const ep = getEventPublisher();
+        if (ep) {
+          await ep.publishStoryAssigned({ storyId: normalizedStoryId, agentId, reason: "manual" });
+        }
+      } catch {
+        // Non-fatal: event publishing is an enhancement
+      }
 
       // Log to audit trail
       const auditDir = join(sessionsDir, "audit");
-      logAssignment(auditDir, {
+      logAuditEvent(auditDir, {
         timestamp: new Date().toISOString(),
         event_type: "assign",
         agent_id: agentId,

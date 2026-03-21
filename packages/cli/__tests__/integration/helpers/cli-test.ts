@@ -262,7 +262,7 @@ export function createTestConfig(
   const lines: string[] = [];
 
   // Port
-  lines.push(`port: ${overrides?.port ?? 3000}`);
+  lines.push(`port: ${overrides?.port ?? 5000}`);
 
   // Ready threshold
   lines.push(`readyThresholdMs: ${overrides?.readyThresholdMs ?? 300000}`);

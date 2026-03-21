@@ -13,7 +13,12 @@ import type {
   FailureEvent,
   CompletionHandler,
   FailureHandler,
+  StateManager,
+  StoryStatus,
+  EventPublisher,
 } from "./types.js";
+import { captureSessionLearning } from "./session-learning.js";
+import { getLearningStore } from "./service-registry.js";
 import {
   readFileSync,
   writeFileSync,
@@ -75,13 +80,65 @@ function loadSprintStatus(projectPath: string): Record<string, unknown> | null {
 }
 
 /**
- * Update story status in sprint-status.yaml atomically
+ * Update story status in sprint-status.yaml.
+ *
+ * When a StateManager is provided, uses stateManager.update() for write-through
+ * caching with version conflict detection. Falls back to direct YAML write when
+ * StateManager is unavailable or on StateManager error (graceful degradation).
  */
 export function updateSprintStatus(
   projectPath: string,
   storyId: string,
   newStatus: string,
+  stateManager?: StateManager,
 ): boolean {
+  // Try StateManager path first (if provided)
+  if (stateManager) {
+    try {
+      const currentVersion = stateManager.getVersion(storyId);
+      const updatePromise = stateManager.update(
+        storyId,
+        { status: newStatus as StoryStatus },
+        currentVersion ?? undefined,
+      );
+
+      // Handle async result — fire and forget with conflict retry
+      updatePromise
+        .then((result) => {
+          if (result.conflict) {
+            // Retry once with fresh version
+            const freshVersion = stateManager.getVersion(storyId);
+            return stateManager.update(
+              storyId,
+              { status: newStatus as StoryStatus },
+              freshVersion ?? undefined,
+            );
+          }
+          return result;
+        })
+        .catch((err) => {
+          // StateManager failed — fall back to direct YAML write
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[completion-handlers] StateManager update failed for ${storyId}, falling back to direct YAML:`,
+            err,
+          );
+          directYamlUpdate(projectPath, storyId, newStatus);
+        });
+
+      return true;
+    } catch {
+      // StateManager threw synchronously — fall back to direct YAML write
+    }
+  }
+
+  return directYamlUpdate(projectPath, storyId, newStatus);
+}
+
+/**
+ * Direct YAML write — the original update path (fallback when no StateManager).
+ */
+function directYamlUpdate(projectPath: string, storyId: string, newStatus: string): boolean {
   const statusPath = join(projectPath, "sprint-status.yaml");
   const tmpPath = statusPath + ".tmp";
 
@@ -121,13 +178,17 @@ export function updateSprintStatus(
 }
 
 /**
- * Find all stories that depend on a given story
+ * Find all stories that depend on a given story.
+ * Reads the story_dependencies section of sprint-status.yaml.
  */
-function findDependentStories(
+export function findDependentStories(
   sprintStatus: Record<string, unknown>,
   completedStoryId: string,
 ): string[] {
-  const deps = sprintStatus.dependencies as Record<string, string[]> | undefined;
+  // Use story_dependencies (story-level deps), falling back to dependencies for backward compat
+  const deps = (sprintStatus.story_dependencies ?? sprintStatus.dependencies) as
+    | Record<string, string[]>
+    | undefined;
   if (!deps) {
     return [];
   }
@@ -143,10 +204,17 @@ function findDependentStories(
 }
 
 /**
- * Check if all dependencies for a story are satisfied
+ * Check if all dependencies for a story are satisfied.
+ * Reads the story_dependencies section of sprint-status.yaml.
  */
-function areDependenciesSatisfied(storyId: string, sprintStatus: Record<string, unknown>): boolean {
-  const deps = sprintStatus.dependencies as Record<string, string[]> | undefined;
+export function areDependenciesSatisfied(
+  storyId: string,
+  sprintStatus: Record<string, unknown>,
+): boolean {
+  // Use story_dependencies (story-level deps), falling back to dependencies for backward compat
+  const deps = (sprintStatus.story_dependencies ?? sprintStatus.dependencies) as
+    | Record<string, string[]>
+    | undefined;
   if (!deps) {
     return true; // No dependencies
   }
@@ -251,10 +319,14 @@ export function createCompletionHandler(
   configPath: string,
   auditDir: string,
   notifier?: Notifier,
+  overrideSessionsDir?: string,
+  stateManager?: StateManager,
+  eventPublisher?: EventPublisher,
 ): CompletionHandler {
   return async (event: CompletionEvent) => {
     // Capture session logs before completion
-    const sessionsDir = getSessionsDir(configPath, projectPath);
+    // Use overrideSessionsDir if provided (avoids hash mismatch when projectPath is a subdirectory)
+    const sessionsDir = overrideSessionsDir ?? getSessionsDir(configPath, projectPath);
     const logPath = getLogFilePath(sessionsDir, event.agentId);
     await captureTmuxSessionLogs(event.agentId, logPath);
 
@@ -268,8 +340,24 @@ export function createCompletionHandler(
       registry.remove(event.agentId);
     }
 
-    // Update story status to "done"
-    updateSprintStatus(projectPath, event.storyId, "done");
+    // Update story status to "done" — via StateManager if available, else direct YAML
+    updateSprintStatus(projectPath, event.storyId, "done", stateManager);
+
+    // Publish story.completed event (non-fatal)
+    if (eventPublisher) {
+      try {
+        await eventPublisher.publishStoryCompleted({
+          storyId: event.storyId,
+          agentId: event.agentId,
+          previousStatus: "in-progress",
+          newStatus: "done",
+          duration: event.duration,
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[completion-handlers] Event publish failed:", err);
+      }
+    }
 
     // Log completion event
     logAuditEvent(auditDir, {
@@ -280,6 +368,24 @@ export function createCompletionHandler(
       exit_code: event.exitCode,
       duration_ms: event.duration,
     });
+
+    // Capture session learning for AI intelligence (Cycle 3 — opt-in)
+    try {
+      const learningStore = getLearningStore();
+      if (learningStore) {
+        // Extract projectId from path — strip trailing slash, take last segment
+        const normalizedPath = projectPath.endsWith("/") ? projectPath.slice(0, -1) : projectPath;
+        const projectId = normalizedPath.split("/").pop() ?? "unknown";
+        const learning = await captureSessionLearning(
+          event,
+          projectId,
+          registry.getRetryCount(event.storyId),
+        );
+        await learningStore.store(learning);
+      }
+    } catch {
+      // Learning capture failure must never break completion flow
+    }
 
     // Unblock dependent stories
     await unblockDependentStories(projectPath, event.storyId, auditDir, notifier);
@@ -295,10 +401,14 @@ export function createFailureHandler(
   configPath: string,
   auditDir: string,
   notifier?: Notifier,
+  overrideSessionsDir?: string,
+  stateManager?: StateManager,
+  eventPublisher?: EventPublisher,
 ): FailureHandler {
   return async (event: FailureEvent) => {
     // Capture session logs before failure (if tmux session still exists)
-    const sessionsDir = getSessionsDir(configPath, projectPath);
+    // Use overrideSessionsDir if provided (avoids hash mismatch when projectPath is a subdirectory)
+    const sessionsDir = overrideSessionsDir ?? getSessionsDir(configPath, projectPath);
     const logPath = getLogFilePath(sessionsDir, event.agentId);
     await captureTmuxSessionLogs(event.agentId, logPath);
 
@@ -313,8 +423,25 @@ export function createFailureHandler(
     }
 
     // Update story status to "blocked" (except for manual termination)
+    // Via StateManager if available, else direct YAML
     if (event.reason !== "disconnected") {
-      updateSprintStatus(projectPath, event.storyId, "blocked");
+      updateSprintStatus(projectPath, event.storyId, "blocked", stateManager);
+    }
+
+    // Publish story.blocked event (non-fatal, skip for manual disconnect)
+    if (eventPublisher && event.reason !== "disconnected") {
+      try {
+        await eventPublisher.publishStoryBlocked({
+          storyId: event.storyId,
+          agentId: event.agentId,
+          reason: event.reason,
+          exitCode: event.exitCode,
+          signal: event.signal,
+        });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn("[completion-handlers] Event publish failed:", err);
+      }
     }
 
     // Store crash details in agent's session metadata for resume functionality
@@ -335,6 +462,23 @@ export function createFailureHandler(
       signal: event.signal,
       duration_ms: event.duration,
     });
+
+    // Capture session learning for AI intelligence (Cycle 3 — opt-in, failures too)
+    try {
+      const learningStore = getLearningStore();
+      if (learningStore) {
+        const normalizedPath = projectPath.endsWith("/") ? projectPath.slice(0, -1) : projectPath;
+        const projectId = normalizedPath.split("/").pop() ?? "unknown";
+        const learning = await captureSessionLearning(
+          event,
+          projectId,
+          registry.getRetryCount(event.storyId),
+        );
+        await learningStore.store(learning);
+      }
+    } catch {
+      // Learning capture failure must never break failure handling flow
+    }
 
     // Send notification for failures (but not manual termination)
     if (notifier && event.reason !== "disconnected") {

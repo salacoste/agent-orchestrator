@@ -3,13 +3,17 @@
  * Used by CLI to access application-level services like EventPublisher and DegradedModeService
  */
 
+import type { CircuitBreakerManager } from "./circuit-breaker-manager.js";
 import type { DegradedModeService } from "./degraded-mode.js";
+import type { LearningStore } from "./learning-store.js";
 import type { BMADTracker, EventPublisher } from "./types.js";
 
 interface ServiceRegistry {
   degradedModeService?: DegradedModeService;
   eventPublisher?: EventPublisher;
   bmadTracker?: BMADTracker;
+  circuitBreakerManager?: CircuitBreakerManager;
+  learningStore?: LearningStore;
 }
 
 // Global registry instance
@@ -61,6 +65,37 @@ export function registerBMADTracker(tracker: BMADTracker): void {
  */
 export function getBMADTracker(): BMADTracker | undefined {
   return registry.bmadTracker;
+}
+
+/**
+ * Register the CircuitBreakerManager instance
+ * Called by the application during initialization
+ */
+export function registerCircuitBreakerManager(manager: CircuitBreakerManager): void {
+  registry.circuitBreakerManager = manager;
+}
+
+/**
+ * Get the registered CircuitBreakerManager instance
+ * Returns undefined if not registered
+ */
+export function getCircuitBreakerManager(): CircuitBreakerManager | undefined {
+  return registry.circuitBreakerManager;
+}
+
+/**
+ * Register the LearningStore instance (Cycle 3 AI Intelligence)
+ */
+export function registerLearningStore(store: LearningStore): void {
+  registry.learningStore = store;
+}
+
+/**
+ * Get the registered LearningStore instance
+ * Returns undefined if not registered (AI features opt-in)
+ */
+export function getLearningStore(): LearningStore | undefined {
+  return registry.learningStore;
 }
 
 /**

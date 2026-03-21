@@ -76,6 +76,7 @@ export type {
   StoryBlockedEvent,
   StoryAssignedEvent,
   AgentResumedEvent,
+  StoryUnblockedEvent,
 } from "./types.js";
 
 // Event Subscription — subscribe to events with pattern matching and retry
@@ -105,7 +106,15 @@ export type {
 
 // State Manager — write-through cache for sprint status
 export { createStateManager } from "./state-manager.js";
-export type { StateManager, StoryState, SetResult, BatchResult } from "./types.js";
+export type {
+  StateManager,
+  StoryState,
+  SetResult,
+  BatchResult,
+  SprintPlanView,
+  SprintSummary,
+  ActionableStory,
+} from "./types.js";
 
 // File Watcher — watch files for external changes and trigger cache invalidation
 export { createFileWatcher } from "./file-watcher.js";
@@ -136,6 +145,10 @@ export type {
   ConflictInfo,
 } from "./types.js";
 
+// Sync Bridge — orchestration wiring StateManager + FileWatcher + SyncService
+export { createSyncBridge } from "./sync-bridge.js";
+export type { SyncBridge, SyncBridgeConfig, SyncBridgeStatus } from "./sync-bridge.js";
+
 // Notification Service — queue, deduplicate, and route notifications
 export { createNotificationService } from "./notification-service.js";
 export type { NotificationServiceConfig } from "./notification-service.js";
@@ -150,6 +163,12 @@ export type {
   NotificationPreferences,
 } from "./types.js";
 
+// Notification Adapter — shared utilities for NotificationPlugin adapters
+export {
+  mapNotificationPriority,
+  notificationToOrchestratorEvent,
+} from "./notification-adapter.js";
+
 // Agent Completion Detection — monitor and detect agent completion
 export { createAgentCompletionDetector } from "./agent-completion-detector.js";
 export type { AgentCompletionDetectorDeps } from "./agent-completion-detector.js";
@@ -160,6 +179,8 @@ export type {
   FailureEvent,
   CompletionHandler,
   FailureHandler,
+  SessionLearning,
+  ReviewFinding,
 } from "./types.js";
 
 // Blocked Agent Detection — monitor and detect agent inactivity
@@ -171,8 +192,14 @@ export type {
   BlockedAgentStatus,
 } from "./types.js";
 
-// Error Logger — structured error logging with secret redaction
-export { createErrorLogger } from "./error-logger.js";
+// Error Logger — structured error logging with secret redaction and classification
+export {
+  createErrorLogger,
+  ERROR_CODES,
+  registerClassificationRule,
+  clearClassificationRules,
+} from "./error-logger.js";
+export type { ErrorClassificationRule } from "./error-logger.js";
 export type { ErrorLoggerDeps } from "./error-logger.js";
 export type {
   ErrorLogger,
@@ -182,6 +209,8 @@ export type {
   ErrorLogOptions,
   ErrorFilter,
   ErrorRateSummary,
+  ErrorSeverity,
+  ErrorCode,
 } from "./error-logger.js";
 
 // Retry Service — retry with exponential backoff
@@ -217,14 +246,34 @@ export type {
   RecoveryCallback,
 } from "./degraded-mode.js";
 
+// Resilient Event Bus — circuit breaker + retry wrapper for EventBus
+export { createResilientEventBus } from "./resilient-event-bus.js";
+export type { ResilientEventBusDeps, ResilientEventBus } from "./resilient-event-bus.js";
+
+// Resilient Service Wrapper — generic circuit breaker + retry for any async operation
+export { withResilience, clearRetryServiceCache } from "./resilient-service-wrapper.js";
+export type { ResilienceDeps } from "./resilient-service-wrapper.js";
+
+// Circuit Breaker Manager — named breaker instances per service
+export { createCircuitBreakerManager, SILENT_LOGGER } from "./circuit-breaker-manager.js";
+export type {
+  CircuitBreakerManager,
+  CircuitBreakerManagerConfig,
+  BreakerStateSnapshot,
+} from "./circuit-breaker-manager.js";
+
 // Service Registry — global service instance access
 export {
   registerDegradedModeService,
   registerEventPublisher,
   registerBMADTracker,
+  registerCircuitBreakerManager,
   getDegradedModeService,
   getEventPublisher,
   getBMADTracker,
+  getCircuitBreakerManager,
+  registerLearningStore,
+  getLearningStore,
   clearServiceRegistry,
 } from "./service-registry.js";
 
@@ -239,18 +288,76 @@ export type {
   AlertCallback,
 } from "./dead-letter-queue.js";
 
+// DLQ Enqueue Bridge — wires RetryService onNonRetryable to DLQ
+export { createDLQEnqueueCallback } from "./dlq-enqueue-bridge.js";
+
+// DLQ Auto-Replay — replays pending DLQ entries on startup
+export { runDLQAutoReplay } from "./dlq-auto-replay.js";
+export type { DLQAutoReplayResult } from "./dlq-auto-replay.js";
+
+// EventBus Backlog Monitor — queue depth alerting
+export { createEventBusBacklogMonitor } from "./eventbus-backlog-monitor.js";
+export type { BacklogMonitorConfig, EventBusBacklogMonitor } from "./eventbus-backlog-monitor.js";
+
 // DLQ Replay Handlers — service-specific replay logic for failed operations
 export {
   registerReplayHandler,
   getReplayHandler,
   getRegisteredOperationTypes,
+  clearReplayHandlers,
   replayEntry,
   replayEntries,
   bmadSyncHandler,
   eventPublishHandler,
   stateWriteHandler,
+  NO_HANDLER_ERROR_PREFIX,
 } from "./dlq-replay-handlers.js";
 export type { DLQReplayHandlerFn, ReplayContext, DLQReplayResult } from "./dlq-replay-handlers.js";
+
+// Session Learning — capture structured session outcomes for AI intelligence
+export {
+  captureSessionLearning,
+  inferDomainTags,
+  countTestFiles,
+  getModifiedFiles,
+  selectRelevantLearnings,
+} from "./session-learning.js";
+
+export { buildLearningsLayer } from "./prompt-builder.js";
+
+// Learning Patterns — detect recurring failure patterns
+export { detectPatterns } from "./learning-patterns.js";
+export type { FailurePattern } from "./learning-patterns.js";
+
+// Assignment Scorer — agent-story affinity scoring
+export {
+  scoreAffinity,
+  registerAssignmentScorer,
+  clearAssignmentScorers,
+} from "./assignment-scorer.js";
+export type { AffinityScore, AssignmentScorerFn } from "./assignment-scorer.js";
+
+// Collaboration Service — multi-agent coordination
+export {
+  getReadyStories,
+  buildHandoffContext,
+  detectFileConflicts,
+  buildCollabGraph,
+} from "./collaboration-service.js";
+export type {
+  StoryDependency,
+  HandoffRecord,
+  FileConflict,
+  CollabGraphEntry,
+} from "./collaboration-service.js";
+
+// Review Findings Store — JSONL storage for code review findings
+export { createReviewFindingsStore } from "./review-findings-store.js";
+export type { ReviewFindingsStore, ReviewFindingsStoreConfig } from "./review-findings-store.js";
+
+// Learning Store — persistent JSONL storage for session learnings
+export { createLearningStore } from "./learning-store.js";
+export type { LearningStore, LearningStoreConfig, LearningQuery } from "./learning-store.js";
 
 // Completion Handlers — handle agent completion and failure events
 export {
@@ -259,6 +366,8 @@ export {
   logAuditEvent,
   updateSprintStatus,
   formatFailureReason,
+  findDependentStories,
+  areDependenciesSatisfied,
 } from "./completion-handlers.js";
 
 // Log Capture — capture and store agent session logs
@@ -310,6 +419,35 @@ export type {
   ComponentHealth,
   HealthStatus,
 } from "./health-check.js";
+
+// Dependency Resolver — event-driven story unblocking on completion
+export { createDependencyResolver } from "./dependency-resolver.js";
+export type { DependencyResolverConfig, DependencyResolverService } from "./dependency-resolver.js";
+
+// State Conflict Reconciler — orchestrates conflict detection, retry, and escalation
+export { createStateConflictReconciler } from "./state-conflict-reconciler.js";
+export type {
+  StateConflictReconcilerConfig,
+  ReconcileResult,
+  StateConflictReconciler,
+} from "./state-conflict-reconciler.js";
+
+// Burndown Service — event-driven sprint burndown recalculation
+export { createBurndownService } from "./burndown-service.js";
+export type {
+  BurndownServiceConfig,
+  BurndownData,
+  BurndownResult,
+  BurndownService,
+} from "./burndown-service.js";
+
+// Assignment Service — priority-based story selection for multi-agent orchestration
+export {
+  selectNextStory,
+  getAssignableStories,
+  resolveDependencies,
+} from "./assignment-service.js";
+export type { StoryCandidate, DependencyResult, SprintStatusData } from "./assignment-service.js";
 
 // Conflict Detection — detect and manage agent assignment conflicts
 export { createConflictDetectionService } from "./conflict-detection.js";

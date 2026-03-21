@@ -8,7 +8,11 @@ import {
   type CIStatus,
   type ReviewDecision,
   type ActivityState,
+  type AgentStatus,
+  type AgentRegistry,
   loadConfig,
+  getAgentRegistry,
+  getSessionsDir,
 } from "@composio/ao-core";
 import { git, getTmuxSessions, getTmuxActivity } from "../lib/shell.js";
 import {
@@ -22,6 +26,8 @@ import {
 } from "../lib/format.js";
 import { getAgentByName, getSCM, getTracker } from "../lib/plugins.js";
 import { getSessionManager } from "../lib/create-session-manager.js";
+import { readSprintStatus } from "../lib/story-context.js";
+import { join } from "node:path";
 
 interface SessionInfo {
   name: string;
@@ -40,6 +46,29 @@ interface SessionInfo {
   reviewDecision: ReviewDecision | null;
   pendingThreads: number | null;
   activity: ActivityState | null;
+  storyId: string | null;
+  agentStatus: AgentStatus | null;
+}
+
+/** Color-code agent status for display */
+function agentStatusIcon(status: AgentStatus | null): string {
+  if (!status) return chalk.dim("-");
+  switch (status) {
+    case "active":
+      return chalk.green(status);
+    case "blocked":
+      return chalk.red(status);
+    case "idle":
+      return chalk.yellow(status);
+    case "completed":
+      return chalk.dim(status);
+    case "spawning":
+      return chalk.blue(status);
+    case "disconnected":
+      return chalk.red(status);
+    default:
+      return chalk.dim(status);
+  }
 }
 
 async function gatherSessionInfo(
@@ -47,12 +76,31 @@ async function gatherSessionInfo(
   agent: Agent,
   scm: SCM,
   projectConfig: ReturnType<typeof loadConfig>,
+  registry: AgentRegistry | null,
 ): Promise<SessionInfo> {
   let branch = session.branch;
   const status = session.status;
   const summary = session.metadata["summary"] ?? null;
   const prUrl = session.metadata["pr"] ?? null;
   const issue = session.issueId;
+
+  // Look up agent-story assignment from registry
+  let storyId: string | null = null;
+  let agentStatus: AgentStatus | null = null;
+  if (registry) {
+    const assignment = registry.getByAgent(session.id);
+    if (assignment) {
+      storyId = assignment.storyId;
+      agentStatus = assignment.status;
+    }
+  }
+  // Fallback: read storyId from session metadata if not in registry
+  if (!storyId && session.metadata["storyId"]) {
+    storyId = session.metadata["storyId"];
+  }
+  if (!agentStatus && session.metadata["agentStatus"]) {
+    agentStatus = session.metadata["agentStatus"] as AgentStatus;
+  }
 
   // Get live branch from worktree if available
   if (session.workspacePath) {
@@ -155,6 +203,8 @@ async function gatherSessionInfo(
     reviewDecision,
     pendingThreads,
     activity,
+    storyId,
+    agentStatus,
   };
 }
 
@@ -162,6 +212,8 @@ async function gatherSessionInfo(
 const COL = {
   session: 14,
   branch: 24,
+  story: 12,
+  agentSt: 8,
   pr: 6,
   ci: 6,
   review: 6,
@@ -174,6 +226,8 @@ function printTableHeader(): void {
   const hdr =
     padCol("Session", COL.session) +
     padCol("Branch", COL.branch) +
+    padCol("Story", COL.story) +
+    padCol("AgentSt", COL.agentSt) +
     padCol("PR", COL.pr) +
     padCol("CI", COL.ci) +
     padCol("Rev", COL.review) +
@@ -182,16 +236,29 @@ function printTableHeader(): void {
     "Age";
   console.log(chalk.dim(`  ${hdr}`));
   const totalWidth =
-    COL.session + COL.branch + COL.pr + COL.ci + COL.review + COL.threads + COL.activity + 3;
+    COL.session +
+    COL.branch +
+    COL.story +
+    COL.agentSt +
+    COL.pr +
+    COL.ci +
+    COL.review +
+    COL.threads +
+    COL.activity +
+    3;
   console.log(chalk.dim(`  ${"─".repeat(totalWidth)}`));
 }
 
 function printSessionRow(info: SessionInfo): void {
   const prStr = info.prNumber ? `#${info.prNumber}` : "-";
+  // Truncate story ID to fit column
+  const storyStr = info.storyId ? info.storyId.slice(0, COL.story - 1) : "-";
 
   const row =
     padCol(chalk.green(info.name), COL.session) +
     padCol(info.branch ? chalk.cyan(info.branch) : chalk.dim("-"), COL.branch) +
+    padCol(info.storyId ? chalk.magenta(storyStr) : chalk.dim(storyStr), COL.story) +
+    padCol(agentStatusIcon(info.agentStatus), COL.agentSt) +
     padCol(info.prNumber ? chalk.blue(prStr) : chalk.dim(prStr), COL.pr) +
     padCol(ciStatusIcon(info.ciStatus), COL.ci) +
     padCol(reviewDecisionIcon(info.reviewDecision), COL.review) +
@@ -221,13 +288,61 @@ function printSessionRow(info: SessionInfo): void {
   }
 }
 
+/** Display detailed status for a specific story */
+function printStoryDetail(
+  storyId: string,
+  sessionInfos: SessionInfo[],
+  sprintStatus: {
+    development_status: Record<string, string>;
+    dependencies?: Record<string, string[]>;
+  } | null,
+): void {
+  console.log(header(`Story: ${storyId}`));
+  console.log();
+
+  // Sprint status info
+  if (sprintStatus) {
+    const devStatus = sprintStatus.development_status;
+    const storyStatus = devStatus[storyId] ?? "unknown";
+    console.log(`  ${chalk.dim("Sprint Status:")} ${chalk.bold(storyStatus)}`);
+
+    // Show dependency status
+    const storyDeps = sprintStatus.dependencies?.[storyId];
+    if (storyDeps && storyDeps.length > 0) {
+      console.log(`  ${chalk.dim("Dependencies:")}`);
+      for (const dep of storyDeps) {
+        const depStatus = devStatus[dep] ?? "unknown";
+        const resolved = depStatus === "done";
+        const icon = resolved ? chalk.green("✓") : chalk.yellow("○");
+        console.log(`    ${icon} ${dep} — ${chalk.dim(depStatus)}`);
+      }
+    }
+  }
+
+  // Assigned agent info
+  const assigned = sessionInfos.filter((s) => s.storyId === storyId);
+  if (assigned.length === 0) {
+    console.log(`  ${chalk.dim("Agent:")} ${chalk.dim("(no agent assigned)")}`);
+  } else {
+    console.log(`  ${chalk.dim("Assigned Agents:")}`);
+    for (const info of assigned) {
+      const duration = info.lastActivity !== "-" ? info.lastActivity : "unknown";
+      console.log(
+        `    ${chalk.green(info.name)} — ${agentStatusIcon(info.agentStatus)} — ${chalk.dim(duration)}`,
+      );
+    }
+  }
+  console.log();
+}
+
 export function registerStatus(program: Command): void {
   program
     .command("status")
     .description("Show all sessions with branch, activity, PR, and CI status")
     .option("-p, --project <id>", "Filter by project ID")
+    .option("-s, --story <id>", "Show detailed status for a specific story")
     .option("--json", "Output as JSON")
-    .action(async (opts: { project?: string; json?: boolean }) => {
+    .action(async (opts: { project?: string; story?: string; json?: boolean }) => {
       let config: ReturnType<typeof loadConfig>;
       try {
         config = loadConfig();
@@ -278,11 +393,20 @@ export function registerStatus(program: Command): void {
         const agent = getAgentByName(agentName);
         const scm = getSCM(config, projectId);
 
-        if (!opts.json) {
+        // Get agent registry for this project
+        let registry: AgentRegistry | null = null;
+        try {
+          const sessionsDir = getSessionsDir(config.configPath, projectId);
+          registry = getAgentRegistry(sessionsDir, config);
+        } catch {
+          // Registry unavailable — non-critical, columns will show "-"
+        }
+
+        if (!opts.json && !opts.story) {
           console.log(header(projectConfig.name || projectId));
         }
 
-        if (projectSessions.length === 0) {
+        if (projectSessions.length === 0 && !opts.story) {
           if (!opts.json) {
             console.log(chalk.dim("  (no active sessions)"));
             console.log();
@@ -292,13 +416,36 @@ export function registerStatus(program: Command): void {
 
         totalSessions += projectSessions.length;
 
+        // Gather all session info in parallel
+        const infoPromises = projectSessions.map((s) =>
+          gatherSessionInfo(s, agent, scm, config, registry),
+        );
+        const sessionInfos = await Promise.all(infoPromises);
+
+        // Story detail mode
+        if (opts.story) {
+          let sprintStatus: ReturnType<typeof readSprintStatus> = null;
+          try {
+            const storyDir =
+              typeof projectConfig.tracker?.["storyDir"] === "string"
+                ? projectConfig.tracker["storyDir"]
+                : "_bmad-output/implementation-artifacts";
+            sprintStatus = readSprintStatus(join(projectConfig.path, storyDir));
+          } catch {
+            // Sprint status unavailable
+          }
+          printStoryDetail(opts.story, sessionInfos, sprintStatus);
+          // Include matching sessions in JSON
+          if (opts.json) {
+            const matching = sessionInfos.filter((s) => s.storyId === opts.story);
+            jsonOutput.push(...matching);
+          }
+          continue;
+        }
+
         if (!opts.json) {
           printTableHeader();
         }
-
-        // Gather all session info in parallel
-        const infoPromises = projectSessions.map((s) => gatherSessionInfo(s, agent, scm, config));
-        const sessionInfos = await Promise.all(infoPromises);
 
         for (const info of sessionInfos) {
           if (opts.json) {
@@ -315,7 +462,7 @@ export function registerStatus(program: Command): void {
 
       if (opts.json) {
         console.log(JSON.stringify(jsonOutput, null, 2));
-      } else {
+      } else if (!opts.story) {
         console.log(
           chalk.dim(
             `  ${totalSessions} active session${totalSessions !== 1 ? "s" : ""} across ${projectIds.length} project${projectIds.length !== 1 ? "s" : ""}`,

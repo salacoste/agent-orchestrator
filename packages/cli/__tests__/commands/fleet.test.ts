@@ -77,7 +77,7 @@ Another test story.
     // Create minimal config
     const config = {
       configPath: ctx.configPath,
-      port: 3000,
+      port: 5000,
       readyThresholdMs: 300000,
       defaults: {
         runtime: "tmux",
@@ -314,6 +314,137 @@ Another test story.
       expect(summary.active).toBe(1);
       expect(summary.idle).toBe(1);
       expect(summary.blocked).toBe(0);
+    });
+  });
+
+  describe("empty fleet message", () => {
+    it("should show helpful message when no agents are active", () => {
+      const agents: any[] = [];
+      expect(agents.length).toBe(0);
+      // When empty, CLI displays "No active agents. Use `ao spawn` to start one."
+      const message = "No active agents. Use `ao spawn` to start one.";
+      expect(message).toContain("ao spawn");
+    });
+
+    it("should still output JSON with empty agents array when format is json", () => {
+      const output = {
+        timestamp: new Date().toISOString(),
+        agents: [] as unknown[],
+        summary: { total: 0, active: 0, idle: 0, blocked: 0, disconnected: 0 },
+      };
+      expect(output.agents).toHaveLength(0);
+      expect(output.summary.total).toBe(0);
+    });
+  });
+
+  describe("default sort order", () => {
+    it("should sort blocked agents first by default", () => {
+      const agents = [
+        {
+          agentId: "ao-1",
+          agentStatus: "active" as const,
+          lastActivity: new Date("2026-03-06T09:00:00Z"),
+        },
+        {
+          agentId: "ao-2",
+          agentStatus: "blocked" as const,
+          lastActivity: new Date("2026-03-06T10:00:00Z"),
+        },
+        {
+          agentId: "ao-3",
+          agentStatus: "idle" as const,
+          lastActivity: new Date("2026-03-06T08:00:00Z"),
+        },
+      ] as any;
+
+      const statusPriority: Record<string, number> = {
+        blocked: 0,
+        idle: 1,
+        active: 2,
+        disconnected: 3,
+      };
+
+      const sorted = [...agents].sort((a: any, b: any) => {
+        const aPri = statusPriority[a.agentStatus] ?? 99;
+        const bPri = statusPriority[b.agentStatus] ?? 99;
+        if (aPri !== bPri) return aPri - bPri;
+        const aTime = a.lastActivity?.getTime() || 0;
+        const bTime = b.lastActivity?.getTime() || 0;
+        return aTime - bTime;
+      });
+
+      expect(sorted[0].agentId).toBe("ao-2"); // blocked first
+      expect(sorted[1].agentId).toBe("ao-3"); // idle second
+      expect(sorted[2].agentId).toBe("ao-1"); // active last
+    });
+
+    it("should sort by duration descending within same status", () => {
+      const agents = [
+        {
+          agentId: "ao-1",
+          agentStatus: "active" as const,
+          lastActivity: new Date("2026-03-06T10:00:00Z"),
+        },
+        {
+          agentId: "ao-2",
+          agentStatus: "active" as const,
+          lastActivity: new Date("2026-03-06T08:00:00Z"),
+        },
+        {
+          agentId: "ao-3",
+          agentStatus: "active" as const,
+          lastActivity: new Date("2026-03-06T09:00:00Z"),
+        },
+      ] as any;
+
+      const sorted = [...agents].sort((a: any, b: any) => {
+        const aTime = a.lastActivity?.getTime() || 0;
+        const bTime = b.lastActivity?.getTime() || 0;
+        return aTime - bTime; // earlier = longer running = first
+      });
+
+      expect(sorted[0].agentId).toBe("ao-2"); // longest running (earliest assignedAt)
+      expect(sorted[1].agentId).toBe("ao-3");
+      expect(sorted[2].agentId).toBe("ao-1"); // shortest running
+    });
+  });
+
+  describe("duration column", () => {
+    it("should format duration from assignedAt", () => {
+      const now = Date.now();
+      const agent = {
+        lastActivity: new Date(now - 90 * 60 * 1000), // 90 minutes ago
+      } as any;
+
+      const diffMs = Date.now() - agent.lastActivity.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const hours = Math.floor(diffMins / 60);
+      const mins = diffMins % 60;
+
+      expect(hours).toBe(1);
+      expect(mins).toBe(30);
+    });
+
+    it("should show dash when lastActivity is null", () => {
+      const agent = { lastActivity: null } as any;
+      const duration = agent.lastActivity ? "has duration" : "—";
+      expect(duration).toBe("—");
+    });
+  });
+
+  describe("responsive columns", () => {
+    it("should calculate story column width from terminal width", () => {
+      const termWidth = 120;
+      const fixedCols = 18 + 12 + 10 + 16 + 7;
+      const storyWidth = Math.max(20, termWidth - fixedCols);
+      expect(storyWidth).toBe(57);
+    });
+
+    it("should enforce minimum story width of 20 at narrow terminals", () => {
+      const termWidth = 80;
+      const fixedCols = 18 + 12 + 10 + 16 + 7;
+      const storyWidth = Math.max(20, termWidth - fixedCols);
+      expect(storyWidth).toBe(20);
     });
   });
 

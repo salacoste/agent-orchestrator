@@ -3,7 +3,64 @@
  * No side effects, no external dependencies.
  */
 
-import type { DashboardSession } from "./types.js";
+import type { ActivityState } from "@composio/ao-core";
+import type { DashboardSession } from "./types";
+
+/**
+ * Format duration from an ISO date string to now.
+ * Returns "Xh Ym" or "Xm" for shorter durations.
+ */
+export function formatDuration(isoDate: string): string {
+  const diffMs = Date.now() - new Date(isoDate).getTime();
+  if (diffMs < 0) return "0m";
+  const totalMinutes = Math.floor(diffMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${totalMinutes}m`;
+}
+
+/**
+ * Format relative time from an ISO date string.
+ * Returns "Xs ago", "Xm ago", "Xh ago", "Xd ago".
+ */
+export function formatTimeAgo(isoDate: string): string {
+  const diffMs = Date.now() - new Date(isoDate).getTime();
+  if (diffMs < 0) return "just now";
+  const seconds = Math.floor(diffMs / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
+/** Status display info: emoji, label, tailwind color class */
+export interface StatusInfo {
+  emoji: string;
+  label: string;
+  color: string;
+}
+
+/** Map activity state to display status */
+export function getStatusInfo(activity: ActivityState | null): StatusInfo {
+  switch (activity) {
+    case "blocked":
+      return { emoji: "🔴", label: "blocked", color: "text-red-500" };
+    case "idle":
+      return { emoji: "🟡", label: "idle", color: "text-yellow-500" };
+    case "exited":
+      return { emoji: "⚫", label: "exited", color: "text-gray-500" };
+    case "waiting_input":
+      return { emoji: "🟠", label: "waiting", color: "text-orange-500" };
+    case "active":
+    case "ready":
+    default:
+      return { emoji: "🟢", label: "active", color: "text-green-500" };
+  }
+}
 
 /**
  * Humanize a git branch name into a readable title.

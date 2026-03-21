@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { lkgCache } from "../lkg-cache.js";
-import type { WorkflowResponse } from "../types.js";
+import { lkgCache } from "../lkg-cache";
+import type { WorkflowResponse } from "../types";
 
 function makeResponse(overrides: Partial<WorkflowResponse> = {}): WorkflowResponse {
   return {

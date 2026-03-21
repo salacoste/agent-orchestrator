@@ -37,8 +37,8 @@ export interface DLQEntry {
   retryCount: number;
   /** ISO timestamp of when the operation failed */
   failedAt: string;
-  /** Original error details */
-  originalError: Error | { message: string; name: string };
+  /** Original error details (stack preserved when available) */
+  originalError: Error | { message: string; name: string; stack?: string };
 }
 
 /**
@@ -53,6 +53,8 @@ export interface DLQStats {
   oldestEntry: string | null;
   /** Timestamp of newest entry (null if empty) */
   newestEntry: string | null;
+  /** Whether the DLQ is at maximum capacity */
+  atCapacity: boolean;
 }
 
 /**
@@ -63,6 +65,8 @@ export interface DLQConfig {
   dlqPath: string;
   /** Alert threshold - fire alert when entries exceed this count */
   alertThreshold?: number;
+  /** Maximum number of entries before FIFO eviction (default: 10000) */
+  maxEntries?: number;
   /** Maximum DLQ file size before rotation (default: 10MB) */
   maxDlqSize?: number;
   /** Retention period for rotated DLQ files in days (default: 30) */
@@ -84,6 +88,7 @@ export type AlertCallback = (size: number) => void;
 // =============================================================================
 
 const DEFAULT_ALERT_THRESHOLD = 1000;
+const DEFAULT_MAX_ENTRIES = 10000;
 const DEFAULT_MAX_DLQ_SIZE = 10 * 1024 * 1024; // 10MB
 const DEFAULT_RETENTION_DAYS = 30;
 
@@ -96,6 +101,7 @@ export class DeadLetterQueueServiceImpl {
     this.config = {
       dlqPath: config.dlqPath,
       alertThreshold: config.alertThreshold ?? DEFAULT_ALERT_THRESHOLD,
+      maxEntries: config.maxEntries ?? DEFAULT_MAX_ENTRIES,
       maxDlqSize: config.maxDlqSize ?? DEFAULT_MAX_DLQ_SIZE,
       retentionDays: config.retentionDays ?? DEFAULT_RETENTION_DAYS,
     };
@@ -123,7 +129,12 @@ export class DeadLetterQueueServiceImpl {
   }
 
   /**
-   * Add a failed operation to the DLQ
+   * Add a failed operation to the DLQ.
+   *
+   * Note: Not concurrency-safe. Concurrent enqueue() calls during eviction may
+   * produce stale disk snapshots (in-memory state remains correct). Acceptable
+   * for single-process usage; add an async mutex if multi-process access is needed.
+   *
    * @returns The error ID for the new entry
    */
   async enqueue(
@@ -138,17 +149,32 @@ export class DeadLetterQueueServiceImpl {
       errorId,
       failedAt,
       ...entry,
-      // Ensure originalError is serializable
+      // Ensure originalError is serializable (preserve stack for diagnostics)
       originalError:
         entry.originalError instanceof Error
-          ? { message: entry.originalError.message, name: entry.originalError.name }
+          ? {
+              message: entry.originalError.message,
+              name: entry.originalError.name,
+              stack: entry.originalError.stack,
+            }
           : entry.originalError,
     };
 
+    // FIFO eviction: remove oldest entry if at capacity
+    let evicted = false;
+    if (this.entries.length >= this.config.maxEntries) {
+      this.entries.shift();
+      evicted = true;
+    }
+
     this.entries.push(dlqEntry);
 
-    // Persist to disk immediately
-    await this.appendToFile(dlqEntry);
+    // Full rewrite needed after eviction (removed line from file) or first entry
+    if (evicted || this.entries.length <= 1) {
+      await this.persistToDisk();
+    } else {
+      await this.appendToFile(dlqEntry);
+    }
 
     // Check alert threshold
     if (this.entries.length >= this.config.alertThreshold) {
@@ -272,6 +298,7 @@ export class DeadLetterQueueServiceImpl {
       byOperation,
       oldestEntry,
       newestEntry,
+      atCapacity: this.entries.length >= this.config.maxEntries,
     };
   }
 
@@ -324,7 +351,7 @@ export class DeadLetterQueueServiceImpl {
 
     try {
       // Ensure directory exists
-      const dir = join(this.config.dlqPath, "..");
+      const dir = dirname(this.config.dlqPath);
       await mkdir(dir, { recursive: true });
 
       await writeFile(this.config.dlqPath, content, "utf-8");
@@ -340,7 +367,7 @@ export class DeadLetterQueueServiceImpl {
   private async appendToFile(entry: DLQEntry): Promise<void> {
     try {
       // Ensure directory exists
-      const dir = join(this.config.dlqPath, "..");
+      const dir = dirname(this.config.dlqPath);
       await mkdir(dir, { recursive: true });
 
       // Check if rotation is needed before appending

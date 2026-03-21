@@ -93,7 +93,7 @@ beforeEach(() => {
 
   config = {
     configPath,
-    port: 3000,
+    port: 5000,
     defaults: {
       runtime: "mock",
       agent: "mock-agent",

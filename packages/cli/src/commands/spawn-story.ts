@@ -13,6 +13,7 @@ import {
   getAgentRegistry,
   computeStoryContextHash,
   getSessionsDir,
+  getEventPublisher,
   type AgentStatus,
   createConflictDetectionService,
   createConflictResolutionService,
@@ -614,6 +615,17 @@ export function registerSpawnStory(program: Command): void {
           status: "active" as AgentStatus,
           contextHash,
         });
+
+        // Publish story lifecycle events (non-fatal)
+        try {
+          const ep = getEventPublisher();
+          if (ep) {
+            await ep.publishStoryAssigned({ storyId, agentId: session.id, reason: "auto" });
+            await ep.publishStoryStarted({ storyId, agentId: session.id, contextHash });
+          }
+        } catch {
+          // Non-fatal: event publishing is an enhancement
+        }
 
         console.log();
         console.log(`  Story:     ${chalk.dim(storyId)}`);

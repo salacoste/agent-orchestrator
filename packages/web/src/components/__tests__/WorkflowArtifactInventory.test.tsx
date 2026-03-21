@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { WorkflowArtifactInventory } from "../WorkflowArtifactInventory";
-import type { ClassifiedArtifact } from "@/lib/workflow/types.js";
+import type { ClassifiedArtifact } from "@/lib/workflow/types";
 
 function makeArtifact(
   filename: string,

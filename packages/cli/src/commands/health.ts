@@ -3,11 +3,14 @@ import type { Command } from "commander";
 import {
   loadConfig,
   createHealthCheckService,
+  createDeadLetterQueue,
   type HealthCheckConfig,
   type HealthCheckResult,
   type HealthCheckService,
   type BMADTracker,
 } from "@composio/ao-core";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
 import { getTracker } from "../lib/plugins.js";
 import { resolveProject } from "../lib/resolve-project.js";
 
@@ -207,11 +210,27 @@ export function registerHealth(program: Command): void {
         const sessionsDir = getSessionsDir(config.configPath, projectId);
         const agentRegistry = getAgentRegistry(sessionsDir, config);
 
-        // Create health check service (eventBus and stateManager are optional)
+        // Load health config from YAML (Story 10.1)
+        const healthYaml = config.health;
+
+        // Try to find DLQ file for health monitoring
+        const dlqPath = join(sessionsDir, "dlq.jsonl");
+        const dlq = existsSync(dlqPath) ? createDeadLetterQueue({ dlqPath }) : undefined;
+
         const healthCheckConfig: HealthCheckConfig = {
           bmadTracker: tracker,
           agentRegistry,
-          checkIntervalMs: opts.interval ? Number.parseInt(opts.interval, 10) : undefined,
+          dlq,
+          thresholds: healthYaml?.thresholds
+            ? {
+                maxLatencyMs: healthYaml.thresholds.maxLatencyMs,
+                maxQueueDepth: healthYaml.thresholds.maxQueueDepth,
+              }
+            : undefined,
+          checkIntervalMs: opts.interval
+            ? Number.parseInt(opts.interval, 10)
+            : healthYaml?.checkIntervalMs,
+          alertOnTransition: healthYaml?.alertOnTransition,
         };
 
         const healthCheckService = createHealthCheckService(healthCheckConfig);

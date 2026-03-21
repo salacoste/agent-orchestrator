@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ARTIFACT_RULES, classifyArtifact } from "../artifact-rules.js";
+import { ARTIFACT_RULES, classifyArtifact } from "../artifact-rules";
 
 describe("ARTIFACT_RULES", () => {
   it("has 9 rules covering all 4 phases", () => {

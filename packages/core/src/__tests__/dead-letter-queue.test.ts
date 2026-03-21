@@ -622,4 +622,112 @@ describe("DeadLetterQueue", () => {
       await rmdir(tempDir);
     });
   });
+
+  describe("FIFO eviction (10K entry cap)", () => {
+    it("should evict oldest entry when at capacity", async () => {
+      const smallCap = createDeadLetterQueue({
+        dlqPath,
+        maxEntries: 3,
+      });
+
+      const mkEntry = (op: string): DLQEntryInput => ({
+        operation: op,
+        payload: {},
+        failureReason: "test",
+        retryCount: 1,
+        originalError: new Error("test"),
+      });
+
+      await smallCap.enqueue(mkEntry("op1"));
+      await smallCap.enqueue(mkEntry("op2"));
+      await smallCap.enqueue(mkEntry("op3"));
+
+      // At capacity (3), adding one more should evict the oldest (op1)
+      await smallCap.enqueue(mkEntry("op4"));
+
+      const list = await smallCap.list();
+      expect(list.length).toBe(3);
+      expect(list[0].operation).toBe("op2");
+      expect(list[1].operation).toBe("op3");
+      expect(list[2].operation).toBe("op4");
+    });
+
+    it("should preserve newest entries during eviction", async () => {
+      const smallCap = createDeadLetterQueue({
+        dlqPath,
+        maxEntries: 2,
+      });
+
+      const mkEntry = (op: string): DLQEntryInput => ({
+        operation: op,
+        payload: {},
+        failureReason: "test",
+        retryCount: 1,
+        originalError: new Error("test"),
+      });
+
+      await smallCap.enqueue(mkEntry("first"));
+      await smallCap.enqueue(mkEntry("second"));
+      await smallCap.enqueue(mkEntry("third"));
+      await smallCap.enqueue(mkEntry("fourth"));
+
+      const list = await smallCap.list();
+      expect(list.length).toBe(2);
+      expect(list[0].operation).toBe("third");
+      expect(list[1].operation).toBe("fourth");
+    });
+
+    it("should not evict when below capacity", async () => {
+      const smallCap = createDeadLetterQueue({
+        dlqPath,
+        maxEntries: 5,
+      });
+
+      const mkEntry = (op: string): DLQEntryInput => ({
+        operation: op,
+        payload: {},
+        failureReason: "test",
+        retryCount: 1,
+        originalError: new Error("test"),
+      });
+
+      await smallCap.enqueue(mkEntry("op1"));
+      await smallCap.enqueue(mkEntry("op2"));
+      await smallCap.enqueue(mkEntry("op3"));
+
+      const list = await smallCap.list();
+      expect(list.length).toBe(3);
+    });
+
+    it("should default to 10000 maxEntries", async () => {
+      const defaultCap = createDeadLetterQueue({ dlqPath });
+
+      // Verify through stats that atCapacity is false with 0 entries
+      const stats = await defaultCap.getStats();
+      expect(stats.atCapacity).toBe(false);
+    });
+
+    it("should report atCapacity in stats", async () => {
+      const smallCap = createDeadLetterQueue({
+        dlqPath,
+        maxEntries: 2,
+      });
+
+      const mkEntry = (op: string): DLQEntryInput => ({
+        operation: op,
+        payload: {},
+        failureReason: "test",
+        retryCount: 1,
+        originalError: new Error("test"),
+      });
+
+      await smallCap.enqueue(mkEntry("op1"));
+      const stats1 = await smallCap.getStats();
+      expect(stats1.atCapacity).toBe(false);
+
+      await smallCap.enqueue(mkEntry("op2"));
+      const stats2 = await smallCap.getStats();
+      expect(stats2.atCapacity).toBe(true);
+    });
+  });
 });

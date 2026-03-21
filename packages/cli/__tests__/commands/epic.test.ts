@@ -64,7 +64,7 @@ beforeEach(() => {
 
   mockConfigRef.current = {
     configPath: join(tmpDir, "agent-orchestrator.yaml"),
-    port: 3000,
+    port: 5000,
     defaults: {
       runtime: "tmux",
       agent: "claude-code",

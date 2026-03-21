@@ -35,6 +35,7 @@ const DEFAULT_MAX_CHECKS_PER_WINDOW = 60; // Max 60 checks per minute (1 per sec
 export class HealthCheckServiceImpl implements HealthCheckService {
   private config: HealthCheckConfig;
   private currentStatus: HealthCheckResult | null = null;
+  private previousOverallStatus: HealthStatus | null = null;
   private checkInterval?: ReturnType<typeof setInterval>;
   private startTime: Date;
   // Rate limiting state
@@ -157,8 +158,65 @@ export class HealthCheckServiceImpl implements HealthCheckService {
       components.push(await this.checkLifecycleManager());
     }
 
-    const result = this.aggregateHealth(components);
+    // Check Circuit Breakers
+    if (this.config.circuitBreakerStates) {
+      components.push(this.checkCircuitBreakers());
+    }
+
+    // Check Dead Letter Queue
+    if (this.config.dlq) {
+      components.push(await this.checkDLQ());
+    }
+
+    // Run custom checks from rules engine (if configured)
+    if (this.config.rulesEngine) {
+      try {
+        const customChecks = await this.config.rulesEngine.runCustomChecks();
+        components.push(...customChecks);
+      } catch {
+        // Custom check failures should not break health check
+      }
+    }
+
+    // Aggregate: use weighted scoring if rules engine available, otherwise simple hierarchy
+    let result: HealthCheckResult;
+    if (this.config.rulesEngine) {
+      try {
+        result = this.config.rulesEngine.aggregateWithWeights(components);
+      } catch {
+        result = this.aggregateHealth(components);
+      }
+    } else {
+      result = this.aggregateHealth(components);
+    }
     this.currentStatus = result;
+
+    // Publish health status transition event if status changed
+    if (
+      this.config.eventBus &&
+      this.config.alertOnTransition !== false &&
+      this.previousOverallStatus !== null &&
+      this.previousOverallStatus !== result.overall
+    ) {
+      this.config.eventBus
+        .publish({
+          eventType: "health.status_changed",
+          metadata: {
+            from: this.previousOverallStatus,
+            to: result.overall,
+            components: result.components.map((c) => ({
+              component: c.component,
+              status: c.status,
+              message: c.message,
+            })),
+          },
+        })
+        .catch(() => {
+          // Health transition notification failure should never propagate
+        });
+    }
+    this.previousOverallStatus = result.overall;
+
     return result;
   }
 
@@ -195,6 +253,16 @@ export class HealthCheckServiceImpl implements HealthCheckService {
       case "lifecycle-manager":
         if (this.config.lifecycleManager) {
           return this.checkLifecycleManager();
+        }
+        break;
+      case "circuit-breakers":
+        if (this.config.circuitBreakerStates) {
+          return this.checkCircuitBreakers();
+        }
+        break;
+      case "dlq":
+        if (this.config.dlq) {
+          return this.checkDLQ();
         }
         break;
     }
@@ -602,6 +670,105 @@ export class HealthCheckServiceImpl implements HealthCheckService {
     } catch (error) {
       return {
         component: "Lifecycle Manager",
+        status: "unhealthy",
+        message: `Health check failed: ${error instanceof Error ? error.message : String(error)}`,
+        timestamp: new Date(),
+      };
+    }
+  }
+
+  /**
+   * Check Circuit Breaker health
+   */
+  private checkCircuitBreakers(): ComponentHealth {
+    const states = this.config.circuitBreakerStates;
+    if (!states || Object.keys(states).length === 0) {
+      return {
+        component: "Circuit Breakers",
+        status: "healthy",
+        message: "No circuit breakers registered",
+        timestamp: new Date(),
+      };
+    }
+
+    const entries = Object.entries(states);
+    const openBreakers = entries.filter(([, s]) => s.state === "open");
+    const halfOpenBreakers = entries.filter(([, s]) => s.state === "half-open");
+
+    if (openBreakers.length > 0) {
+      return {
+        component: "Circuit Breakers",
+        status: "degraded",
+        message: `${openBreakers.length}/${entries.length} circuit(s) open`,
+        details: openBreakers.map(([name]) => `${name}: OPEN`),
+        timestamp: new Date(),
+      };
+    }
+
+    if (halfOpenBreakers.length > 0) {
+      return {
+        component: "Circuit Breakers",
+        status: "degraded",
+        message: `${halfOpenBreakers.length}/${entries.length} circuit(s) half-open`,
+        details: halfOpenBreakers.map(([name]) => `${name}: HALF-OPEN`),
+        timestamp: new Date(),
+      };
+    }
+
+    return {
+      component: "Circuit Breakers",
+      status: "healthy",
+      message: `All ${entries.length} circuit(s) closed`,
+      timestamp: new Date(),
+    };
+  }
+
+  /**
+   * Check Dead Letter Queue health
+   */
+  private async checkDLQ(): Promise<ComponentHealth> {
+    const dlq = this.config.dlq;
+    if (!dlq) {
+      return {
+        component: "Dead Letter Queue",
+        status: "unhealthy",
+        message: "Not configured",
+        timestamp: new Date(),
+      };
+    }
+
+    try {
+      const stats = await dlq.getStats();
+
+      if (stats.atCapacity) {
+        return {
+          component: "Dead Letter Queue",
+          status: "unhealthy",
+          message: `At capacity (${stats.totalEntries} entries)`,
+          details: Object.entries(stats.byOperation).map(([op, count]) => `${op}: ${count}`),
+          timestamp: new Date(),
+        };
+      }
+
+      if (stats.totalEntries > 0) {
+        return {
+          component: "Dead Letter Queue",
+          status: "degraded",
+          message: `${stats.totalEntries} entries pending`,
+          details: Object.entries(stats.byOperation).map(([op, count]) => `${op}: ${count}`),
+          timestamp: new Date(),
+        };
+      }
+
+      return {
+        component: "Dead Letter Queue",
+        status: "healthy",
+        message: "Empty",
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      return {
+        component: "Dead Letter Queue",
         status: "unhealthy",
         message: `Health check failed: ${error instanceof Error ? error.message : String(error)}`,
         timestamp: new Date(),

@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { WorkflowLastActivity } from "../WorkflowLastActivity";
+import type { Phase } from "@/lib/workflow/types";
 
 function makeLastActivity(
   filename: string,
-  phase: string,
+  phase: Phase,
   modifiedAt: string,
-): { filename: string; phase: string; modifiedAt: string } {
+): { filename: string; phase: Phase; modifiedAt: string } {
   return { filename, phase, modifiedAt };
 }
 
@@ -44,7 +45,7 @@ describe("WorkflowLastActivity", () => {
       ["planning", "Planning"],
       ["solutioning", "Solutioning"],
       ["implementation", "Implementation"],
-    ] as [string, string][])("renders %s phase as '%s' label", (phase, label) => {
+    ] as [Phase, string][])("renders %s phase as '%s' label", (phase, label) => {
       const activity = makeLastActivity("test.md", phase, "2026-03-14T11:00:00Z");
       render(<WorkflowLastActivity lastActivity={activity} />);
 
@@ -136,7 +137,12 @@ describe("WorkflowLastActivity", () => {
     });
 
     it("falls back to raw phase string for unknown phases", () => {
-      const activity = makeLastActivity("custom.md", "custom-phase", "2026-03-14T11:00:00Z");
+      // Force an unknown phase to test defensive fallback in phaseLabel()
+      const activity = {
+        filename: "custom.md",
+        phase: "custom-phase" as Phase,
+        modifiedAt: "2026-03-14T11:00:00Z",
+      };
       render(<WorkflowLastActivity lastActivity={activity} />);
 
       // Unknown phase appears in both sr-only and visible elements

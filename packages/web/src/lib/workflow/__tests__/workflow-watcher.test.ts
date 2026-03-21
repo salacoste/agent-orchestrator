@@ -41,7 +41,7 @@ vi.mock("node:fs", () => {
   return { ...mod, default: mod };
 });
 
-import { subscribeWorkflowChanges, _resetForTesting } from "../../workflow-watcher.js";
+import { subscribeWorkflowChanges, _resetForTesting } from "../../workflow-watcher";
 
 function fireChange(watcherIndex = 0, filename = "somefile.md"): void {
   watchInstances[watcherIndex]?.callback("change", filename);

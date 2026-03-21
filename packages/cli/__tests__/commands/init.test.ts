@@ -38,13 +38,13 @@ describe("init command", () => {
     expect(existsSync(outputPath)).toBe(true);
   });
 
-  it("auto mode uses port 3000 when it is available", async () => {
+  it("auto mode uses port 5000 when it is available", async () => {
     tmpDir = mkdtempSync(join(tmpdir(), "ao-init-test-"));
     const outputPath = join(tmpDir, "agent-orchestrator.yaml");
 
-    // Mock findFreePort so test doesn't depend on actual port 3000 being free
+    // Mock findFreePort so test doesn't depend on actual port 5000 being free
     const webDirModule = await import("../../src/lib/web-dir.js");
-    vi.spyOn(webDirModule, "findFreePort").mockResolvedValue(3000);
+    vi.spyOn(webDirModule, "findFreePort").mockResolvedValue(5000);
 
     const program = new Command();
     program.exitOverride();
@@ -55,17 +55,17 @@ describe("init command", () => {
     await program.parseAsync(["node", "test", "init", "--auto", "--output", outputPath]);
 
     const content = readFileSync(outputPath, "utf-8");
-    expect(content).toContain("port: 3000");
+    expect(content).toContain("port: 5000");
   });
 
-  it("auto mode picks next free port when 3000 is occupied", async () => {
+  it("auto mode picks next free port when 5000 is occupied", async () => {
     tmpDir = mkdtempSync(join(tmpdir(), "ao-init-test-"));
     const outputPath = join(tmpDir, "agent-orchestrator.yaml");
 
-    // Occupy port 3000
+    // Occupy port 5000
     const blocker = createServer();
     await new Promise<void>((resolve) => {
-      blocker.listen(3000, "127.0.0.1", () => resolve());
+      blocker.listen(5000, "127.0.0.1", () => resolve());
     });
 
     try {
@@ -78,14 +78,14 @@ describe("init command", () => {
       await program.parseAsync(["node", "test", "init", "--auto", "--output", outputPath]);
 
       const content = readFileSync(outputPath, "utf-8");
-      // Should NOT be 3000 since we're occupying it
-      expect(content).not.toContain("port: 3000");
-      // Should pick 3001 (or higher if 3001 is also taken)
+      // Should NOT be 5000 since we're occupying it
+      expect(content).not.toContain("port: 5000");
+      // Should pick 5001 (or higher if 5001 is also taken)
       const portMatch = content.match(/port: (\d+)/);
       expect(portMatch).toBeTruthy();
       const port = parseInt(portMatch![1], 10);
-      expect(port).toBeGreaterThan(3000);
-      expect(port).toBeLessThan(3100);
+      expect(port).toBeGreaterThan(5000);
+      expect(port).toBeLessThan(5100);
     } finally {
       await new Promise<void>((resolve) => blocker.close(() => resolve()));
     }
@@ -95,10 +95,10 @@ describe("init command", () => {
     tmpDir = mkdtempSync(join(tmpdir(), "ao-init-test-"));
     const outputPath = join(tmpDir, "agent-orchestrator.yaml");
 
-    // Occupy port 3000
+    // Occupy port 5000
     const blocker = createServer();
     await new Promise<void>((resolve) => {
-      blocker.listen(3000, "127.0.0.1", () => resolve());
+      blocker.listen(5000, "127.0.0.1", () => resolve());
     });
 
     try {
@@ -111,7 +111,7 @@ describe("init command", () => {
       await program.parseAsync(["node", "test", "init", "--auto", "--output", outputPath]);
 
       const logCalls = logSpy.mock.calls.map((args) => args.join(" "));
-      const busyMessage = logCalls.find((msg) => msg.includes("Port 3000 is busy"));
+      const busyMessage = logCalls.find((msg) => msg.includes("Port 5000 is busy"));
       expect(busyMessage).toBeDefined();
       expect(busyMessage).toContain("instead");
     } finally {
@@ -171,9 +171,9 @@ describe("init command", () => {
     const hasPortWarning = logCalls.some((msg) => msg.includes("No free port found"));
     expect(hasPortWarning).toBe(true);
 
-    // Should still write config with fallback port 3000
+    // Should still write config with fallback port 5000
     const content = readFileSync(outputPath, "utf-8");
-    expect(content).toContain("port: 3000");
+    expect(content).toContain("port: 5000");
   });
 
   it("--smart flag description includes 'coming soon'", () => {

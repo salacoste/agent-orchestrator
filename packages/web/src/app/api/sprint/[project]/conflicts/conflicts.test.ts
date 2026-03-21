@@ -5,11 +5,11 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { GET } from "./route.js";
+import { GET } from "./route";
 
 // Mock the dependencies
 vi.mock("@/lib/services", () => ({
-  getServices: async () => ({
+  getServices: vi.fn(async () => ({
     config: {
       projects: {
         "test-project": {
@@ -19,7 +19,7 @@ vi.mock("@/lib/services", () => ({
       },
       configPath: "/test/config",
     },
-  }),
+  })),
 }));
 
 vi.mock("@composio/ao-core", () => ({

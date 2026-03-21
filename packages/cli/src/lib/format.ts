@@ -241,3 +241,31 @@ export function padCol(str: string, width: number): string {
   const padding = width - visible.length;
   return str + " ".repeat(Math.max(0, padding));
 }
+
+/**
+ * Parse a time delta string into milliseconds.
+ * Supports: "30s", "5m", "2h", "1d"
+ * Returns 0 for invalid format.
+ */
+export function parseTimeDelta(str: string): number {
+  const match = str.match(/^(\d+)([smhd])$/);
+  if (!match) {
+    return 0;
+  }
+
+  const value = parseInt(match[1], 10);
+  const unit = match[2];
+
+  switch (unit) {
+    case "s":
+      return value * 1000;
+    case "m":
+      return value * 60 * 1000;
+    case "h":
+      return value * 60 * 60 * 1000;
+    case "d":
+      return value * 24 * 60 * 60 * 1000;
+    default:
+      return 0;
+  }
+}

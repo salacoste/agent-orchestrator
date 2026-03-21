@@ -56,13 +56,13 @@ describe("terminal-web integration", () => {
   });
 
   describe("URL construction", () => {
-    it("default dashboard URL uses port 3000", async () => {
+    it("default dashboard URL uses port 5000", async () => {
       const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
       const terminal = webPlugin.create();
       await terminal.openSession(makeSession({ id: "url-test" }));
 
       expect(logSpy).toHaveBeenCalledWith(
-        expect.stringContaining("http://localhost:3000/sessions/url-test/terminal"),
+        expect.stringContaining("http://localhost:5000/sessions/url-test/terminal"),
       );
     });
 

@@ -10,8 +10,8 @@
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
-import { classifyArtifact } from "./artifact-rules.js";
-import type { ClassifiedArtifact, Phase, ScannedFile } from "./types.js";
+import { classifyArtifact } from "./artifact-rules";
+import type { ClassifiedArtifact, Phase, ScannedFile } from "./types";
 
 /**
  * Scan a single directory for .md files, returning raw ScannedFile entries.
@@ -55,11 +55,16 @@ async function scanDir(
  * Scan all BMAD artifact directories and classify each file.
  *
  * @param projectRoot  Absolute path to the project root
+ * @param bmadOutputDir  Absolute path to the BMAD output directory (default: projectRoot/_bmad-output)
  * @returns Classified artifacts sorted by modification time (newest first)
  */
-export async function scanAllArtifacts(projectRoot: string): Promise<ClassifiedArtifact[]> {
-  const planningDir = path.join(projectRoot, "_bmad-output", "planning-artifacts");
-  const implementationDir = path.join(projectRoot, "_bmad-output", "implementation-artifacts");
+export async function scanAllArtifacts(
+  projectRoot: string,
+  bmadOutputDir?: string,
+): Promise<ClassifiedArtifact[]> {
+  const outputBase = bmadOutputDir ?? path.join(projectRoot, "_bmad-output");
+  const planningDir = path.join(outputBase, "planning-artifacts");
+  const implementationDir = path.join(outputBase, "implementation-artifacts");
 
   const [planningFiles, implementationFiles] = await Promise.all([
     scanDir(planningDir, projectRoot, true),

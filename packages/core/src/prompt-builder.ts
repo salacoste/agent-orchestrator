@@ -13,7 +13,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ProjectConfig } from "./types.js";
+import type { ProjectConfig, SessionLearning } from "./types.js";
 
 // =============================================================================
 // LAYER 1: BASE AGENT PROMPT
@@ -56,8 +56,14 @@ export interface PromptBuildConfig {
   /** Pre-fetched issue context from tracker.generatePrompt() */
   issueContext?: string;
 
+  /** Pre-formatted story context from sprint-status.yaml + story file */
+  storyContext?: string;
+
   /** Explicit user prompt (appended last) */
   userPrompt?: string;
+
+  /** Past session learnings to inject for AI intelligence (Story 12.1) */
+  learnings?: SessionLearning[];
 }
 
 // =============================================================================
@@ -65,7 +71,7 @@ export interface PromptBuildConfig {
 // =============================================================================
 
 function buildConfigLayer(config: PromptBuildConfig): string {
-  const { project, projectId, issueId, issueContext } = config;
+  const { project, projectId, issueId, issueContext, storyContext } = config;
   const lines: string[] = [];
 
   lines.push("## Project Context");
@@ -88,6 +94,11 @@ function buildConfigLayer(config: PromptBuildConfig): string {
   if (issueContext) {
     lines.push(`\n## Issue Details`);
     lines.push(issueContext);
+  }
+
+  if (storyContext) {
+    lines.push(`\n## Story Context`);
+    lines.push(storyContext);
   }
 
   // Include reaction rules so the agent knows what to expect
@@ -147,12 +158,13 @@ function readUserRules(project: ProjectConfig): string | null {
  */
 export function buildPrompt(config: PromptBuildConfig): string | null {
   const hasIssue = Boolean(config.issueId);
+  const hasStory = Boolean(config.storyContext);
   const userRules = readUserRules(config.project);
   const hasRules = Boolean(userRules);
   const hasUserPrompt = Boolean(config.userPrompt);
 
   // Nothing to compose — return null for backward compatibility
-  if (!hasIssue && !hasRules && !hasUserPrompt) {
+  if (!hasIssue && !hasStory && !hasRules && !hasUserPrompt) {
     return null;
   }
 
@@ -169,10 +181,50 @@ export function buildPrompt(config: PromptBuildConfig): string | null {
     sections.push(`## Project Rules\n${userRules}`);
   }
 
+  // Layer 4: Past session learnings (Story 12.1)
+  const learningsSection = buildLearningsLayer(config.learnings);
+  if (learningsSection) {
+    sections.push(learningsSection);
+  }
+
   // Explicit user prompt (appended last, highest priority)
   if (config.userPrompt) {
     sections.push(`## Additional Instructions\n${config.userPrompt}`);
   }
 
   return sections.join("\n\n");
+}
+
+/**
+ * Build learnings section from past session outcomes.
+ * Returns null if no learnings provided or array is empty.
+ * Expects pre-filtered learnings (typically failures from selectRelevantLearnings).
+ */
+export function buildLearningsLayer(learnings?: SessionLearning[]): string | null {
+  if (!learnings || learnings.length === 0) {
+    return null;
+  }
+
+  // Filter out completed outcomes — only failures/blocked are instructive
+  const instructive = learnings.filter((l) => l.outcome !== "completed");
+  if (instructive.length === 0) {
+    return null;
+  }
+
+  const lines: string[] = [];
+  lines.push("## Lessons from Past Sessions");
+  lines.push("");
+  lines.push("In previous similar work, these issues were encountered:");
+  lines.push("");
+
+  for (let i = 0; i < instructive.length; i++) {
+    const l = instructive[i];
+    const errors = l.errorCategories.length > 0 ? l.errorCategories.join(", ") : "unknown";
+    const domains = l.domainTags.length > 0 ? l.domainTags.join(", ") : "general";
+    const durationMin = Math.round(l.durationMs / 60000);
+    lines.push(`${i + 1}. **${l.storyId}** (${l.outcome}) — errors: ${errors}`);
+    lines.push(`   Domains: ${domains} | Duration: ${durationMin}m`);
+  }
+
+  return lines.join("\n");
 }

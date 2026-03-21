@@ -40,6 +40,7 @@ function parseAgentAssignment(
   const assignedAt = metadata["assignedAt"];
   const status = metadata["agentStatus"] as AgentStatus | undefined;
   const contextHash = metadata["contextHash"];
+  const priorityStr = metadata["priority"];
 
   if (!storyId || !assignedAt) {
     return null;
@@ -51,6 +52,7 @@ function parseAgentAssignment(
     assignedAt: new Date(assignedAt),
     status: status ?? "active",
     contextHash: contextHash ?? "",
+    priority: priorityStr !== undefined ? Number(priorityStr) : undefined,
   };
 }
 
@@ -83,6 +85,7 @@ export class InMemoryAgentRegistry implements AgentRegistry {
       assignedAt: assignment.assignedAt.toISOString(),
       agentStatus: assignment.status,
       contextHash: assignment.contextHash,
+      priority: assignment.priority?.toString() ?? "0",
     });
   }
 
@@ -223,9 +226,7 @@ export class InMemoryAgentRegistry implements AgentRegistry {
 
     const attempts = parseInt(raw["attempts"] ?? "0", 10);
     const lastRetryAt = raw["lastRetryAt"] ? new Date(raw["lastRetryAt"]) : new Date();
-    const previousAgents = raw["previousAgents"]
-      ? JSON.parse(raw["previousAgents"])
-      : [];
+    const previousAgents = raw["previousAgents"] ? JSON.parse(raw["previousAgents"]) : [];
 
     return {
       attempts,

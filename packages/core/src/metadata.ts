@@ -22,6 +22,7 @@
 import {
   readFileSync,
   writeFileSync,
+  copyFileSync,
   renameSync,
   existsSync,
   mkdirSync,
@@ -74,6 +75,48 @@ function atomicWriteFileSync(filePath: string, content: string): void {
   renameSync(tmpPath, filePath);
 }
 
+/**
+ * Create a backup copy of a metadata file before overwriting.
+ * Non-fatal: backup failure does not block the write.
+ */
+function createBackup(filePath: string): void {
+  if (!existsSync(filePath)) return;
+  const backupPath = `${filePath}.backup`;
+  try {
+    copyFileSync(filePath, backupPath);
+  } catch {
+    // Backup failure is non-fatal — continue with write
+  }
+}
+
+/**
+ * Detect corruption: a non-empty file that parses to zero keys is corrupted.
+ */
+function isCorrupted(content: string, parsed: Record<string, string>): boolean {
+  const trimmed = content.trim();
+  if (!trimmed) return false; // Empty file is not corruption, just missing data
+  return Object.keys(parsed).length === 0;
+}
+
+/**
+ * Attempt recovery from backup file.
+ * Returns the recovered content string, or null if recovery fails.
+ */
+function recoverFromBackup(filePath: string): string | null {
+  const backupPath = `${filePath}.backup`;
+  if (!existsSync(backupPath)) return null;
+  try {
+    const backupContent = readFileSync(backupPath, "utf-8");
+    const backupParsed = parseMetadataFile(backupContent);
+    if (Object.keys(backupParsed).length === 0) return null; // Backup also corrupt
+    // Restore primary from backup
+    writeFileSync(filePath, backupContent, "utf-8");
+    return backupContent;
+  } catch {
+    return null;
+  }
+}
+
 /** Validate sessionId to prevent path traversal. */
 const VALID_SESSION_ID = /^[a-zA-Z0-9_-]+$/;
 
@@ -89,18 +132,8 @@ function metadataPath(dataDir: string, sessionId: SessionId): string {
   return join(dataDir, sessionId);
 }
 
-/**
- * Read metadata for a session. Returns null if the file doesn't exist.
- */
-export type { SessionId };
-export function readMetadata(dataDir: string, sessionId: SessionId): SessionMetadata | null {
-
-  const path = metadataPath(dataDir, sessionId);
-  if (!existsSync(path)) return null;
-
-  const content = readFileSync(path, "utf-8");
-  const raw = parseMetadataFile(content);
-
+/** Build a SessionMetadata from a raw parsed record */
+function buildSessionMetadata(raw: Record<string, string>): SessionMetadata {
   return {
     worktree: raw["worktree"] ?? "",
     branch: raw["branch"] ?? "",
@@ -117,13 +150,54 @@ export function readMetadata(dataDir: string, sessionId: SessionId): SessionMeta
     role: raw["role"],
     dashboardPort: raw["dashboardPort"] ? Number(raw["dashboardPort"]) : undefined,
     terminalWsPort: raw["terminalWsPort"] ? Number(raw["terminalWsPort"]) : undefined,
-    directTerminalWsPort: raw["directTerminalWsPort"] ? Number(raw["directTerminalWsPort"]) : undefined,
+    directTerminalWsPort: raw["directTerminalWsPort"]
+      ? Number(raw["directTerminalWsPort"])
+      : undefined,
     // Agent failure/crash details for resume functionality
     exitCode: raw["exitCode"] ? Number(raw["exitCode"]) : undefined,
     signal: raw["signal"],
     failureReason: raw["failureReason"],
     previousLogsPath: raw["previousLogsPath"],
   };
+}
+
+/**
+ * Read metadata for a session. Returns null if the file doesn't exist.
+ * Detects corruption and attempts recovery from backup.
+ */
+export type { SessionId };
+export function readMetadata(
+  dataDir: string,
+  sessionId: SessionId,
+  onCorruptionDetected?: (filePath: string, recovered: boolean) => void,
+): SessionMetadata | null {
+  const path = metadataPath(dataDir, sessionId);
+  if (!existsSync(path)) return null;
+
+  const content = readFileSync(path, "utf-8");
+  const raw = parseMetadataFile(content);
+
+  // Corruption detection: non-empty file with zero parsed keys
+  if (isCorrupted(content, raw)) {
+    // eslint-disable-next-line no-console -- Corruption is a critical event worth logging
+    console.warn(`Metadata file corrupted: ${path}`);
+
+    const recovered = recoverFromBackup(path);
+    if (recovered) {
+      // eslint-disable-next-line no-console -- Recovery success should be visible
+      console.log(`Metadata restored from backup: ${path}`);
+      onCorruptionDetected?.(path, true);
+      return buildSessionMetadata(parseMetadataFile(recovered));
+    }
+
+    // Both primary and backup corrupt — return null (existing behavior)
+    // eslint-disable-next-line no-console -- Both-corrupt fallback should be visible
+    console.warn(`Metadata backup also corrupt or missing: ${path}`);
+    onCorruptionDetected?.(path, false);
+    return null;
+  }
+
+  return buildSessionMetadata(raw);
 }
 
 /**
@@ -140,6 +214,7 @@ export function readMetadataRaw(
 
 /**
  * Write full metadata for a session (overwrites existing file).
+ * Creates a backup of the existing file before writing.
  */
 export function writeMetadata(
   dataDir: string,
@@ -148,6 +223,9 @@ export function writeMetadata(
 ): void {
   const path = metadataPath(dataDir, sessionId);
   mkdirSync(dirname(path), { recursive: true });
+
+  // Backup current file before overwriting
+  createBackup(path);
 
   const data: Record<string, string> = {
     worktree: metadata.worktree,
@@ -165,15 +243,13 @@ export function writeMetadata(
   if (metadata.runtimeHandle) data["runtimeHandle"] = metadata.runtimeHandle;
   if (metadata.restoredAt) data["restoredAt"] = metadata.restoredAt;
   if (metadata.role) data["role"] = metadata.role;
-  if (metadata.dashboardPort !== undefined)
-    data["dashboardPort"] = String(metadata.dashboardPort);
+  if (metadata.dashboardPort !== undefined) data["dashboardPort"] = String(metadata.dashboardPort);
   if (metadata.terminalWsPort !== undefined)
     data["terminalWsPort"] = String(metadata.terminalWsPort);
   if (metadata.directTerminalWsPort !== undefined)
     data["directTerminalWsPort"] = String(metadata.directTerminalWsPort);
   // Agent failure/crash details for resume functionality
-  if (metadata.exitCode !== undefined)
-    data["exitCode"] = String(metadata.exitCode);
+  if (metadata.exitCode !== undefined) data["exitCode"] = String(metadata.exitCode);
   if (metadata.signal) data["signal"] = metadata.signal;
   if (metadata.failureReason) data["failureReason"] = metadata.failureReason;
   if (metadata.previousLogsPath) data["previousLogsPath"] = metadata.previousLogsPath;
@@ -184,6 +260,7 @@ export function writeMetadata(
 /**
  * Update specific fields in a session's metadata.
  * Reads existing file, merges updates, writes back.
+ * Creates a backup before writing.
  */
 export function updateMetadata(
   dataDir: string,
@@ -209,6 +286,10 @@ export function updateMetadata(
   }
 
   mkdirSync(dirname(path), { recursive: true });
+
+  // Backup current file before overwriting
+  createBackup(path);
+
   atomicWriteFileSync(path, serializeMetadata(existing));
 }
 

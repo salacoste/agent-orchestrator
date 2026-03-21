@@ -1,0 +1,24 @@
+# Fixture for ao plan YAML fallback tests
+# Snapshot: 2026-03-15
+
+generated: 2026-03-15
+project: test-project
+
+development_status:
+  # Epic 1: Core Agent Orchestration
+  epic-1: in-progress
+  1-1-sprint-plan-cli-data-model-foundation: in-progress
+  1-2-story-aware-agent-spawning: backlog
+  1-3-agent-story-status-tracking: ready-for-dev
+  epic-1-retrospective: optional
+
+  # Epic 2: Real-Time Sprint State Sync
+  epic-2: backlog
+  2-1-bmad-tracker-sync-bridge: backlog
+  2-2-story-lifecycle-events: backlog
+  2-3-dependency-resolution: blocked
+
+  # Epic 6: BMAD Workflow Dashboard
+  epic-6: backlog
+  6-1-artifact-scanner-phase-engine: done
+  6-2-workflow-api-route: review

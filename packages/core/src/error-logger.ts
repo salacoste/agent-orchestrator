@@ -7,11 +7,13 @@
  * - Full execution context, state snapshot
  * - Secret redaction (API keys, passwords, tokens)
  * - Error rate detection and summary
+ * - Error severity classification and structured error codes
+ * - JSONL append-only logging with rotation
  * - Integration with audit trail (JSONL)
  */
 
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { appendFileSync, mkdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { randomUUID } from "node:crypto";
 
 /** Default high error rate threshold (errors per window) */
@@ -28,6 +30,45 @@ const MAX_THRESHOLD = 100;
 
 /** Default time format */
 const DEFAULT_TIME_FORMAT = "%Y-%m-%dT%H:%M:%S.%3SZ";
+
+/** Default max JSONL file size before rotation (10MB) */
+const DEFAULT_MAX_LOG_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+
+/** Error severity levels */
+export type ErrorSeverity = "fatal" | "critical" | "warning" | "info";
+
+/**
+ * Structured error codes for categorization and lookup.
+ * Format: ERR-{COMPONENT}-{NUMBER}
+ */
+export const ERROR_CODES = {
+  // Event Bus
+  "ERR-EVENTBUS-001": "Event bus connection failed",
+  "ERR-EVENTBUS-002": "Event publish timeout",
+  "ERR-EVENTBUS-003": "Event bus backlog exceeded",
+  // Sync
+  "ERR-SYNC-001": "BMAD tracker sync failed",
+  "ERR-SYNC-002": "State conflict during sync",
+  "ERR-SYNC-003": "Sync latency exceeded threshold",
+  // Notification
+  "ERR-NOTIFY-001": "Notification delivery failed",
+  "ERR-NOTIFY-002": "All notification plugins unavailable",
+  // Metadata
+  "ERR-META-001": "Metadata file corrupted",
+  "ERR-META-002": "Metadata backup recovery failed",
+  "ERR-META-003": "Metadata write failed",
+  // Agent
+  "ERR-AGENT-001": "Agent blocked (inactivity timeout)",
+  "ERR-AGENT-002": "Agent process crashed",
+  "ERR-AGENT-003": "Agent spawn failed",
+  // Conflict
+  "ERR-CONFLICT-001": "Version conflict detected",
+  "ERR-CONFLICT-002": "Conflict resolution failed",
+  // General
+  "ERR-UNKNOWN-000": "Unclassified error",
+} as const;
+
+export type ErrorCode = keyof typeof ERROR_CODES;
 
 export interface ErrorLogEntry {
   /** Unique error identifier (prefixed UUID) */
@@ -71,6 +112,12 @@ export interface ErrorLogEntry {
 
   /** Number of retry attempts made */
   retryCount?: number;
+
+  /** Error severity classification */
+  severity?: ErrorSeverity;
+
+  /** Structured error code (ERR-{COMPONENT}-{NUMBER}) */
+  errorCode?: string;
 }
 
 export interface ErrorRateSummary {
@@ -92,12 +139,18 @@ export interface ErrorLoggerConfig {
 
   /** Time format for timestamps (default: ISO 8601) */
   timeFormat?: string;
+
+  /** Maximum JSONL file size in bytes before rotation (default: 10MB) */
+  maxLogFileSizeBytes?: number;
 }
 
 export interface ErrorLoggerDeps {
   /** Directory to write error log files */
   logDir: string;
   config?: Partial<ErrorLoggerConfig>;
+
+  /** Path to JSONL append-only error log file (opt-in) */
+  jsonlPath?: string;
 
   /** Retry handlers by operation type */
   retryHandlers?: Map<string, RetryHandler>;
@@ -159,6 +212,12 @@ export interface ErrorLogOptions {
 
   /** Operation payload for retry */
   operationPayload?: Record<string, unknown>;
+
+  /** Manual severity override (skips auto-classification) */
+  severity?: ErrorSeverity;
+
+  /** Manual error code override (skips auto-assignment) */
+  errorCode?: string;
 }
 
 export interface ErrorFilter {
@@ -211,6 +270,64 @@ const SECRET_PATTERNS = [
   { name: "urlToken", pattern: /token=[a-zA-Z0-9_-]+/gi },
 ];
 
+// =============================================================================
+// Custom Classification Rules Registry
+// =============================================================================
+
+/**
+ * Custom error classification rule
+ */
+export interface ErrorClassificationRule {
+  /** Unique rule name */
+  name: string;
+  /** Pattern to match against error message */
+  messagePattern?: RegExp;
+  /** Component(s) this rule applies to */
+  components?: string[];
+  /** Resulting severity if matched */
+  severity?: ErrorSeverity;
+  /** Resulting error code if matched */
+  errorCode?: string;
+  /** Priority for rule ordering (higher = checked first, default: 0) */
+  priority?: number;
+}
+
+/** Module-level registry of custom classification rules */
+const customClassificationRules: ErrorClassificationRule[] = [];
+
+/**
+ * Register a custom error classification rule.
+ * Custom rules are checked before hardcoded patterns.
+ */
+export function registerClassificationRule(rule: ErrorClassificationRule): void {
+  customClassificationRules.push(rule);
+  customClassificationRules.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+}
+
+/**
+ * Clear all custom classification rules (for testing).
+ */
+export function clearClassificationRules(): void {
+  customClassificationRules.length = 0;
+}
+
+/**
+ * Check if a custom rule matches an error.
+ */
+function matchesCustomRule(
+  rule: ErrorClassificationRule,
+  message: string,
+  component?: string,
+): boolean {
+  // A rule must have at least one matching criterion
+  if (!rule.messagePattern && !rule.components) return false;
+  if (rule.messagePattern && !rule.messagePattern.test(message)) return false;
+  if (rule.components && component && !rule.components.some((c) => c.toLowerCase() === component))
+    return false;
+  if (rule.components && !component) return false;
+  return true;
+}
+
 /**
  * Create error logger with configuration validation
  */
@@ -230,6 +347,8 @@ export function createErrorLogger(deps: ErrorLoggerDeps): ErrorLogger {
  */
 class ErrorLoggerImpl implements ErrorLogger {
   private logDir: string;
+  private jsonlPath: string | undefined;
+  private maxLogFileSizeBytes: number;
   private highErrorRateThreshold: number;
   private highErrorRateWindow: number;
   private timeFormat: string;
@@ -245,6 +364,8 @@ class ErrorLoggerImpl implements ErrorLogger {
 
   constructor(deps: ErrorLoggerDeps) {
     this.logDir = deps.logDir;
+    this.jsonlPath = deps.jsonlPath;
+    this.maxLogFileSizeBytes = deps.config?.maxLogFileSizeBytes ?? DEFAULT_MAX_LOG_FILE_SIZE_BYTES;
     this.highErrorRateThreshold =
       deps.config?.highErrorRateThreshold ?? DEFAULT_HIGH_ERROR_RATE_THRESHOLD;
     this.highErrorRateWindow = deps.config?.highErrorRateWindow ?? DEFAULT_HIGH_ERROR_RATE_WINDOW;
@@ -256,6 +377,15 @@ class ErrorLoggerImpl implements ErrorLogger {
       mkdirSync(this.logDir, { recursive: true });
     } catch {
       // Directory already exists or creation failed
+    }
+
+    // Ensure JSONL parent directory exists (may differ from logDir)
+    if (this.jsonlPath) {
+      try {
+        mkdirSync(dirname(this.jsonlPath), { recursive: true });
+      } catch {
+        // Directory already exists or creation failed
+      }
     }
   }
 
@@ -276,6 +406,9 @@ class ErrorLoggerImpl implements ErrorLogger {
       ? this.redactSecrets(options.operationPayload)
       : undefined;
 
+    // Classify the error (severity + error code)
+    const classification = this.classifyError(error, options);
+
     // Create error log entry
     const entry: ErrorLogEntry = {
       errorId,
@@ -292,12 +425,14 @@ class ErrorLoggerImpl implements ErrorLogger {
       operationType: options.operationType,
       operationPayload: redactedOperationPayload,
       retryCount: 0,
+      severity: classification.severity,
+      errorCode: classification.errorCode,
     };
 
     // Store error in memory
     this.errors.push(entry);
 
-    // Write error to file
+    // Write error to per-file JSON
     const filePath = join(this.logDir, `${errorId}.json`);
     try {
       writeFileSync(filePath, JSON.stringify(entry, null, 2), "utf-8");
@@ -305,6 +440,9 @@ class ErrorLoggerImpl implements ErrorLogger {
       // eslint-disable-next-line no-console -- This IS the error logger; console.error is the last-resort output when file write fails
       console.error(`Failed to write error log to ${filePath}:`, writeError);
     }
+
+    // Append to JSONL file (if configured)
+    this.appendToJsonl(entry);
 
     // Track error for rate detection
     this.trackError();
@@ -449,6 +587,173 @@ class ErrorLoggerImpl implements ErrorLogger {
     this.errorTimestamps = [];
     this.lastSummaryTime = null;
     return Promise.resolve();
+  }
+
+  /**
+   * Classify an error by severity and error code.
+   * Manual overrides in options take precedence over auto-classification.
+   */
+  private classifyError(
+    error: Error,
+    options: ErrorLogOptions,
+  ): { severity: ErrorSeverity; errorCode: string } {
+    const severity = options.severity ?? this.classifySeverity(error, options);
+    const errorCode = options.errorCode ?? this.assignErrorCode(error, options);
+    return { severity, errorCode };
+  }
+
+  /**
+   * Auto-classify severity from error patterns and component context.
+   */
+  private classifySeverity(error: Error, options: ErrorLogOptions): ErrorSeverity {
+    const message = error.message;
+    const errorType = options.type || error.constructor.name;
+    const component = options.component?.toLowerCase();
+
+    // Check custom rules first (higher priority)
+    for (const rule of customClassificationRules) {
+      if (rule.severity && matchesCustomRule(rule, message, component)) {
+        return rule.severity;
+      }
+    }
+
+    // Fatal: resource exhaustion
+    if (/ENOSPC|ENOMEM|out of memory/i.test(message)) {
+      return "fatal";
+    }
+
+    // Critical: network/connectivity failures
+    if (/ECONNREFUSED|ECONNRESET|ETIMEDOUT|service unavailable/i.test(message)) {
+      return "critical";
+    }
+
+    // Component-based bump to critical
+    if (component === "event-bus" || component === "lifecycle") {
+      return "critical";
+    }
+
+    // Warning: parse/conflict errors
+    if (
+      errorType === "ConflictError" ||
+      errorType === "SyntaxError" ||
+      error instanceof SyntaxError ||
+      /parse error|invalid YAML/i.test(message)
+    ) {
+      return "warning";
+    }
+
+    // Safe default
+    return "warning";
+  }
+
+  /**
+   * Auto-assign structured error code from error patterns.
+   */
+  private assignErrorCode(error: Error, options: ErrorLogOptions): string {
+    const message = error.message;
+    const errorType = options.type || error.constructor.name;
+    const component = options.component?.toLowerCase();
+
+    // Check custom rules first (higher priority)
+    for (const rule of customClassificationRules) {
+      if (rule.errorCode && matchesCustomRule(rule, message, component)) {
+        return rule.errorCode;
+      }
+    }
+
+    // Event bus errors
+    if (component === "event-bus") {
+      if (/ECONNREFUSED|ECONNRESET|connection failed/i.test(message)) {
+        return "ERR-EVENTBUS-001";
+      }
+      if (/timeout|ETIMEDOUT/i.test(message)) {
+        return "ERR-EVENTBUS-002";
+      }
+      if (/backlog|overflow/i.test(message)) {
+        return "ERR-EVENTBUS-003";
+      }
+    }
+
+    // Metadata errors
+    if (component === "metadata" || /metadata/i.test(message)) {
+      if (/corrupt/i.test(message)) {
+        return "ERR-META-001";
+      }
+      if (/backup.*recov|recov.*backup/i.test(message)) {
+        return "ERR-META-002";
+      }
+      if (/write failed|ENOSPC/i.test(message)) {
+        return "ERR-META-003";
+      }
+    }
+
+    // Conflict errors
+    if (errorType === "ConflictError" || /conflict/i.test(message)) {
+      if (/resolution failed/i.test(message)) {
+        return "ERR-CONFLICT-002";
+      }
+      return "ERR-CONFLICT-001";
+    }
+
+    // Sync errors
+    if (component === "sync") {
+      if (/ECONNREFUSED|ECONNRESET|failed/i.test(message)) {
+        return "ERR-SYNC-001";
+      }
+      if (/latency|threshold/i.test(message)) {
+        return "ERR-SYNC-003";
+      }
+      return "ERR-SYNC-001";
+    }
+
+    // Notification errors
+    if (component === "notification") {
+      if (/unavailable|all.*plugin/i.test(message)) {
+        return "ERR-NOTIFY-002";
+      }
+      return "ERR-NOTIFY-001";
+    }
+
+    // Agent errors
+    if (component === "agent" || component === "agent-manager" || component === "agent-spawner") {
+      if (/blocked|inactiv|timeout/i.test(message)) {
+        return "ERR-AGENT-001";
+      }
+      if (/crash/i.test(message)) {
+        return "ERR-AGENT-002";
+      }
+      if (/spawn|start/i.test(message)) {
+        return "ERR-AGENT-003";
+      }
+    }
+
+    return "ERR-UNKNOWN-000";
+  }
+
+  /**
+   * Append error entry to JSONL file with rotation.
+   */
+  private appendToJsonl(entry: ErrorLogEntry): void {
+    if (!this.jsonlPath) return;
+
+    // Check rotation before append
+    try {
+      const stats = statSync(this.jsonlPath);
+      if (stats.size > this.maxLogFileSizeBytes) {
+        const rotatedPath = this.jsonlPath.replace(".jsonl", `-${Date.now()}.jsonl`);
+        renameSync(this.jsonlPath, rotatedPath);
+      }
+    } catch {
+      // File doesn't exist yet — will be created on append
+    }
+
+    const line = JSON.stringify(entry) + "\n";
+    try {
+      appendFileSync(this.jsonlPath, line, "utf-8");
+    } catch (err) {
+      // eslint-disable-next-line no-console -- This IS the error logger; console.error is the last-resort output when JSONL write fails
+      console.error(`Failed to append to JSONL ${this.jsonlPath}:`, err);
+    }
   }
 
   /**

@@ -382,7 +382,7 @@ describe("ConflictResolutionService", () => {
       const config: ConflictResolutionConfig = {
         autoResolve: true,
         tieBreaker: "recent",
-        eventPublisher: mockEventPublisher as any,
+        eventPublisher: { publish: mockEventPublisher.publish },
       };
 
       const service = createConflictResolutionService(mockRegistry, mockRuntime, config);

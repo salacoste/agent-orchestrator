@@ -14,11 +14,14 @@ import {
   updateSprintStatus,
   logAuditEvent,
   readMetadata,
+  formatFailureReason,
+  getEventPublisher,
 } from "@composio/ao-core";
 
 import { getSessionManager } from "../lib/create-session-manager.js";
 import { header, formatTimeAgo } from "../lib/format.js";
 import { formatResumeContext, validateUserMessage } from "../lib/resume-context.js";
+import { wireDetection } from "../lib/wire-detection.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -328,13 +331,17 @@ async function resumeStory(
 
   // Check if story is blocked
   if (storyStatus !== "blocked") {
-    spinner.info("Story is not blocked");
-    console.log(chalk.blue(`Story ${storyId} is not blocked (current status: ${storyStatus})`));
+    spinner.fail("Story is not blocked");
+    console.error(
+      chalk.red(
+        `Cannot resume: story ${storyId} is not blocked (current status: ${storyStatus}). Only blocked stories can be resumed.`,
+      ),
+    );
     console.log();
     console.log(chalk.dim("The story is already being worked on. Use:"));
     console.log(chalk.dim(`  ao status ${storyId}  -- to view current assignment`));
     console.log(chalk.dim(`  ao assign ${storyId} <agent>  -- to reassign`));
-    return;
+    process.exit(1);
   }
 
   spinner.succeed(`Found story ${storyId} (status: ${storyStatus})`);
@@ -376,12 +383,24 @@ async function resumeStory(
   let previousLogsPath: string | undefined;
   let previousExitCode: number | undefined;
   let previousSignal: string | undefined;
+  let previousFailureReason: string | undefined;
 
   if (previousMetadata) {
     previousLogsPath = previousMetadata.previousLogsPath;
     previousExitCode = previousMetadata.exitCode;
     previousSignal = previousMetadata.signal;
+    previousFailureReason = previousMetadata.failureReason;
   }
+
+  // Format human-readable blocking reason
+  const validReasons = ["failed", "crashed", "timed_out", "disconnected"] as const;
+  type FailureReason = (typeof validReasons)[number];
+  const isValidReason = (r: string): r is FailureReason =>
+    validReasons.includes(r as FailureReason);
+  const blockingReason =
+    previousFailureReason && isValidReason(previousFailureReason)
+      ? formatFailureReason(previousFailureReason)
+      : (previousFailureReason ?? "unknown");
 
   metadataSpinner.succeed("Loaded previous agent details");
 
@@ -463,6 +482,7 @@ async function resumeStory(
   console.log();
   console.log(`  ${chalk.dim("Story:")}   ${chalk.bold(storyContext.title)}`);
   console.log(`  ${chalk.dim("Retry:")}   ${chalk.yellow(`#${newRetryCount}`)}`);
+  console.log(`  ${chalk.dim("Reason:")}  ${chalk.red(blockingReason)}`);
   console.log(`  ${chalk.dim("Previous:")} ${chalk.dim(previousAssignment.agentId)}`);
   console.log(`  ${chalk.dim("New agent:")} ${chalk.green(agentName)}`);
   if (userMessage) {
@@ -485,7 +505,7 @@ async function resumeStory(
 
     spawnSpinner.succeed(`Session ${chalk.green(session.id)} created`);
 
-    // Register new agent assignment
+    // Register new agent assignment with priority boost (+10 for resumed stories)
     const contextHash = previousAssignment.contextHash; // Reuse same context hash
     registry.register({
       agentId: session.id,
@@ -493,6 +513,7 @@ async function resumeStory(
       assignedAt: new Date(),
       status: "active",
       contextHash,
+      priority: 10,
     });
 
     // Increment retry count
@@ -521,7 +542,41 @@ async function resumeStory(
       previousExitReason: previousAssignment.status,
     });
 
+    // Wire completion + blocked detection for resumed session (same as spawn --story)
+    try {
+      await wireDetection(config, projectId, session.id, sessionsDir, project.path, registry);
+    } catch (err) {
+      console.log(
+        chalk.dim(
+          `  (monitoring not available: ${err instanceof Error ? err.message : String(err)})`,
+        ),
+      );
+    }
+
+    // Publish story lifecycle events (non-fatal)
+    try {
+      const ep = getEventPublisher();
+      if (ep) {
+        await ep.publishAgentResumed({
+          storyId,
+          previousAgentId: previousAssignment.agentId,
+          newAgentId: session.id,
+          retryCount: newRetryCount,
+          userMessage,
+        });
+        await ep.publishStoryAssigned({
+          storyId,
+          agentId: session.id,
+          previousAgentId: previousAssignment.agentId,
+          reason: "auto",
+        });
+      }
+    } catch {
+      // Non-fatal: event publishing is an enhancement
+    }
+
     console.log();
+    console.log(chalk.green(`  ✓ Cleared: ${blockingReason} → now in-progress`));
     console.log(`  Story:     ${chalk.dim(storyId)}`);
     console.log(`  Session:   ${chalk.green(session.id)}`);
     console.log(`  Worktree:  ${chalk.dim(session.workspacePath ?? "-")}`);

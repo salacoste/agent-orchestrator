@@ -48,6 +48,9 @@ export type DLQReplayHandlerFn = (
   context: ReplayContext,
 ) => Promise<DLQReplayResult>;
 
+/** Error prefix returned when no handler is registered for an operation type */
+export const NO_HANDLER_ERROR_PREFIX = "No replay handler registered for operation type:";
+
 /**
  * Registry of replay handlers by operation type
  */
@@ -65,6 +68,14 @@ export function registerReplayHandler(operationType: string, handler: DLQReplayH
  */
 export function getReplayHandler(operationType: string): DLQReplayHandlerFn | undefined {
   return handlers.get(operationType);
+}
+
+/**
+ * Clear all registered replay handlers (for testing only).
+ * Re-registers built-in handlers after clearing.
+ */
+export function clearReplayHandlers(): void {
+  handlers.clear();
 }
 
 /**
@@ -388,7 +399,7 @@ export async function replayEntry(
   if (!handler) {
     return {
       success: false,
-      error: `No replay handler registered for operation type: ${entry.operation}`,
+      error: `${NO_HANDLER_ERROR_PREFIX} ${entry.operation}`,
       entryId: entry.errorId,
       operationType: entry.operation,
     };

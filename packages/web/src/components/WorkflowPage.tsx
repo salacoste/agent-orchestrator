@@ -5,8 +5,8 @@ import { useSearchParams, useRouter } from "next/navigation";
 
 import { EmptyWorkflowState } from "@/components/EmptyWorkflowState";
 import { WorkflowDashboard } from "@/components/WorkflowDashboard";
-import { useWorkflowSSE } from "@/hooks/useWorkflowSSE.js";
-import type { WorkflowResponse } from "@/lib/workflow/types.js";
+import { useWorkflowSSE } from "@/hooks/useWorkflowSSE";
+import type { WorkflowResponse } from "@/lib/workflow/types";
 
 interface WorkflowPageProps {
   projects: string[];

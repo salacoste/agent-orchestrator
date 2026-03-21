@@ -5,8 +5,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n next,ws,dws -c blue,green,yellow \"next dev -p ${PORT:-3000}\" \"tsx watch server/terminal-websocket.ts\" \"tsx watch server/direct-terminal-ws.ts\"",
-    "dev:next": "next dev -p ${PORT:-3000}",
+    "predev": "bash scripts/kill-stale-dev.sh",
+    "dev": "concurrently --kill-others --kill-signal SIGTERM -n next,ws,dws -c blue,green,yellow \"next dev -p ${PORT:-5000}\" \"tsx watch server/terminal-websocket.ts\" \"tsx watch server/direct-terminal-ws.ts\"",
+    "dev:next": "next dev -p ${PORT:-5000}",
     "dev:terminal": "tsx watch server/terminal-websocket.ts",
     "dev:direct-terminal": "tsx watch server/direct-terminal-ws.ts",
     "build": "next build",

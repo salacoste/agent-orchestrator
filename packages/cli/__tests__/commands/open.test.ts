@@ -34,7 +34,7 @@ beforeEach(() => {
   mockConfigRef.current = {
     dataDir: "/tmp/ao",
     worktreeDir: "/tmp/wt",
-    port: 3000,
+    port: 5000,
     defaults: {
       runtime: "tmux",
       agent: "claude-code",

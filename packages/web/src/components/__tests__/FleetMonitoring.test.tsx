@@ -1,21 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import FleetPage from "@/app/fleet/page";
 
 // Mock fetch
 global.fetch = vi.fn();
 
-// Mock SSE hooks - track callbacks for testing
-let mockAgentStatusCallback: (() => void) | null = null;
-let mockStoryBlockedCallback: (() => void) | null = null;
+// Mock next/navigation
+const mockPush = vi.fn();
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
 
+// Mock SSE hooks
 vi.mock("@/hooks/useSSEConnection.js", () => ({
-  useSSEConnection: vi.fn((callbacks) => {
-    // Store callbacks for testing
-    mockAgentStatusCallback = callbacks.onAgentStatusChanged;
-    mockStoryBlockedCallback = callbacks.onStoryBlocked;
-    return { connected: true, reconnecting: false };
-  }),
+  useSSEConnection: vi.fn(() => ({ connected: true, reconnecting: false })),
 }));
 
 vi.mock("@/hooks/useFlashAnimation.js", () => ({
@@ -27,418 +25,210 @@ describe("FleetMonitoring", () => {
     {
       id: "ao-test-001",
       projectId: "test-project",
-      status: "running",
-      activity: "working",
-      branch: "main",
-      issueId: "https://github.com/test/repo/issues/1",
-      issueLabel: "STORY-001",
+      status: "working",
+      activity: "active",
+      branch: "feat/test",
+      issueId: null,
+      issueUrl: null,
+      issueLabel: "#42",
       issueTitle: "Test Story",
-      summary: "Implementing feature",
-      createdAt: "2026-03-08T00:00:00Z",
-      lastActivityAt: "2026-03-08T00:05:00Z",
-      metadata: { storyId: "1-1-test-story" },
+      summary: "Working on test",
+      summaryIsFallback: false,
+      createdAt: new Date(Date.now() - 3600000).toISOString(),
+      lastActivityAt: new Date(Date.now() - 60000).toISOString(),
+      pr: null,
+      metadata: {},
     },
     {
       id: "ao-test-002",
       projectId: "test-project",
-      status: "idle",
+      status: "working",
       activity: "idle",
-      branch: "main",
-      issueId: "https://github.com/test/repo/issues/2",
-      issueLabel: "STORY-002",
-      issueTitle: "Another Story",
-      summary: "Waiting for work",
-      createdAt: "2026-03-08T00:00:00Z",
-      lastActivityAt: "2026-03-08T00:02:00Z",
-      metadata: { storyId: "1-2-another-story" },
+      branch: "feat/idle",
+      issueId: null,
+      issueUrl: null,
+      issueLabel: "#43",
+      issueTitle: "Idle Story",
+      summary: null,
+      summaryIsFallback: false,
+      createdAt: new Date(Date.now() - 7200000).toISOString(),
+      lastActivityAt: new Date(Date.now() - 900000).toISOString(),
+      pr: null,
+      metadata: {},
+    },
+    {
+      id: "ao-test-003",
+      projectId: "test-project",
+      status: "working",
+      activity: "blocked",
+      branch: "feat/blocked",
+      issueId: null,
+      issueUrl: null,
+      issueLabel: "#44",
+      issueTitle: "Blocked Story",
+      summary: "Agent stuck",
+      summaryIsFallback: false,
+      createdAt: new Date(Date.now() - 1800000).toISOString(),
+      lastActivityAt: new Date(Date.now() - 300000).toISOString(),
+      pr: null,
+      metadata: {},
     },
   ];
 
   beforeEach(() => {
     vi.clearAllMocks();
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        json: async () => ({
-          sessions: mockAgents,
-          stats: { total: 2, active: 1, idle: 1, blocked: 0 },
-        }),
-      }),
-    ) as unknown as typeof fetch;
+    mockPush.mockClear();
   });
 
   it("renders loading state initially", () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockReturnValue(new Promise(() => {}));
     render(<FleetPage />);
-    expect(screen.getByText(/Loading fleet status/i)).toBeInTheDocument();
+    expect(screen.getByText("Loading fleet status...")).toBeDefined();
   });
 
-  it("renders 3-column grid layout with agents", async () => {
-    render(<FleetPage />);
-
-    await waitFor(() => {
-      expect(screen.queryByText(/Loading fleet status/i)).not.toBeInTheDocument();
-    });
-
-    // Check column headers
-    expect(screen.getByText("Active")).toBeInTheDocument();
-    expect(screen.getByText("Idle")).toBeInTheDocument();
-    expect(screen.getByText("Blocked")).toBeInTheDocument();
-  });
-
-  it("displays active agent in Active column", async () => {
-    render(<FleetPage />);
-
-    await waitFor(() => {
-      expect(screen.queryByText(/Loading fleet status/i)).not.toBeInTheDocument();
-    });
-
-    expect(screen.getByText("STORY-001")).toBeInTheDocument();
-    expect(screen.getByText("Test Story")).toBeInTheDocument();
-  });
-
-  it("displays idle agent in Idle column", async () => {
-    render(<FleetPage />);
-
-    await waitFor(() => {
-      expect(screen.queryByText(/Loading fleet status/i)).not.toBeInTheDocument();
-    });
-
-    expect(screen.getByText("STORY-002")).toBeInTheDocument();
-    expect(screen.getByText("Another Story")).toBeInTheDocument();
-  });
-
-  it("shows empty state with spawn button when no agents", async () => {
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        json: async () => ({ sessions: [], stats: { total: 0, active: 0, idle: 0, blocked: 0 } }),
+  it("renders Fleet Monitoring heading after load", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        sessions: mockAgents,
+        stats: { total: 3, active: 1, idle: 1, blocked: 1 },
       }),
-    ) as unknown as typeof fetch;
+    });
 
     render(<FleetPage />);
 
     await waitFor(() => {
-      expect(screen.getByText(/No active agents/i)).toBeInTheDocument();
+      expect(screen.getByText("Fleet Monitoring")).toBeDefined();
     });
-
-    // Check for spawn button
-    expect(screen.getByText("Spawn Agent")).toBeInTheDocument();
-    expect(screen.getByText(/Spawn agents with/i)).toBeInTheDocument();
   });
 
-  it("renders error state on fetch failure", async () => {
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        ok: false,
+  it("renders FleetMatrix table with agent rows", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        sessions: mockAgents,
+        stats: { total: 3, active: 1, idle: 1, blocked: 1 },
       }),
-    ) as unknown as typeof fetch;
+    });
 
     render(<FleetPage />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Failed to load fleet status/i)).toBeInTheDocument();
+      // Table headers
+      expect(screen.getByText("Agent")).toBeDefined();
+      expect(screen.getByText("Story")).toBeDefined();
+      expect(screen.getByText("Status")).toBeDefined();
+      expect(screen.getByText("Duration")).toBeDefined();
+      expect(screen.getByText("Last Activity")).toBeDefined();
     });
+
+    // Agent IDs in rows
+    expect(screen.getByText("ao-test-001")).toBeDefined();
+    expect(screen.getByText("ao-test-002")).toBeDefined();
+    expect(screen.getByText("ao-test-003")).toBeDefined();
   });
 
-  it("opens agent detail drawer when agent card is clicked", async () => {
-    render(<FleetPage />);
-
-    await waitFor(() => {
-      expect(screen.queryByText(/Loading fleet status/i)).not.toBeInTheDocument();
-    });
-
-    // Click on agent card by finding the story title
-    const agentCard = screen.getByText("Test Story");
-    fireEvent.click(agentCard);
-
-    // Drawer should be visible with proper ARIA attributes
-    await waitFor(() => {
-      expect(screen.getByText("Agent Details")).toBeInTheDocument();
-    });
-
-    // Check for accessibility attributes
-    const drawer = screen.getByRole("dialog");
-    expect(drawer).toHaveAttribute("aria-modal", "true");
-  });
-
-  it("displays activity log in drawer", async () => {
-    render(<FleetPage />);
-
-    await waitFor(() => {
-      expect(screen.queryByText(/Loading fleet status/i)).not.toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText("Test Story"));
-
-    // Check for activity log section
-    await waitFor(() => {
-      expect(screen.getByText(/Recent Activity/i)).toBeInTheDocument();
-    });
-  });
-
-  it("displays story progress section in drawer", async () => {
-    render(<FleetPage />);
-
-    await waitFor(() => {
-      expect(screen.queryByText(/Loading fleet status/i)).not.toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText("Test Story"));
-
-    // Check for story progress section
-    await waitFor(() => {
-      expect(screen.getByText(/Story Progress/i)).toBeInTheDocument();
-    });
-  });
-
-  it("opens resume modal when resume button is clicked", async () => {
-    const blockedAgent = {
-      ...mockAgents[0],
-      activity: "blocked",
-    };
-
-    global.fetch = vi.fn(() =>
-      Promise.resolve({
-        ok: true,
-        json: async () => ({
-          sessions: [blockedAgent],
-          stats: { total: 1, active: 0, idle: 0, blocked: 1 },
-        }),
+  it("shows status badges for each agent", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        sessions: mockAgents,
+        stats: { total: 3, active: 1, idle: 1, blocked: 1 },
       }),
-    ) as unknown as typeof fetch;
+    });
 
     render(<FleetPage />);
 
     await waitFor(() => {
-      expect(screen.queryByText(/Loading fleet status/i)).not.toBeInTheDocument();
+      expect(screen.getByText("ao-test-001")).toBeDefined();
     });
 
-    // Click resume button
-    const resumeButton = screen.getByText("Resume");
-    fireEvent.click(resumeButton);
-
-    // Modal should be visible with proper ARIA attributes
-    await waitFor(() => {
-      expect(screen.getByText("Resume Agent")).toBeInTheDocument();
-    });
-
-    // Check for accessibility attributes
-    const modal = screen.getByRole("dialog");
-    expect(modal).toHaveAttribute("aria-modal", "true");
+    // Status labels present
+    expect(screen.getByText("active")).toBeDefined();
+    expect(screen.getByText("idle")).toBeDefined();
+    expect(screen.getByText("blocked")).toBeDefined();
   });
 
-  it("calls resume API when resume button is clicked in modal", async () => {
-    const blockedAgent = {
-      ...mockAgents[0],
-      activity: "blocked",
-    };
-
-    const mockResumeResponse = { ok: true };
-    global.fetch = vi.fn((url) => {
-      if (url === "/api/sessions?active=true") {
-        return Promise.resolve({
-          ok: true,
-          json: async () => ({
-            sessions: [blockedAgent],
-            stats: { total: 1, active: 0, idle: 0, blocked: 1 },
-          }),
-        });
-      }
-      if (url === "/api/resume") {
-        return Promise.resolve(mockResumeResponse);
-      }
-      return Promise.resolve({ ok: false });
-    }) as unknown as typeof fetch;
+  it("shows issue labels in story column", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        sessions: mockAgents,
+        stats: { total: 3, active: 1, idle: 1, blocked: 1 },
+      }),
+    });
 
     render(<FleetPage />);
 
     await waitFor(() => {
-      expect(screen.queryByText(/Loading fleet status/i)).not.toBeInTheDocument();
+      expect(screen.getByText("#42")).toBeDefined();
+      expect(screen.getByText("#43")).toBeDefined();
+      expect(screen.getByText("#44")).toBeDefined();
     });
-
-    // Open resume modal
-    fireEvent.click(screen.getByText("Resume"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Resume Agent")).toBeInTheDocument();
-    });
-
-    // Verify the modal shows the correct agent information
-    expect(screen.getAllByText(blockedAgent.id).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("STORY-001").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Implementing feature").length).toBeGreaterThan(0);
   });
 
-  it("has proper ARIA labels for status emojis", async () => {
+  it("shows empty state when no agents", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        sessions: [],
+        stats: { total: 0, active: 0, idle: 0, blocked: 0 },
+      }),
+    });
+
     render(<FleetPage />);
 
     await waitFor(() => {
-      expect(screen.queryByText(/Loading fleet status/i)).not.toBeInTheDocument();
-    });
-
-    // Check for status indicators with proper ARIA labels
-    const statusIndicators = screen.getAllByRole("status");
-    expect(statusIndicators.length).toBeGreaterThan(0);
-
-    // Each status indicator should have a descriptive aria-label
-    statusIndicators.forEach((indicator) => {
-      const ariaLabel = indicator.getAttribute("aria-label");
-      expect(ariaLabel).toMatch(
-        /Agent is (active and working|idle waiting for work|blocked and needs attention)/,
-      );
+      expect(screen.getByText("No active agents")).toBeDefined();
     });
   });
 
-  describe("SSE Integration", () => {
-    it("registers SSE callbacks on mount", async () => {
-      render(<FleetPage />);
-
-      await waitFor(() => {
-        expect(screen.queryByText(/Loading fleet status/i)).not.toBeInTheDocument();
-      });
-
-      // Verify callbacks were registered
-      expect(mockAgentStatusCallback).toBeDefined();
-      expect(mockStoryBlockedCallback).toBeDefined();
+  it("shows stats summary", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        sessions: mockAgents,
+        stats: { total: 3, active: 1, idle: 1, blocked: 1 },
+      }),
     });
 
-    it("refetches data when agent status changes via SSE", async () => {
-      const fetchMock = vi.fn(() =>
-        Promise.resolve({
-          ok: true,
-          json: async () => ({
-            sessions: mockAgents,
-            stats: { total: 2, active: 1, idle: 1, blocked: 0 },
-          }),
-        }),
-      );
-      global.fetch = fetchMock as unknown as typeof fetch;
+    render(<FleetPage />);
 
-      render(<FleetPage />);
-
-      await waitFor(() => {
-        expect(screen.queryByText(/Loading fleet status/i)).not.toBeInTheDocument();
-      });
-
-      const callCountBefore = fetchMock.mock.calls.length;
-
-      // Trigger SSE event
-      if (mockAgentStatusCallback) {
-        mockAgentStatusCallback();
-      }
-
-      await waitFor(() => {
-        expect(fetchMock.mock.calls.length).toBeGreaterThan(callCountBefore);
-      });
-    });
-
-    it("refetches data when story is blocked via SSE", async () => {
-      const fetchMock = vi.fn(() =>
-        Promise.resolve({
-          ok: true,
-          json: async () => ({
-            sessions: mockAgents,
-            stats: { total: 2, active: 1, idle: 1, blocked: 0 },
-          }),
-        }),
-      );
-      global.fetch = fetchMock as unknown as typeof fetch;
-
-      render(<FleetPage />);
-
-      await waitFor(() => {
-        expect(screen.queryByText(/Loading fleet status/i)).not.toBeInTheDocument();
-      });
-
-      const callCountBefore = fetchMock.mock.calls.length;
-
-      // Trigger SSE event
-      if (mockStoryBlockedCallback) {
-        mockStoryBlockedCallback();
-      }
-
-      await waitFor(() => {
-        expect(fetchMock.mock.calls.length).toBeGreaterThan(callCountBefore);
-      });
+    await waitFor(() => {
+      const statsText = screen.getByText(/Total: 3/);
+      expect(statsText).toBeDefined();
     });
   });
 
-  describe("Empty State", () => {
-    it("shows spawn button that opens alert when clicked", async () => {
-      global.fetch = vi.fn(() =>
-        Promise.resolve({
-          ok: true,
-          json: async () => ({ sessions: [], stats: { total: 0, active: 0, idle: 0, blocked: 0 } }),
-        }),
-      ) as unknown as typeof fetch;
+  it("shows error state on fetch failure", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: false,
+      status: 500,
+    });
 
-      // Mock window.alert
-      const alertMock = vi.fn();
-      global.alert = alertMock;
+    render(<FleetPage />);
 
-      render(<FleetPage />);
-
-      await waitFor(() => {
-        expect(screen.getByText(/No active agents/i)).toBeInTheDocument();
-      });
-
-      const spawnButton = screen.getByText("Spawn Agent");
-      fireEvent.click(spawnButton);
-
-      expect(alertMock).toHaveBeenCalledWith(
-        expect.stringContaining("To spawn a new agent, use the CLI: ao spawn"),
-      );
+    await waitFor(() => {
+      expect(screen.getByText("Failed to load fleet status")).toBeDefined();
     });
   });
 
-  describe("Accessibility", () => {
-    it("close button has aria-label in drawer", async () => {
-      render(<FleetPage />);
-
-      await waitFor(() => {
-        expect(screen.queryByText(/Loading fleet status/i)).not.toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByText("Test Story"));
-
-      await waitFor(() => {
-        expect(screen.getByText("Agent Details")).toBeInTheDocument();
-      });
-
-      const closeButton = screen.getByLabelText("Close drawer");
-      expect(closeButton).toBeInTheDocument();
+  it("has keyboard navigation hint", async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        sessions: mockAgents,
+        stats: { total: 3, active: 1, idle: 1, blocked: 1 },
+      }),
     });
 
-    it("close button has aria-label in modal", async () => {
-      const blockedAgent = {
-        ...mockAgents[0],
-        activity: "blocked",
-      };
+    render(<FleetPage />);
 
-      global.fetch = vi.fn(() =>
-        Promise.resolve({
-          ok: true,
-          json: async () => ({
-            sessions: [blockedAgent],
-            stats: { total: 1, active: 0, idle: 0, blocked: 1 },
-          }),
-        }),
-      ) as unknown as typeof fetch;
-
-      render(<FleetPage />);
-
-      await waitFor(() => {
-        expect(screen.queryByText(/Loading fleet status/i)).not.toBeInTheDocument();
-      });
-
-      fireEvent.click(screen.getByText("Resume"));
-
-      await waitFor(() => {
-        expect(screen.getByText("Resume Agent")).toBeInTheDocument();
-      });
-
-      const closeButton = screen.getByLabelText("Close modal");
-      expect(closeButton).toBeInTheDocument();
+    await waitFor(() => {
+      // Keyboard hint contains j/k/Enter keys
+      expect(screen.getByText("j")).toBeDefined();
+      expect(screen.getByText("k")).toBeDefined();
+      expect(screen.getByText("Enter")).toBeDefined();
     });
   });
 });

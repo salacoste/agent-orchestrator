@@ -59,7 +59,7 @@ beforeEach(() => {
 
   mockConfigRef.current = {
     configPath: join(tmpDir, "agent-orchestrator.yaml"),
-    port: 3000,
+    port: 5000,
     defaults: {
       runtime: "tmux",
       agent: "claude-code",
@@ -153,17 +153,18 @@ describe("plan command", () => {
     expect(parsed.capacity.remainingCapacity).toBe(4);
   });
 
-  it("handles non-bmad tracker", async () => {
+  it("falls back to YAML when non-bmad tracker configured", async () => {
     const projects = (mockConfigRef.current as Record<string, unknown>)["projects"] as Record<
       string,
       Record<string, unknown>
     >;
     projects["my-app"]["tracker"] = { plugin: "github" };
 
+    // No sprint-status.yaml exists → should error with file-not-found (YAML fallback path)
     await expect(program.parseAsync(["node", "test", "plan"])).rejects.toThrow("process.exit(1)");
 
     const errorOutput = consoleErrorSpy.mock.calls.map((c) => String(c[0])).join("\n");
-    expect(errorOutput).toMatch(/bmad tracker/);
+    expect(errorOutput).toMatch(/sprint-status\.yaml not found/);
   });
 
   it("displays blocked stories", async () => {

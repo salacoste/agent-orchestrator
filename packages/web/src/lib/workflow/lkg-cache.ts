@@ -6,7 +6,7 @@
  * Cache is a fallback — every request reads fresh data first.
  */
 
-import type { WorkflowResponse } from "./types.js";
+import type { WorkflowResponse } from "./types";
 
 /** Cache fields matching independently-failing WorkflowResponse data sources. */
 export type CacheField = "phases" | "agents" | "recommendation" | "artifacts" | "lastActivity";

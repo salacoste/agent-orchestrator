@@ -2,7 +2,7 @@
 # This is the minimal valid agent-orchestrator.yaml for testing
 
 configPath: /tmp/test/agent-orchestrator.yaml
-port: 3000
+port: 5000
 readyThresholdMs: 300000
 
 defaults:

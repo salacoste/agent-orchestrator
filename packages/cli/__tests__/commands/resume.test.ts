@@ -230,3 +230,246 @@ so that resume commands complete quickly.
     expect(endTime - startTime).toBeLessThan(100);
   });
 });
+
+describe("resume — Story 1-4 enhancements", () => {
+  it("resume.ts calls wireDetection after spawning a session", () => {
+    // Verify resume.ts imports and calls wireDetection from shared utility
+    const content = readFileSync(join(__dirname, "../../src/commands/resume.ts"), "utf-8");
+
+    // Must import wireDetection from shared lib
+    expect(content).toContain('import { wireDetection } from "../lib/wire-detection.js"');
+
+    // Must call wireDetection with the required parameters
+    expect(content).toContain(
+      "await wireDetection(config, projectId, session.id, sessionsDir, project.path, registry)",
+    );
+  });
+
+  it("resume.ts registers assignment with priority=10", () => {
+    // Verify resumed stories get priority boost
+    const content = readFileSync(join(__dirname, "../../src/commands/resume.ts"), "utf-8");
+
+    // Must set priority: 10 in registry.register call
+    expect(content).toContain("priority: 10");
+  });
+
+  it("spawn.ts registers assignment with priority=0 for fresh spawns", () => {
+    // Verify fresh spawns have default priority
+    const content = readFileSync(join(__dirname, "../../src/commands/spawn.ts"), "utf-8");
+
+    // Must set priority: 0 for fresh spawns
+    expect(content).toContain("priority: 0");
+  });
+
+  it("non-blocked story triggers process.exit(1)", () => {
+    // Verify the non-blocked path exits with code 1
+    const content = readFileSync(join(__dirname, "../../src/commands/resume.ts"), "utf-8");
+
+    // The non-blocked handler must call spinner.fail and process.exit(1)
+    // Find the section where storyStatus !== "blocked"
+    const nonBlockedSection = content.slice(
+      content.indexOf('if (storyStatus !== "blocked")'),
+      content.indexOf("spinner.succeed(`Found story"),
+    );
+
+    expect(nonBlockedSection).toContain("spinner.fail");
+    expect(nonBlockedSection).toContain("process.exit(1)");
+    expect(nonBlockedSection).toContain("Cannot resume");
+    // Must NOT just return — must exit
+    expect(nonBlockedSection).not.toMatch(/^\s*return;/m);
+  });
+
+  it("story not found triggers process.exit(1)", () => {
+    // Verify missing story exits with code 1
+    const content = readFileSync(join(__dirname, "../../src/commands/resume.ts"), "utf-8");
+
+    // The story-not-found handler
+    const notFoundSection = content.slice(
+      content.indexOf("if (!storyStatus)"),
+      content.indexOf('if (storyStatus !== "blocked")'),
+    );
+
+    expect(notFoundSection).toContain("spinner.fail");
+    expect(notFoundSection).toContain("process.exit(1)");
+    expect(notFoundSection).toContain("not found in sprint-status.yaml");
+  });
+
+  it("no previous assignment triggers process.exit(1)", () => {
+    // Verify missing previous agent exits with code 1
+    const content = readFileSync(join(__dirname, "../../src/commands/resume.ts"), "utf-8");
+
+    const noPrevSection = content.slice(
+      content.indexOf("if (!previousAssignment)"),
+      content.indexOf("lookupSpinner.succeed"),
+    );
+
+    expect(noPrevSection).toContain("process.exit(1)");
+    expect(noPrevSection).toContain("no previous agent");
+  });
+
+  it("confirmation display includes blocking reason", () => {
+    // Verify the confirmation output shows the blocking reason
+    const content = readFileSync(join(__dirname, "../../src/commands/resume.ts"), "utf-8");
+
+    // Must import formatFailureReason
+    expect(content).toContain("formatFailureReason");
+
+    // Must display "Reason:" line with the blocking reason
+    expect(content).toContain('"Reason:"');
+    expect(content).toContain("blockingReason");
+
+    // Must display "Cleared:" line after spawn
+    expect(content).toContain("Cleared:");
+    expect(content).toContain("now in-progress");
+  });
+
+  it("wireDetection is wrapped in try-catch for graceful degradation", () => {
+    // Verify wireDetection call has error handling
+    const content = readFileSync(join(__dirname, "../../src/commands/resume.ts"), "utf-8");
+
+    // Find the wireDetection call section
+    const wireSection = content.slice(
+      content.indexOf("Wire completion + blocked detection"),
+      content.indexOf("Wire completion + blocked detection") + 300,
+    );
+
+    expect(wireSection).toContain("try");
+    expect(wireSection).toContain("catch");
+    expect(wireSection).toContain("monitoring not available");
+  });
+
+  it("AgentAssignment type includes optional priority field", () => {
+    // Verify the core type was updated
+    const typesContent = readFileSync(join(__dirname, "../../../core/src/types.ts"), "utf-8");
+
+    // AgentAssignment must have priority field
+    expect(typesContent).toMatch(/priority\?:\s*number/);
+  });
+});
+
+describe("resume — behavioral tests", () => {
+  it("formatFailureReason returns human-readable text for all reasons", async () => {
+    // Behavioral test: actually call formatFailureReason with each value
+    const { formatFailureReason } = await import("@composio/ao-core");
+
+    expect(formatFailureReason("failed")).toBe("failed with non-zero exit code");
+    expect(formatFailureReason("crashed")).toBe("crashed");
+    expect(formatFailureReason("timed_out")).toBe("timed out");
+    expect(formatFailureReason("disconnected")).toBe("was disconnected (manual termination)");
+  });
+
+  it("AgentAssignment accepts priority field at runtime", async () => {
+    // Behavioral test: construct an AgentAssignment with priority
+    const assignment = {
+      agentId: "test-agent-1",
+      storyId: "1-4-test",
+      assignedAt: new Date(),
+      status: "active" as const,
+      contextHash: "abc123",
+      priority: 10,
+    };
+
+    expect(assignment.priority).toBe(10);
+
+    // Default priority for fresh spawns
+    const freshAssignment = { ...assignment, priority: 0 };
+    expect(freshAssignment.priority).toBe(0);
+
+    // Resumed stories get +10 boost
+    expect(assignment.priority).toBeGreaterThan(freshAssignment.priority);
+  });
+
+  it("agent registry persists and retrieves priority field", async () => {
+    const { getAgentRegistry } = await import("@composio/ao-core");
+    const fsMod = await import("node:fs");
+    const pathMod = await import("node:path");
+    const osMod = await import("node:os");
+    const cryptoMod = await import("node:crypto");
+
+    const tmpDir = pathMod.join(osMod.tmpdir(), `ao-resume-behavioral-${cryptoMod.randomUUID()}`);
+    fsMod.mkdirSync(tmpDir, { recursive: true });
+
+    const config = {
+      configPath: pathMod.join(tmpDir, "config.yaml"),
+      port: 5000,
+      defaults: { runtime: "mock", agent: "mock", workspace: "mock", notifiers: [] as string[] },
+      projects: {},
+      notifiers: {},
+      notificationRouting: {
+        urgent: [] as string[],
+        action: [] as string[],
+        warning: [] as string[],
+        info: [] as string[],
+      },
+      reactions: {},
+      readyThresholdMs: 300_000,
+    };
+
+    const registry = getAgentRegistry(tmpDir, config);
+
+    // Register with priority 10 (resumed)
+    registry.register({
+      agentId: "agent-retry-1",
+      storyId: "1-4-test",
+      assignedAt: new Date(),
+      status: "active",
+      contextHash: "hash",
+      priority: 10,
+    });
+
+    const assignment = registry.getByAgent("agent-retry-1");
+    expect(assignment).not.toBeNull();
+    expect(assignment!.priority).toBe(10);
+
+    // Clean up
+    fsMod.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("registry operations complete within 500ms (NFR-P8)", async () => {
+    const { getAgentRegistry } = await import("@composio/ao-core");
+    const fsMod = await import("node:fs");
+    const pathMod = await import("node:path");
+    const osMod = await import("node:os");
+    const cryptoMod = await import("node:crypto");
+
+    const tmpDir = pathMod.join(osMod.tmpdir(), `ao-resume-perf-${cryptoMod.randomUUID()}`);
+    fsMod.mkdirSync(tmpDir, { recursive: true });
+
+    const config = {
+      configPath: pathMod.join(tmpDir, "config.yaml"),
+      port: 5000,
+      defaults: { runtime: "mock", agent: "mock", workspace: "mock", notifiers: [] as string[] },
+      projects: {},
+      notifiers: {},
+      notificationRouting: {
+        urgent: [] as string[],
+        action: [] as string[],
+        warning: [] as string[],
+        info: [] as string[],
+      },
+      reactions: {},
+      readyThresholdMs: 300_000,
+    };
+
+    const registry = getAgentRegistry(tmpDir, config);
+    const start = Date.now();
+
+    // Simulate resume: register, incrementRetry, getRetryCount, getByStory
+    registry.register({
+      agentId: "perf-agent-1",
+      storyId: "perf-story",
+      assignedAt: new Date(),
+      status: "active",
+      contextHash: "hash",
+      priority: 10,
+    });
+    registry.incrementRetry("perf-story", "perf-agent-1");
+    registry.getRetryCount("perf-story");
+    registry.getByStory("perf-story");
+
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeLessThan(500);
+
+    fsMod.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});

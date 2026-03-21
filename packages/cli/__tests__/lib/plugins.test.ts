@@ -9,7 +9,7 @@ function makeConfig(
   return {
     dataDir: "/tmp",
     worktreeDir: "/tmp/wt",
-    port: 3000,
+    port: 5000,
     defaults: { runtime: "tmux", agent: defaultAgent, workspace: "worktree", notifiers: [] },
     projects: Object.fromEntries(
       Object.entries(projects ?? { app: {} }).map(([id, p]) => [

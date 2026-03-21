@@ -49,6 +49,7 @@ const mockRegistry = {
   getRetryHistory: vi.fn(
     (): { attempts: number; lastRetryAt: Date; previousAgents: string[] } | null => null,
   ),
+  updateStatus: vi.fn(),
 } satisfies AgentRegistry;
 
 // Mock SessionManager
@@ -174,7 +175,7 @@ describe("BlockedAgentDetector", () => {
       await detector.trackActivity("ao-story-001");
 
       // Mark as blocked
-      vi.advanceTimersByTime(11 * 60 * 1000); // 11 minutes later
+      vi.advanceTimersByTime(31 * 60 * 1000); // 31 minutes later (exceeds 30m default)
       await detector.checkBlocked();
 
       expect(mockEventBus.publish).toHaveBeenCalledWith(
@@ -202,7 +203,7 @@ describe("BlockedAgentDetector", () => {
     it("does not mark agent as blocked before timeout", async () => {
       await detector.trackActivity("ao-story-001");
 
-      vi.advanceTimersByTime(9 * 60 * 1000); // 9 minutes
+      vi.advanceTimersByTime(29 * 60 * 1000); // 29 minutes (below 30m default)
       await detector.checkBlocked();
 
       expect(mockEventBus.publish).not.toHaveBeenCalledWith(
@@ -212,10 +213,10 @@ describe("BlockedAgentDetector", () => {
       );
     });
 
-    it("marks agent as blocked after default timeout (10m)", async () => {
+    it("marks agent as blocked after default timeout (30m)", async () => {
       await detector.trackActivity("ao-story-001");
 
-      vi.advanceTimersByTime(11 * 60 * 1000); // 11 minutes
+      vi.advanceTimersByTime(31 * 60 * 1000); // 31 minutes
       await detector.checkBlocked();
 
       expect(mockEventBus.publish).toHaveBeenCalledWith(
@@ -257,7 +258,7 @@ describe("BlockedAgentDetector", () => {
       await detector.trackActivity("ao-story-001");
       detector.pause("ao-story-001");
 
-      vi.advanceTimersByTime(15 * 60 * 1000); // 15 minutes
+      vi.advanceTimersByTime(35 * 60 * 1000); // 35 minutes (exceeds 30m default but paused)
       await detector.checkBlocked();
 
       expect(mockEventBus.publish).not.toHaveBeenCalledWith(
@@ -280,11 +281,11 @@ describe("BlockedAgentDetector", () => {
   });
 
   describe("agent-type specific timeouts", () => {
-    it("uses claude-code timeout (10m) by default", async () => {
+    it("uses default timeout (30m) for unknown agent types", async () => {
       const detector = createBlockedAgentDetector(mockDeps);
       await detector.trackActivity("ao-story-001");
 
-      vi.advanceTimersByTime(11 * 60 * 1000);
+      vi.advanceTimersByTime(31 * 60 * 1000);
       await detector.checkBlocked();
 
       expect(mockEventBus.publish).toHaveBeenCalledWith(

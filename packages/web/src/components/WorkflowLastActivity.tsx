@@ -1,9 +1,9 @@
-import { PHASE_LABELS, type Phase } from "@/lib/workflow/types.js";
+import { PHASE_LABELS, type Phase } from "@/lib/workflow/types";
 
 interface WorkflowLastActivityProps {
   lastActivity: {
     filename: string;
-    phase: string;
+    phase: Phase;
     modifiedAt: string;
   } | null;
 }

@@ -14,7 +14,7 @@ import {
   formatProjectTypeForDisplay,
 } from "../lib/project-detection.js";
 
-const DEFAULT_PORT = 3000;
+const DEFAULT_PORT = 5000;
 
 async function prompt(
   rl: ReturnType<typeof createInterface>,
@@ -147,10 +147,7 @@ export function registerInit(program: Command): void {
     .description("Interactive setup wizard — creates agent-orchestrator.yaml")
     .option("-o, --output <path>", "Output file path", "agent-orchestrator.yaml")
     .option("--auto", "Auto-generate config with sensible defaults (no prompts)")
-    .option(
-      "--smart",
-      "Analyze project and generate custom rules (coming soon — requires --auto)",
-    )
+    .option("--smart", "Analyze project and generate custom rules (coming soon — requires --auto)")
     .action(async (opts: { output: string; auto?: boolean; smart?: boolean }) => {
       const outputPath = resolve(opts.output);
 

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { WorkflowAgentsPanel } from "../WorkflowAgentsPanel";
-import type { AgentInfo } from "@/lib/workflow/types.js";
+import type { AgentInfo } from "@/lib/workflow/types";
 
 function makeAgent(
   name: string,

@@ -85,7 +85,7 @@ so that the agent can continue its work without losing context.
     // Create minimal config
     const config = {
       configPath: ctx.configPath,
-      port: 3000,
+      port: 5000,
       readyThresholdMs: 300000,
       defaults: {
         runtime: "tmux",

@@ -56,7 +56,7 @@ beforeEach(() => {
 
   mockConfigRef.current = {
     configPath: join(tmpDir, "agent-orchestrator.yaml"),
-    port: 3000,
+    port: 5000,
     defaults: {
       runtime: "tmux",
       agent: "claude-code",
@@ -173,5 +173,47 @@ describe("health command", () => {
     mockGetTracker.mockReturnValue(unhealthyTracker);
 
     await expect(program.parseAsync(["node", "test", "health"])).rejects.toThrow("process.exit(1)");
+  });
+
+  describe("YAML health config (Story 10.1)", () => {
+    it("applies thresholds from config.health section", async () => {
+      (mockConfigRef.current as Record<string, unknown>).health = {
+        thresholds: {
+          maxLatencyMs: 500,
+          maxQueueDepth: 200,
+        },
+        checkIntervalMs: 15000,
+        alertOnTransition: true,
+      };
+
+      await program.parseAsync(["node", "test", "health"]);
+
+      const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+      // Should still render health output — no crash with config present
+      expect(output).toContain("System Health");
+      expect(output).toContain("healthy");
+    });
+
+    it("works without health config section (backward compatible)", async () => {
+      // config.health is undefined (default)
+      delete (mockConfigRef.current as Record<string, unknown>).health;
+
+      await program.parseAsync(["node", "test", "health"]);
+
+      const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(output).toContain("System Health");
+    });
+
+    it("CLI --interval flag overrides config.health.checkIntervalMs", async () => {
+      (mockConfigRef.current as Record<string, unknown>).health = {
+        checkIntervalMs: 60000,
+      };
+
+      // --interval should take precedence over config
+      await program.parseAsync(["node", "test", "health", "--interval", "5000"]);
+
+      const output = consoleSpy.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(output).toContain("System Health");
+    });
   });
 });

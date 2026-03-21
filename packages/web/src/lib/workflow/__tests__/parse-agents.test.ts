@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseAgentManifest } from "../parse-agents.js";
+import { parseAgentManifest } from "../parse-agents";
 
 const VALID_HEADER = "name,displayName,title,icon,capabilities,role";
 

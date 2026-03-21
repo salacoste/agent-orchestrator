@@ -3,8 +3,9 @@ import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
-import { buildPrompt, BASE_AGENT_PROMPT } from "../prompt-builder.js";
-import type { ProjectConfig } from "../types.js";
+import { buildPrompt, buildLearningsLayer, BASE_AGENT_PROMPT } from "../prompt-builder.js";
+import { selectRelevantLearnings } from "../session-learning.js";
+import type { ProjectConfig, SessionLearning } from "../types.js";
 
 let tmpDir: string;
 let project: ProjectConfig;
@@ -202,6 +203,58 @@ describe("buildPrompt", () => {
   });
 });
 
+describe("buildPrompt with storyContext", () => {
+  it("returns non-null when storyContext is provided (no issue, no rules)", () => {
+    const result = buildPrompt({
+      project,
+      projectId: "test-app",
+      storyContext: "# Story: User Auth\n**Story ID:** 1-1-user-auth",
+    });
+    expect(result).not.toBeNull();
+    expect(result).toContain(BASE_AGENT_PROMPT);
+  });
+
+  it("includes story context in Layer 2 output", () => {
+    const result = buildPrompt({
+      project,
+      projectId: "test-app",
+      storyContext:
+        "# Story: User Auth\n**Story ID:** 1-1-user-auth\n## Acceptance Criteria\n1. Must work",
+    });
+    expect(result).toContain("## Story Context");
+    expect(result).toContain("# Story: User Auth");
+    expect(result).toContain("1-1-user-auth");
+    expect(result).toContain("## Acceptance Criteria");
+  });
+
+  it("includes both issue and story context when both provided", () => {
+    const result = buildPrompt({
+      project,
+      projectId: "test-app",
+      issueId: "INT-100",
+      issueContext: "Linear issue details here",
+      storyContext: "# Story: Build Feature\n**Story ID:** 2-1-build-feature",
+    });
+    expect(result).toContain("## Issue Details");
+    expect(result).toContain("Linear issue details here");
+    expect(result).toContain("## Story Context");
+    expect(result).toContain("# Story: Build Feature");
+  });
+
+  it("places story context after issue details in Layer 2", () => {
+    const result = buildPrompt({
+      project,
+      projectId: "test-app",
+      issueId: "INT-100",
+      issueContext: "Issue content",
+      storyContext: "Story content",
+    });
+    const issueIdx = result!.indexOf("Issue content");
+    const storyIdx = result!.indexOf("Story content");
+    expect(issueIdx).toBeLessThan(storyIdx);
+  });
+});
+
 describe("BASE_AGENT_PROMPT", () => {
   it("is a non-empty string", () => {
     expect(typeof BASE_AGENT_PROMPT).toBe("string");
@@ -212,5 +265,141 @@ describe("BASE_AGENT_PROMPT", () => {
     expect(BASE_AGENT_PROMPT).toContain("Session Lifecycle");
     expect(BASE_AGENT_PROMPT).toContain("Git Workflow");
     expect(BASE_AGENT_PROMPT).toContain("PR Best Practices");
+  });
+});
+
+describe("buildLearningsLayer (Story 12.1)", () => {
+  function makeLearning(overrides: Partial<SessionLearning> = {}): SessionLearning {
+    return {
+      sessionId: "ao-1",
+      agentId: "ao-1",
+      storyId: "1-1-test",
+      projectId: "proj",
+      outcome: "failed",
+      durationMs: 120000,
+      retryCount: 0,
+      filesModified: [],
+      testsAdded: 0,
+      errorCategories: ["ECONNREFUSED"],
+      domainTags: ["backend"],
+      completedAt: new Date().toISOString(),
+      capturedAt: new Date().toISOString(),
+      ...overrides,
+    };
+  }
+
+  it("returns null for empty learnings", () => {
+    expect(buildLearningsLayer([])).toBeNull();
+    expect(buildLearningsLayer(undefined)).toBeNull();
+  });
+
+  it("formats learnings as numbered markdown list", () => {
+    const learnings = [
+      makeLearning({ storyId: "1-1-auth", errorCategories: ["timeout"] }),
+      makeLearning({ storyId: "1-2-sync", errorCategories: ["parse error"] }),
+    ];
+
+    const result = buildLearningsLayer(learnings);
+
+    expect(result).toContain("Lessons from Past Sessions");
+    expect(result).toContain("1. **1-1-auth**");
+    expect(result).toContain("2. **1-2-sync**");
+    expect(result).toContain("timeout");
+    expect(result).toContain("parse error");
+  });
+
+  it("includes domain tags and duration", () => {
+    const result = buildLearningsLayer([
+      makeLearning({ domainTags: ["frontend", "testing"], durationMs: 300000 }),
+    ]);
+
+    expect(result).toContain("frontend, testing");
+    expect(result).toContain("5m");
+  });
+
+  it("integrates into buildPrompt when learnings provided", () => {
+    const prompt = buildPrompt({
+      project,
+      projectId: "test",
+      issueId: "TEST-1",
+      issueContext: "test context",
+      learnings: [makeLearning()],
+    });
+
+    expect(prompt).toContain("Lessons from Past Sessions");
+    expect(prompt).toContain("1-1-test");
+  });
+
+  it("does not affect buildPrompt when no learnings", () => {
+    const prompt = buildPrompt({
+      project,
+      projectId: "test",
+      issueId: "TEST-1",
+      issueContext: "test context",
+    });
+
+    expect(prompt).not.toContain("Lessons from Past Sessions");
+  });
+});
+
+describe("selectRelevantLearnings (Story 12.1)", () => {
+  function makeLearning(overrides: Partial<SessionLearning> = {}): SessionLearning {
+    return {
+      sessionId: "ao-1",
+      agentId: "ao-1",
+      storyId: "1-1-test",
+      projectId: "proj",
+      outcome: "failed",
+      durationMs: 60000,
+      retryCount: 0,
+      filesModified: [],
+      testsAdded: 0,
+      errorCategories: ["error"],
+      domainTags: ["backend"],
+      completedAt: new Date().toISOString(),
+      capturedAt: new Date().toISOString(),
+      ...overrides,
+    };
+  }
+
+  it("filters to failed outcomes only", () => {
+    const all = [
+      makeLearning({ outcome: "completed", storyId: "s1" }),
+      makeLearning({ outcome: "failed", storyId: "s2" }),
+      makeLearning({ outcome: "completed", storyId: "s3" }),
+    ];
+
+    const result = selectRelevantLearnings(all, []);
+    expect(result).toHaveLength(1);
+    expect(result[0].storyId).toBe("s2");
+  });
+
+  it("prefers domain matches", () => {
+    const all = [
+      makeLearning({ domainTags: ["api"], storyId: "api-story" }),
+      makeLearning({ domainTags: ["frontend"], storyId: "fe-story" }),
+      makeLearning({ domainTags: ["backend"], storyId: "be-story" }),
+    ];
+
+    const result = selectRelevantLearnings(all, ["frontend"], 2);
+    expect(result[0].storyId).toBe("fe-story");
+  });
+
+  it("limits to specified count", () => {
+    const all = Array.from({ length: 10 }, (_, i) =>
+      makeLearning({
+        storyId: `s-${i}`,
+        capturedAt: new Date(Date.now() + i * 1000).toISOString(),
+      }),
+    );
+
+    const result = selectRelevantLearnings(all, [], 3);
+    expect(result).toHaveLength(3);
+  });
+
+  it("returns empty for no failures", () => {
+    const all = [makeLearning({ outcome: "completed" }), makeLearning({ outcome: "completed" })];
+
+    expect(selectRelevantLearnings(all, [])).toEqual([]);
   });
 });

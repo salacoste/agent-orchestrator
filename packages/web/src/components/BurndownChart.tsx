@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSSEConnection } from "@/hooks/useSSEConnection";
 import { useFlashAnimation } from "@/hooks/useFlashAnimation";
 
@@ -161,16 +161,19 @@ export function BurndownChart({
   const [animateLine, setAnimateLine] = useState(false);
 
   // SSE integration for real-time updates per AC2
+  const isFirstFetch = useRef(true);
   const fetchData = useCallback(() => {
     const epicParam = epicFilter ? `?epic=${encodeURIComponent(epicFilter)}` : "";
     const abortController = new AbortController();
-    const timeoutId = setTimeout(() => abortController.abort(), 2000); // 2-second timeout per NFR-P2
+    // First fetch gets 5s (dev server cold-compile), subsequent fetches get 2s (NFR-P2)
+    const timeoutMs = isFirstFetch.current ? 5000 : 2000;
+    isFirstFetch.current = false;
+    const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
+    const signal = abortController.signal;
 
     const velocityFetch = fetch(
       `/api/sprint/${encodeURIComponent(projectId)}/velocity${epicParam}`,
-      {
-        signal: abortController.signal,
-      },
+      { signal },
     )
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load burndown data");
@@ -179,22 +182,20 @@ export function BurndownChart({
       .then((d) => {
         setData(d as VelocityData);
         setError(null);
-        clearTimeout(timeoutId);
       })
       .catch((err) => {
         if (err.name === "AbortError") {
-          setError("Update timed out (2s) - will retry on next event");
+          setError(`Update timed out (${timeoutMs / 1000}s) - will retry on next event`);
         } else {
           setError(err instanceof Error ? err.message : "Unknown error");
         }
-        clearTimeout(timeoutId);
       });
 
-    const forecastFetch = fetch(`/api/sprint/${encodeURIComponent(projectId)}/forecast${epicParam}`)
-      .then((res) => {
-        if (!res.ok) return null;
-        return res.json();
-      })
+    const forecastFetch = fetch(
+      `/api/sprint/${encodeURIComponent(projectId)}/forecast${epicParam}`,
+      { signal },
+    )
+      .then((res) => (res.ok ? res.json() : null))
       .then((d) => {
         if (d) setForecast(d as ForecastData);
       })
@@ -202,11 +203,10 @@ export function BurndownChart({
         // Non-fatal — forecast is supplementary
       });
 
-    const mcFetch = fetch(`/api/sprint/${encodeURIComponent(projectId)}/monte-carlo${epicParam}`)
-      .then((res) => {
-        if (!res.ok) return null;
-        return res.json();
-      })
+    const mcFetch = fetch(`/api/sprint/${encodeURIComponent(projectId)}/monte-carlo${epicParam}`, {
+      signal,
+    })
+      .then((res) => (res.ok ? res.json() : null))
       .then((d) => {
         if (d) setMcData(d as MonteCarloData);
       })
@@ -214,14 +214,18 @@ export function BurndownChart({
         // Non-fatal — MC is supplementary
       });
 
-    const goalsFetch = fetch(`/api/sprint/${encodeURIComponent(projectId)}/goals${epicParam}`)
+    const goalsFetch = fetch(`/api/sprint/${encodeURIComponent(projectId)}/goals${epicParam}`, {
+      signal,
+    })
       .then((res) => (res.ok ? res.json() : null))
       .then((d) => {
         if (d) setGoals(d);
       })
       .catch(() => {});
 
-    return Promise.all([velocityFetch, forecastFetch, mcFetch, goalsFetch]);
+    return Promise.all([velocityFetch, forecastFetch, mcFetch, goalsFetch]).finally(() => {
+      clearTimeout(timeoutId);
+    });
   }, [projectId, epicFilter]);
 
   // Initial data fetch (only on mount, not on fetchData changes)

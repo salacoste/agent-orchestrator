@@ -1,12 +1,37 @@
-import { getServices } from "@/lib/services";
-import type { OrchestratorConfig } from "@composio/ao-core";
+import { readdir } from "node:fs/promises";
+import path from "node:path";
+
+import type { OrchestratorConfig, ProjectConfig } from "@composio/ao-core";
 import type { Metadata } from "next";
+
+import { getServices } from "@/lib/services";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Settings",
 };
+
+/** Resolve a project path, expanding ~ and resolving relative to projectsDir */
+function resolveProjectPath(project: ProjectConfig, projectsDir?: string): string {
+  const expandHome = (p: string) => p.replace(/^~/, process.env.HOME ?? "~");
+  if (!project.path) return process.cwd();
+  const expanded = expandHome(project.path);
+  if (path.isAbsolute(expanded)) return path.resolve(expanded);
+  return path.resolve(expandHome(projectsDir ?? "."), expanded);
+}
+
+/** Check if a BMAD config directory exists for a project */
+async function hasBmad(project: ProjectConfig, projectsDir?: string): Promise<boolean> {
+  const root = resolveProjectPath(project, projectsDir);
+  const bmadDir = path.resolve(root, project.bmad?.configDir ?? "_bmad");
+  try {
+    await readdir(bmadDir);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export default async function SettingsPage() {
   let config: OrchestratorConfig | null = null;
@@ -30,6 +55,18 @@ export default async function SettingsPage() {
 
   const { defaults, projects, reactions, notifiers, notificationRouting: routing } = config;
 
+  // Check BMAD presence for each project
+  const bmadStatus: Record<string, boolean> = {};
+  if (projects) {
+    const entries = Object.entries(projects);
+    const results = await Promise.all(
+      entries.map(([, project]) => hasBmad(project, config?.projectsDir)),
+    );
+    entries.forEach(([id], i) => {
+      bmadStatus[id] = results[i];
+    });
+  }
+
   return (
     <div className="p-6 max-w-7xl mx-auto w-full">
       <h1 className="text-2xl font-bold mb-6">Settings</h1>
@@ -40,6 +77,7 @@ export default async function SettingsPage() {
           <Row label="Port" value={String(config.port ?? 5000)} />
           <Row label="Config Path" value={String(config.configPath ?? "—")} />
           <Row label="Ready Threshold" value={`${(config.readyThresholdMs ?? 300000) / 1000}s`} />
+          {config.projectsDir && <Row label="Projects Dir" value={config.projectsDir} />}
         </Section>
 
         {defaults && (
@@ -71,6 +109,16 @@ export default async function SettingsPage() {
                       prefix: {project.sessionPrefix}
                     </span>
                   )}
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded ${bmadStatus[id] ? "bg-green-900/50 text-green-300" : "bg-gray-700/50 text-gray-500"}`}
+                    title={
+                      bmadStatus[id]
+                        ? `BMAD: ${project.bmad?.configDir ?? "_bmad"}`
+                        : "No BMAD directory found"
+                    }
+                  >
+                    {bmadStatus[id] ? "● BMAD" : "○ no BMAD"}
+                  </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-x-8 gap-y-1 text-sm overflow-hidden">
                   <Row label="Repo" value={project.repo} />
@@ -90,6 +138,15 @@ export default async function SettingsPage() {
                   />
                   <Row label="Tracker" value={project.tracker?.plugin ?? "github"} />
                   <Row label="SCM" value={project.scm?.plugin ?? "github"} />
+                  {project.bmad && (
+                    <>
+                      <Row label="BMAD Config" value={project.bmad.configDir ?? "_bmad"} />
+                      <Row label="BMAD Output" value={project.bmad.outputDir ?? "_bmad-output"} />
+                    </>
+                  )}
+                  {project.learning?.injectInPrompts && (
+                    <Row label="Learning" value="prompts injection enabled" />
+                  )}
                   {project.symlinks && project.symlinks.length > 0 && (
                     <Row label="Symlinks" value={project.symlinks.join(", ")} />
                   )}

@@ -236,6 +236,7 @@ describe("assign command", () => {
         assignedAt: expect.any(Date),
         status: "active",
         contextHash: "test-hash-123",
+        priority: 0,
       });
 
       // Verify send was called to deliver context

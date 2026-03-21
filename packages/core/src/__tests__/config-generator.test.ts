@@ -390,9 +390,9 @@ describe("sanitizeProjectId", () => {
 
 describe("configToYaml", () => {
   it("serializes config to valid YAML", () => {
-    const config = { port: 3000, projects: { app: { name: "App" } } };
+    const config = { port: 5000, projects: { app: { name: "App" } } };
     const yaml = configToYaml(config);
-    expect(yaml).toContain("port: 3000");
+    expect(yaml).toContain("port: 5000");
     expect(yaml).toContain("name: App");
   });
 });

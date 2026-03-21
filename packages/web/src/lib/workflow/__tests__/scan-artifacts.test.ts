@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 
-import { buildPhasePresence, scanAllArtifacts } from "../scan-artifacts.js";
+import { buildPhasePresence, scanAllArtifacts } from "../scan-artifacts";
 
 // Project root for integration tests (NFR-T4)
 const testFileDir = path.dirname(fileURLToPath(import.meta.url));

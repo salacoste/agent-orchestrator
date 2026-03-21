@@ -128,16 +128,33 @@ class AgentCompletionDetectorImpl implements AgentCompletionDetector {
   }
 
   private async handleCompletion(event: CompletionEvent): Promise<void> {
-    // Call all completion handlers
+    // Call all completion handlers with error isolation — one handler throwing
+    // must not prevent subsequent handlers from running (e.g., CLI cleanup)
     for (const handler of this.completionHandlers) {
-      await handler(event);
+      try {
+        await handler(event);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `Completion handler error for agent ${event.agentId}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
     }
   }
 
   private async handleFailure(event: FailureEvent): Promise<void> {
-    // Call all failure handlers
+    // Call all failure handlers with error isolation
     for (const handler of this.failureHandlers) {
-      await handler(event);
+      try {
+        await handler(event);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error(
+          `Failure handler error for agent ${event.agentId}:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
     }
   }
 }

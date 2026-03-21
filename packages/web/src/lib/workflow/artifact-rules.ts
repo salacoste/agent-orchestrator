@@ -5,7 +5,7 @@
  * To support new artifact types, add a row here — no logic changes needed.
  */
 
-import type { ArtifactRule, Phase } from "./types.js";
+import type { ArtifactRule, Phase } from "./types";
 
 export const ARTIFACT_RULES: readonly ArtifactRule[] = [
   // Analysis phase

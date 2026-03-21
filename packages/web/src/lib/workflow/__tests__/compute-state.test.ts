@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { computePhaseStates } from "../compute-state.js";
-import type { Phase, PhaseState } from "../types.js";
+import { computePhaseStates } from "../compute-state";
+import type { Phase, PhaseState } from "../types";
 
 type StatesTuple = [PhaseState, PhaseState, PhaseState, PhaseState];
 

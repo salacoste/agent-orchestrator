@@ -9,7 +9,7 @@
  * - No artifacts at all → all "not-started"
  */
 
-import { PHASES, PHASE_LABELS, type Phase, type PhaseEntry, type PhaseState } from "./types.js";
+import { PHASES, PHASE_LABELS, type Phase, type PhaseEntry, type PhaseState } from "./types";
 
 /**
  * Compute phase states from a phase-presence map.

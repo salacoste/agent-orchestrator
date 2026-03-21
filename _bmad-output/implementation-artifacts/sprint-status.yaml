@@ -335,12 +335,12 @@ previous_cycle:
   # Epic 25b: Dashboard Component Wiring
   # FRs: FR-C5-3
   # Depends on: Epic 25a
-  epic-25b: in-progress
+  epic-25b: done
   25b-1-cascade-detector-dashboard-panel: done
   25b-2-cost-sprint-clock-dashboard: done
   25b-3-conflict-checkpoint-ui: done
-  25b-4-project-chat-panel: backlog
-  25b-5-keyboard-shortcut-hook-help-modal: backlog
+  25b-4-project-chat-panel: done
+  25b-5-keyboard-shortcut-hook-help-modal: done
   epic-25b-retrospective: optional
 
   # Epic 26: Command Palette & Agent Profiles

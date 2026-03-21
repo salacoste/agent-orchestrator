@@ -1,0 +1,153 @@
+/**
+ * Cost & efficiency tracking (Stories 21.1, 21.2, 21.3).
+ *
+ * Tracks token consumption per agent/story/sprint and computes
+ * efficiency scores. Pure module — works with provided data.
+ */
+
+/** Token usage record for a session. */
+export interface TokenUsage {
+  agentId: string;
+  storyId?: string;
+  tokensUsed: number;
+  durationMs: number;
+  timestamp: string;
+}
+
+/** Agent efficiency score. */
+export interface EfficiencyScore {
+  agentId: string;
+  tokensPerStoryPoint: number;
+  totalTokens: number;
+  storiesCompleted: number;
+  totalStoryPoints: number;
+}
+
+/** Sprint cost summary. */
+export interface SprintCostSummary {
+  totalTokens: number;
+  totalAgents: number;
+  burnRate: number; // tokens per minute
+  projectedCost: number; // estimated remaining tokens
+  runawayAgents: string[]; // agents consuming >3x average
+}
+
+/** Sprint clock data. */
+export interface SprintClock {
+  /** Time remaining in sprint (ms). */
+  timeRemainingMs: number;
+  /** Estimated work remaining (ms). */
+  workRemainingMs: number;
+  /** Gap: positive = behind, negative = ahead. */
+  gapMs: number;
+  /** Status indicator. */
+  status: "on-track" | "tight" | "behind";
+  /** Human-readable description. */
+  description: string;
+}
+
+/**
+ * Compute sprint cost summary from token usage records.
+ */
+export function computeSprintCost(usages: TokenUsage[]): SprintCostSummary {
+  if (usages.length === 0) {
+    return {
+      totalTokens: 0,
+      totalAgents: 0,
+      burnRate: 0,
+      projectedCost: 0,
+      runawayAgents: [],
+    };
+  }
+
+  const totalTokens = usages.reduce((sum, u) => sum + u.tokensUsed, 0);
+  const totalDurationMs = usages.reduce((sum, u) => sum + u.durationMs, 0);
+  const agents = new Set(usages.map((u) => u.agentId));
+  const burnRate = totalDurationMs > 0 ? (totalTokens / totalDurationMs) * 60000 : 0;
+
+  // Detect runaway agents (>3x average)
+  const avgPerAgent = totalTokens / agents.size;
+  const agentTotals = new Map<string, number>();
+  for (const u of usages) {
+    agentTotals.set(u.agentId, (agentTotals.get(u.agentId) ?? 0) + u.tokensUsed);
+  }
+  const runawayAgents = [...agentTotals.entries()]
+    .filter(([, tokens]) => tokens > avgPerAgent * 3)
+    .map(([id]) => id);
+
+  return {
+    totalTokens,
+    totalAgents: agents.size,
+    burnRate: Math.round(burnRate),
+    projectedCost: 0, // Requires sprint duration info
+    runawayAgents,
+  };
+}
+
+/**
+ * Compute efficiency scores for agents.
+ */
+export function computeEfficiencyScores(
+  usages: TokenUsage[],
+  storyPoints: Record<string, number>,
+): EfficiencyScore[] {
+  const agentData = new Map<string, { tokens: number; stories: Set<string>; points: number }>();
+
+  for (const u of usages) {
+    const existing = agentData.get(u.agentId) ?? {
+      tokens: 0,
+      stories: new Set<string>(),
+      points: 0,
+    };
+    existing.tokens += u.tokensUsed;
+    if (u.storyId) {
+      existing.stories.add(u.storyId);
+      existing.points += storyPoints[u.storyId] ?? 0;
+    }
+    agentData.set(u.agentId, existing);
+  }
+
+  return [...agentData.entries()].map(([agentId, data]) => ({
+    agentId,
+    tokensPerStoryPoint: data.points > 0 ? Math.round(data.tokens / data.points) : 0,
+    totalTokens: data.tokens,
+    storiesCompleted: data.stories.size,
+    totalStoryPoints: data.points,
+  }));
+}
+
+/**
+ * Compute sprint clock — time remaining vs work remaining.
+ */
+export function computeSprintClock(
+  sprintEndDate: Date,
+  storiesDone: number,
+  storiesTotal: number,
+  avgStoryDurationMs: number,
+): SprintClock {
+  const now = new Date();
+  const timeRemainingMs = Math.max(0, sprintEndDate.getTime() - now.getTime());
+  const storiesRemaining = storiesTotal - storiesDone;
+  const workRemainingMs = storiesRemaining * avgStoryDurationMs;
+  const gapMs = workRemainingMs - timeRemainingMs;
+
+  let status: SprintClock["status"];
+  if (gapMs <= 0) {
+    status = "on-track";
+  } else if (gapMs < timeRemainingMs * 0.2) {
+    status = "tight";
+  } else {
+    status = "behind";
+  }
+
+  const timeHours = Math.round(timeRemainingMs / 3600000);
+  const workHours = Math.round(workRemainingMs / 3600000);
+  const gapHours = Math.round(Math.abs(gapMs) / 3600000);
+
+  const description =
+    gapMs > 0
+      ? `Sprint ends in ${timeHours}h. Remaining work: ${workHours}h. BEHIND by ${gapHours}h`
+      : `Sprint ends in ${timeHours}h. Remaining work: ${workHours}h. On track`;
+
+  return { timeRemainingMs, workRemainingMs, gapMs, status, description };
+}

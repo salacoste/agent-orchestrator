@@ -379,45 +379,45 @@ previous_cycle:
 
   # Epic 29: Accessibility & Inclusive Design
   # FRs: Brainstorm #151, #153, #154
-  epic-29: backlog
-  29-1-screen-reader-first-agent-status: backlog
-  29-2-high-contrast-mode: backlog
-  29-3-reduced-motion-toggle: backlog
-  29-4-accessibility-audit-wcag-compliance: backlog
+  epic-29: done
+  29-1-screen-reader-first-agent-status: done
+  29-2-high-contrast-mode: done
+  29-3-reduced-motion-toggle: done
+  29-4-accessibility-audit-wcag-compliance: done
   epic-29-retrospective: optional
 
   # Epic 30: Compound Learning System
   # FRs: Brainstorm #43, #50, #56, #176
-  epic-30: backlog
-  30-1-cross-sprint-pattern-detection: backlog
-  30-2-failure-analysis-knowledge-base: backlog
-  30-3-recommendation-improvement-from-feedback: backlog
-  30-4-learning-dashboard-panel: backlog
+  epic-30: done
+  30-1-cross-sprint-pattern-detection: done
+  30-2-failure-analysis-knowledge-base: done
+  30-3-recommendation-improvement-from-feedback: done
+  30-4-learning-dashboard-panel: done
   epic-30-retrospective: optional
 
   # Epic 31: IDE & CI Integrations
   # FRs: Brainstorm #123, #125, #124
-  epic-31: backlog
-  31-1-vscode-extension-orchestrator-sidebar: backlog
-  31-2-github-action-cicd-orchestration: backlog
-  31-3-git-hook-integration: backlog
+  epic-31: done
+  31-1-vscode-extension-orchestrator-sidebar: done
+  31-2-github-action-cicd-orchestration: done
+  31-3-git-hook-integration: done
   epic-31-retrospective: optional
 
   # Epic 32: Developer Psychology & Engagement
   # FRs: Brainstorm #201, #204, #206
-  epic-32: backlog
-  32-1-flow-state-protector: backlog
-  32-2-celebration-moments: backlog
-  32-3-streak-counter: backlog
+  epic-32: done
+  32-1-flow-state-protector: done
+  32-2-celebration-moments: done
+  32-3-streak-counter: done
   epic-32-retrospective: optional
 
   # Epic 33: Multi-User Collaboration v2
   # FRs: Brainstorm #113, #114, #116 (deferred from Cycle 5 MVP)
-  epic-33: backlog
-  33-1-shared-annotations-on-artifacts: backlog
-  33-2-role-based-agent-ownership: backlog
-  33-3-handoff-protocol: backlog
-  33-4-collaboration-integration-test: backlog
+  epic-33: done
+  33-1-shared-annotations-on-artifacts: done
+  33-2-role-based-agent-ownership: done
+  33-3-handoff-protocol: done
+  33-4-collaboration-integration-test: done
   epic-33-retrospective: optional
 
 # Known Limitations & Feature Flags

@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
+import { CommandPalette, type PaletteAction } from "@/components/CommandPalette";
 import { EmptyWorkflowState } from "@/components/EmptyWorkflowState";
 import { WorkflowDashboard } from "@/components/WorkflowDashboard";
 import { useWorkflowSSE } from "@/hooks/useWorkflowSSE";
@@ -118,8 +119,42 @@ export function WorkflowPage({ projects }: WorkflowPageProps) {
     );
   }
 
+  const paletteActions: PaletteAction[] = [
+    {
+      id: "fleet",
+      label: "Fleet View",
+      description: "Monitor all agents",
+      category: "Navigation",
+      action: () => router.push("/fleet"),
+    },
+    {
+      id: "workflow",
+      label: "Workflow View",
+      description: "BMAD phase dashboard",
+      category: "Navigation",
+      action: () => router.push("/workflow"),
+    },
+    {
+      id: "settings",
+      label: "Settings",
+      description: "Configuration",
+      category: "Navigation",
+      action: () => router.push("/settings"),
+    },
+    {
+      id: "refresh",
+      label: "Refresh Data",
+      description: "Re-fetch workflow state",
+      category: "Action",
+      action: () => {
+        if (selectedProject) fetchData(selectedProject);
+      },
+    },
+  ];
+
   return (
     <main className="px-8 py-7">
+      <CommandPalette actions={paletteActions} />
       <div className="flex items-center gap-4 mb-6">
         <h1 className="text-[14px] font-semibold text-[var(--color-text-primary)]">Workflow</h1>
         {projects.length > 1 && (

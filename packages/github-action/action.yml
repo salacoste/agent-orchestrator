@@ -1,0 +1,37 @@
+name: "Agent Orchestrator"
+description: "Spawn AI coding agents and manage workflow from GitHub Actions"
+author: "composio"
+
+inputs:
+  command:
+    description: "Command to execute: spawn, status, recommend"
+    required: true
+  story-id:
+    description: "Story ID for spawn command"
+    required: false
+  project-id:
+    description: "Project ID for recommend/status commands"
+    required: false
+    default: "default"
+  ao-url:
+    description: "Agent Orchestrator API URL"
+    required: true
+  ao-api-key:
+    description: "API key for authentication"
+    required: false
+
+outputs:
+  session-id:
+    description: "Session ID of spawned agent (spawn command)"
+  recommendation:
+    description: "Workflow recommendation JSON (recommend command)"
+  status:
+    description: "Sprint status summary (status command)"
+
+runs:
+  using: "node20"
+  main: "dist/index.js"
+
+branding:
+  icon: "cpu"
+  color: "blue"

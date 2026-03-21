@@ -1,0 +1,42 @@
+{
+  "name": "agent-orchestrator",
+  "displayName": "Agent Orchestrator",
+  "description": "Manage AI coding agents from VS Code — sprint status, agent monitoring, workflow recommendations",
+  "version": "0.1.0",
+  "publisher": "composio",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "agent-orchestrator",
+          "title": "Agent Orchestrator",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "agent-orchestrator": [
+        { "id": "ao-sprint", "name": "Sprint" },
+        { "id": "ao-agents", "name": "Agents" },
+        { "id": "ao-recommendations", "name": "Recommendations" }
+      ]
+    },
+    "commands": [
+      { "command": "ao.spawn", "title": "AO: Spawn Agent for Story" },
+      { "command": "ao.status", "title": "AO: Show Sprint Status" },
+      { "command": "ao.recommend", "title": "AO: Get Recommendation" }
+    ]
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -433,11 +433,11 @@ previous_cycle:
   epic-34-retrospective: optional
 
   # Epic 35: IDE & CI Production Integrations
-  epic-35: backlog
-  35-1-vscode-extension-scaffold: backlog
-  35-2-vscode-extension-sprint-sidebar: backlog
-  35-3-github-action-orchestration-commands: backlog
-  35-4-git-hook-integration-commit-tagging: backlog
+  epic-35: done
+  35-1-vscode-extension-scaffold: done
+  35-2-vscode-extension-sprint-sidebar: done
+  35-3-github-action-orchestration-commands: done
+  35-4-git-hook-integration-commit-tagging: done
   epic-35-retrospective: optional
 
   # Epic 36: Collaboration Production Features

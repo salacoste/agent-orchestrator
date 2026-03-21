@@ -1,6 +1,6 @@
 # @composio/ao-sdk
 
-TypeScript SDK for [Agent Orchestrator](https://github.com/composio/agent-orchestrator) — spawn AI coding agents, subscribe to events, get workflow recommendations.
+TypeScript SDK for [Agent Orchestrator](https://github.com/salacoste/agent-orchestrator) — spawn AI coding agents, subscribe to events, get workflow recommendations.
 
 ## Install
 

@@ -441,17 +441,17 @@ previous_cycle:
   epic-35-retrospective: optional
 
   # Epic 36: Collaboration Production Features
-  epic-36: backlog
-  36-1-shared-annotation-ui-component: backlog
-  36-2-role-based-agent-ownership-ui: backlog
-  36-3-handoff-protocol-implementation: backlog
+  epic-36: done
+  36-1-shared-annotation-ui-component: done
+  36-2-role-based-agent-ownership-ui: done
+  36-3-handoff-protocol-implementation: done
   epic-36-retrospective: optional
 
   # Epic 37: DX Conventions & Lint Rules
-  epic-37: backlog
-  37-1-dead-button-lint-rule: backlog
-  37-2-test-per-story-convention-enforcement: backlog
-  37-3-renders-in-parent-ac-convention: backlog
+  epic-37: done
+  37-1-dead-button-lint-rule: done
+  37-2-test-per-story-convention-enforcement: done
+  37-3-renders-in-parent-ac-convention: done
   epic-37-retrospective: optional
 
 # Known Limitations & Feature Flags

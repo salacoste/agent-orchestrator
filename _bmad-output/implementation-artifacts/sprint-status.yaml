@@ -346,8 +346,8 @@ previous_cycle:
   # Epic 26: Command Palette & Agent Profiles
   # FRs: Brainstorm #24, #70, #128
   # Parallel with 25b
-  epic-26: backlog
-  26-1-command-palette-cmd-k: backlog
+  epic-26: in-progress
+  26-1-command-palette-cmd-k: done
   26-2-agent-personality-profiles: backlog
   26-3-story-agent-personality-matching: backlog
   epic-26-retrospective: optional

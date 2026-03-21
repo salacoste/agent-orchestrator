@@ -328,7 +328,7 @@ previous_cycle:
   # Priority: Second — backend before frontend
   epic-25a: in-progress
   25a-1-agent-recovery-api-endpoints: done
-  25a-2-jsonl-recommendation-feedback-persistence: backlog
+  25a-2-jsonl-recommendation-feedback-persistence: done
   25a-3-state-machine-recommendation-full-integration: backlog
   epic-25a-retrospective: optional
 

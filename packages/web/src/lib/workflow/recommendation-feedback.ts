@@ -29,9 +29,21 @@ const feedbackHistory: RecommendationFeedback[] = [];
 
 /**
  * Record a feedback action on a recommendation.
+ * Stores in-memory AND persists to JSONL via API (Story 25a.2).
  */
 export function recordFeedback(feedback: RecommendationFeedback): void {
   feedbackHistory.push(feedback);
+
+  // Persist to JSONL via API (fire-and-forget, non-blocking)
+  if (typeof fetch !== "undefined") {
+    fetch("/api/workflow/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(feedback),
+    }).catch(() => {
+      // Persistence failure is non-fatal — in-memory tracking continues
+    });
+  }
 }
 
 /**

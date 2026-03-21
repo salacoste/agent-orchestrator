@@ -239,7 +239,10 @@ export function DeadLetterQueueViewer({ projectId }: { projectId: string }) {
                     {entry.retryCount === 1 ? "y" : "ies"}
                   </div>
                 </div>
-                <button className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] ml-2">
+                <button
+                  className="text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)] ml-2"
+                  onClick={() => toggleExpand(entry.errorId)}
+                >
                   {isExpanded ? "Hide" : "Details"}
                 </button>
               </div>

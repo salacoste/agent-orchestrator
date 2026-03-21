@@ -91,6 +91,35 @@ export default tseslint.config(
     },
   },
 
+  // Story 24.1: Prevent node:* imports in client-side web components.
+  // Next.js webpack bundles the ENTIRE module graph when a client component
+  // imports from a module that imports node:fs (even transitively). This
+  // caused build failures in Cycle 4 Stories 16.1 and 18.4.
+  {
+    files: [
+      "packages/web/src/components/**/*.tsx",
+      "packages/web/src/components/**/*.ts",
+      "packages/web/src/hooks/**/*.ts",
+      // Note: page.tsx/layout.tsx are server components by default in App Router
+      // and CAN use node:* imports. Only "use client" pages would be a problem,
+      // but those are rare and caught by Next.js build errors.
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["node:*"],
+              message:
+                "Node.js builtins cannot be imported in client components (breaks Next.js bundle). Use server-side API routes instead.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Scripts directory - Node.js environment
   {
     files: ["scripts/**/*.js", "scripts/**/*.mjs"],

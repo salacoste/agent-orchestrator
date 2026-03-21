@@ -1,4 +1,4 @@
-# generated: 2026-03-13
+# generated: 2026-03-21
 # project: agent-orchestrator
 # project_key: NOKEY
 # tracking_system: file-system
@@ -32,132 +32,396 @@
 # - Stories can be worked in parallel if team capacity allows
 # - SM typically creates next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+#
+# SOURCE DOCUMENTS:
+# =================
+# epics.md — Epics 1-9 (45 stories), Planning Cycles 1-2
+# epics-cycle-3.md — Epics 10-15 (25 stories), Planning Cycle 3
+# epics-cycle-3-4.md — Epics 16-23 (33 stories), Planning Cycle 4
+# epics-cycle-5.md — Epics 24-28 (20 stories), Planning Cycle 5
+# epics-cycle-6.md — Epics 29-33 (18 stories), Planning Cycle 6
+# Total: 33 epics, 162 stories
 
-generated: 2026-03-13
+generated: 2026-03-21
 project: agent-orchestrator
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
 
 development_status:
-  # Epic 1: Sprint Planning & Agent Orchestration
+  # ==========================================================================
+  # PHASE 1 — Core Platform (Epics 1-5)
+  # ==========================================================================
+
+  # Epic 1: Core Agent Orchestration
+  # FRs: FR1-FR8, FR33
   epic-1: done
-  1-1-cli-generate-sprint-plan-from-yaml: done
-  1-2-cli-spawn-agent-with-story-context: done
-  1-3-state-track-agent-assignments: done
-  1-4-cli-view-story-agent-status: done
-  1-5-cli-manual-story-assignment: done
-  1-6-agent-completion-detection: done
-  1-7-cli-resume-blocked-story: done
-  1-8-cli-fleet-monitoring-table: done
+  1-1-sprint-plan-cli-data-model-foundation: done
+  1-2-story-aware-agent-spawning: done
+  1-3-agent-story-status-tracking-completion-detection: done
+  1-4-resume-blocked-stories: done
+  1-5-multi-agent-assignment: done
   epic-1-retrospective: done
 
-  # Epic 2: Event Bus & State Synchronization
+  # Epic 2: Real-Time Sprint State Sync (Event Bus + Bidirectional YAML Sync)
+  # FRs: FR9-FR18, FR23-FR24
   epic-2: done
-  2-1-redis-event-bus-implementation: done
-  2-2-event-publishing-service: done
-  2-3-event-subscription-service: done
-  2-4-jsonl-audit-trail: done
-  2-5-state-manager-write-through-cache: done
-  2-6-yaml-file-watcher: done
-  2-7-conflict-resolution-with-optimistic-locking: done
-  2-8-state-sync-to-bmad-tracker: done
+  2-1-bmad-tracker-bidirectional-sync-bridge: done
+  2-2-story-lifecycle-event-types-publishing: done
+  2-3-dependency-resolution-story-unblocking: done
+  2-4-sprint-burndown-recalculation: done
+  2-5-state-conflict-reconciliation: done
   epic-2-retrospective: done
 
-  # Epic 2.1: Technical Debt Resolution
-  epic-2-1: done
-  2-1-1-integration-test-framework: done
-  2-1-2-interface-validation-checklist: done
-  2-1-3-task-completion-validation: done
-  2-1-4-cli-test-infrastructure: done
-  2-1-5-persistent-dead-letter-queue: done
-  2-1-6-performance-test-suite: done
-  2-1-7-file-locking-mechanism: done
-  2-1-8-dependency-security-review: done
-  2-1-9-enhanced-sync-strategies: done
-  epic-2-1-retrospective: done
-
-  # Epic 3: Dashboard & Real-Time Monitoring
+  # Epic 3: Push Notifications & Alerting
+  # FRs: FR19-FR22
   epic-3: done
-  3-1-notification-service-core: done
-  3-2-desktop-notification-plugin: done
-  3-3-web-dashboard-foundation: done
-  3-4-sprint-burndown-chart-component: done
-  3-5-fleet-monitoring-matrix: done
-  3-6-agent-session-cards-with-activity-history: done
-  3-7-event-audit-trail-viewer: done
-  3-8-workflow-health-metrics-panel: done
+  3-1-notification-routing-channel-configuration: done
+  3-2-event-driven-notification-triggers: done
+  3-3-notification-deduplication-digest-mode: done
   epic-3-retrospective: done
 
-  # Epic 4: Error Handling & Graceful Degradation
+  # Epic 4: Self-Healing Operations (Error Recovery + Circuit Breaker + DLQ)
+  # FRs: FR33-FR40
   epic-4: done
-  4-1-blocked-agent-detection: done
-  4-2-error-logging-with-context: done
-  4-3-retry-with-exponential-backoff-and-circuit-breaker: done
-  4-4-graceful-degradation-mode: done
-  4-5-dead-letter-queue: done
-  4-6-event-bus-backlog-recovery: done
-  4-7-metadata-corruption-detection-and-recovery: done
-  4-8-health-check-configuration: done
+  4-1-error-classification-structured-logging: done
+  4-2-circuit-breaker-exponential-backoff: done
+  4-3-dead-letter-queue-event-replay: done
+  4-4-health-monitoring-configurable-thresholds: done
   epic-4-retrospective: done
 
-  # Epic 5: Multi-Agent Conflict Resolution
+  # Epic 5: CLI Sprint Management & Fleet Monitoring
+  # FRs: FR25-FR30, FR32
   epic-5: done
-  5-1-conflict-detection-engine: done
-  5-2-conflict-resolution-service: done
-  5-3-conflict-prevention-ui: done
-  5-4-conflict-history-dashboard: done
+  5-1-ao-fleet-multi-agent-fleet-matrix: done
+  5-2-ao-burndown-sprint-analytics-cli: done
+  5-3-ao-logs-agent-log-viewer: done
+  5-4-ao-events-event-audit-trail-cli: done
+  5-5-deferred-tech-debt-epics-1-4: done
   epic-5-retrospective: done
 
-  # Epic 6: Plugin & Workflow Extensibility
+  # ==========================================================================
+  # PHASE 2 — Dashboard & Coordination (Epics 6-8)
+  # ==========================================================================
+
+  # Epic 6: BMAD Workflow Dashboard
+  # FRs: WD-FR1-FR31
   epic-6: done
-  6-1-plugin-system-core: done
-  6-2-plugin-api-with-type-definitions: done
-  6-3-custom-trigger-conditions: done
-  6-4-custom-event-handlers-for-workflow-automation: done
-  6-5-plugin-installation-cli: done
-  6-6-community-plugin-registry: done
+  6-1-artifact-scanner-phase-computation-engine: done
+  6-2-workflow-api-route: done
+  6-3-phase-computation-unit-tests: done
+  6-4-workflow-page-shell-navigation: done
+  6-5-phase-bar-component: done
+  6-6-recommendation-engine: done
+  6-7-recommendation-engine-tests: done
+  6-8-ai-guide-panel-component: done
+  6-9-agent-manifest-parser-agents-panel: done
+  6-10-artifact-inventory-panel: done
+  6-11-last-activity-indicator: done
+  6-12-file-watcher-debounced-sse-notifications: done
+  6-13-lkg-state-pattern-error-resilience: done
   epic-6-retrospective: done
 
-  # Epic 7: Workflow Phase Visibility (Workflow Dashboard)
+  # Epic 7: Dashboard Monitoring & Visualization
+  # FRs: FR25-FR32 (dashboard interface)
   epic-7: done
-  7-1-artifact-scanner-and-phase-computation-engine: done
-  7-2-workflow-api-route: done
-  7-3-phase-computation-unit-tests: done
-  7-4-workflow-page-shell-and-navigation: done
-  7-5-phase-bar-component: done
+  7-1-fleet-monitoring-matrix-component: done
+  7-2-agent-session-cards-with-drill-down: done
+  7-3-sprint-burndown-chart-analytics-dashboard: done
+  7-4-event-audit-trail-conflict-alerts: done
   epic-7-retrospective: done
 
-  # Epic 8: AI-Guided Recommendations & Agent Discovery (Workflow Dashboard)
+  # Epic 8: Multi-Agent Conflict Resolution
+  # FRs: FR41-FR44
   epic-8: done
-  8-1-recommendation-engine: done
-  8-2-recommendation-engine-tests: done
-  8-3-ai-guide-panel-component: done
-  8-4-agent-manifest-parser-and-agents-panel: done
+  8-1-conflict-detection-engine: done
+  8-2-automated-conflict-resolution-reassignment: done
+  8-3-conflict-history-analytics: done
   epic-8-retrospective: done
 
-  # Epic 9: Artifact Inventory & Activity Tracking (Workflow Dashboard)
+  # ==========================================================================
+  # PHASE 3 — Extensibility (Epic 9)
+  # ==========================================================================
+
+  # Epic 9: Plugin & Workflow Extensibility
+  # FRs: FR45-FR50
   epic-9: done
-  9-1-artifact-inventory-panel: done
-  9-2-last-activity-indicator: done
+  9-1-plugin-installation-discovery-cli: done
+  9-2-custom-trigger-conditions-event-handlers: done
+  9-3-plugin-typescript-api-documentation: done
+  9-4-community-plugin-registry-foundation: done
   epic-9-retrospective: done
 
-  # Epic 10: Real-Time Updates & Error Resilience (Workflow Dashboard)
+  # ==========================================================================
+  # CYCLE 3 — AI Agent Intelligence & Tech Debt (Epics 10-15)
+  # Source: epics-cycle-3.md, prd-cycle-3-ai-intelligence.md
+  # ==========================================================================
+
+  # Epic 10: Tech Debt & Testing Infrastructure
+  # FRs: FR-TD-1 through FR-TD-5
   epic-10: done
-  10-1-file-watcher-with-debounced-sse-notifications: done
-  10-2-client-side-sse-subscription-and-auto-refresh: done
-  10-3-lkg-state-pattern-and-error-resilience: done
-  10-4-error-resilience-tests: done
+  10-1-cli-health-config-dlq-display: done
+  10-2-cli-integration-tests: done
+  10-3-api-route-testing-infrastructure: done
+  10-4-performance-benchmarks-documentation: done
   epic-10-retrospective: done
 
+  # Epic 11: Agent Session Learning — Infrastructure
+  # FRs: FR-AI-1, FR-AI-2, FR-AI-5, FR-AI-6
+  epic-11: done
+  11-1-session-outcome-capture: done
+  11-2-learning-knowledge-base-jsonl-storage: done
+  11-3-learning-query-api: done
+  11-4-ao-agent-history-cli-command: done
+  epic-11-retrospective: done
+
+  # Epic 12: Agent Session Learning — Intelligence
+  # FRs: FR-AI-3, FR-AI-4
+  epic-12: done
+  12-1-prompt-learning-injection: done
+  12-2-failure-pattern-detection: done
+  12-3-ao-learning-patterns-cli-command: done
+  12-4-learning-dashboard-panel: done
+  epic-12-retrospective: done
+
+  # Epic 13: Smart Story Assignment
+  # FRs: FR-AI-7 through FR-AI-11
+  epic-13: done
+  13-1-agent-story-affinity-scoring: done
+  13-2-ao-assign-suggest-cli-command: done
+  13-3-smart-auto-assignment-mode: done
+  13-4-pluggable-assignment-scorer-api: done
+  epic-13-retrospective: done
+
+  # Epic 14: Code Review Intelligence
+  # FRs: FR-AI-12 through FR-AI-16
+  epic-14: done
+  14-1-structured-review-findings-capture: done
+  14-2-review-findings-prompt-injection: done
+  14-3-ao-review-stats-cli-command: done
+  14-4-auto-generated-pre-review-checklist: done
+  epic-14-retrospective: done
+
+  # Epic 15: Multi-Agent Collaboration
+  # FRs: FR-AI-17 through FR-AI-21
+  epic-15: done
+  15-1-dependency-aware-story-scheduling: done
+  15-2-cross-agent-context-sharing: done
+  15-3-agent-handoff-protocol: done
+  15-4-file-level-conflict-prevention: done
+  15-5-ao-collab-graph-cli-command: done
+  epic-15-retrospective: done
+
+# ============================================================================
+# PREVIOUS CYCLE (ARCHIVED — All Complete)
+# ============================================================================
+# The first planning cycle delivered 66 stories across 11 epics.
+# All epics, stories, retrospectives, and action items are DONE as of 2026-03-15.
+# Story files for the previous cycle remain in implementation-artifacts/ with their
+# original naming (e.g., 1-1-cli-generate-sprint-plan-from-yaml.md).
+
+previous_cycle:
+  status: complete
+  completed_at: "2026-03-15"
+  total_epics: 11
+  total_stories: 66
+  all_retrospectives: done
+  all_action_items: done
+
+  # ==========================================================================
+  # CYCLE 4 — BMAD Workflow Orchestration (Epics 16-23)
+  # Source: epics-cycle-3-4.md (Cycle 4 section)
+  # Parallelizable with Cycle 3. Critical path: 16→17→(19,21,22 parallel)→18→20→23
+  # ==========================================================================
+
+  # Epic 16: Workflow Data Foundation (was Epic 6a)
+  # FRs: FR-WF-1, FR-WF-2, FR-WF-3, FR-WF-4, FR-WF-5, FR-WF-28
+  epic-16: done
+  16-1-artifact-type-definition: done
+  16-2-workflow-state-machine-model: done
+  16-3-yaml-workflow-configuration: done
+  16-4-artifact-scanner-service: done
+  16-5-workflow-event-types-sse-integration: done
+  16-6-zero-config-default-workflow: done
+  epic-16-retrospective: optional
+
+  # Epic 17: Workflow Dashboard Experience (was Epic 6b)
+  # FRs: FR-WF-6, FR-WF-7, FR-WF-8, FR-WF-9, FR-WF-10
+  # Depends on: Epic 16
+  epic-17: done
+  17-1-you-are-here-phase-pipeline-component: done
+  17-2-next-step-recommendation-launcher: done
+  17-3-deterministic-recommendation-engine: done
+  17-4-phase-readiness-scoring: done
+  17-5-recommendation-reasoning-display: done
+  epic-17-retrospective: optional
+
+  # Epic 18: Agent Communication & Intelligence (was Epic 7)
+  # FRs: FR-WF-12, FR-WF-13, FR-WF-14, FR-WF-22, FR-WF-30
+  epic-18: done
+  18-1-commanders-intent-in-agent-prompts: done
+  18-2-agent-narrative-status-updates: done
+  18-3-structured-help-request-protocol: done
+  18-4-workflow-anti-pattern-detector: done
+  18-5-recommendation-feedback-loop: done
+  epic-18-retrospective: optional
+
+  # Epic 19: Agent Health & Recovery (was Epic 8a)
+  # FRs: FR-WF-17, FR-WF-18
+  epic-19: done
+  19-1-dead-agent-detection: done
+  19-2-agent-recovery-actions: done
+  19-3-cascade-failure-circuit-breaker: done
+  epic-19-retrospective: optional
+
+  # Epic 20: Conflict & Checkpoint Management (was Epic 8b)
+  # FRs: FR-WF-19, FR-WF-20, FR-WF-21
+  # Depends on: Epic 19
+  epic-20: done
+  20-1-merge-conflict-resolution-wizard: done
+  20-2-agent-work-checkpoint-rollback: done
+  20-3-parallelism-opportunity-finder: done
+  epic-20-retrospective: optional
+
+  # Epic 21: Cost & Efficiency Analytics (was Epic 9)
+  # FRs: FR-WF-15, FR-WF-16, FR-WF-27
+  epic-21: done
+  21-1-token-consumption-tracking: done
+  21-2-agent-efficiency-scoring: done
+  21-3-sprint-clock-countdown: done
+  epic-21-retrospective: optional
+
+  # Epic 22: Dashboard Command Center (was Epic 10)
+  # FRs: FR-WF-11, FR-WF-23, FR-WF-24, FR-WF-25, FR-WF-26
+  epic-22: done
+  22-1-war-room-fleet-grid: done
+  22-2-breadcrumb-navigation: done
+  22-3-keyboard-shortcut-system: done
+  22-4-hover-preview-tooltips: done
+  22-5-notification-priority-tiers: done
+  epic-22-retrospective: optional
+
+  # Epic 23: Project Intelligence & Conversational Interface (was Epic 12, STRETCH)
+  # FRs: FR-WF-29
+  epic-23: done
+  23-1-project-context-aggregator: done
+  23-2-project-chat-interface: done
+  23-3-proactive-project-insights: done
+  epic-23-retrospective: optional
+
+  # ==========================================================================
+  # CYCLE 5 — UI Wiring, Power Features, Collaboration, SDK (Epics 24-28)
+  # Source: epics-cycle-5.md
+  # Priority: 24 first → 25a → (25b, 26, 27 parallel) → 28
+  # ==========================================================================
+
+  # Epic 24: DX & Quality Infrastructure
+  # FRs: FR-C5-1, FR-C5-2
+  # Priority: FIRST — prevents recurring bugs
+  epic-24: done
+  24-1-eslint-no-node-imports-in-client: done
+  24-2-dead-button-audit-fix: done
+  epic-24-retrospective: optional
+
+  # Epic 25a: API Backend Wiring
+  # FRs: FR-C5-4, FR-C5-5, FR-C5-6
+  # Priority: Second — backend before frontend
+  epic-25a: backlog
+  25a-1-agent-recovery-api-endpoints: backlog
+  25a-2-jsonl-recommendation-feedback-persistence: backlog
+  25a-3-state-machine-recommendation-full-integration: backlog
+  epic-25a-retrospective: optional
+
+  # Epic 25b: Dashboard Component Wiring
+  # FRs: FR-C5-3
+  # Depends on: Epic 25a
+  epic-25b: backlog
+  25b-1-cascade-detector-dashboard-panel: backlog
+  25b-2-cost-sprint-clock-dashboard: backlog
+  25b-3-conflict-checkpoint-ui: backlog
+  25b-4-project-chat-panel: backlog
+  25b-5-keyboard-shortcut-hook-help-modal: backlog
+  epic-25b-retrospective: optional
+
+  # Epic 26: Command Palette & Agent Profiles
+  # FRs: Brainstorm #24, #70, #128
+  # Parallel with 25b
+  epic-26: backlog
+  26-1-command-palette-cmd-k: backlog
+  26-2-agent-personality-profiles: backlog
+  26-3-story-agent-personality-matching: backlog
+  epic-26-retrospective: optional
+
+  # Epic 27: Multi-User Collaboration (MVP)
+  # FRs: Brainstorm #111, #112, #115
+  # Parallel with 26
+  epic-27: backlog
+  27-1-team-presence: backlog
+  27-2-review-claim-system: backlog
+  27-3-decision-log: backlog
+  epic-27-retrospective: optional
+
+  # Epic 28: SDK & Headless Mode
+  # FRs: Brainstorm #83, #85
+  # Depends on: Epic 25a (stable API)
+  epic-28: backlog
+  28-1-sdk-public-api-surface: backlog
+  28-2-sdk-client-implementation: backlog
+  28-3-headless-daemon-mode: backlog
+  28-4-sdk-documentation-examples: backlog
+  epic-28-retrospective: optional
+
+  # ==========================================================================
+  # CYCLE 6 — Accessibility, Learning, Integrations, Psychology, Collab v2
+  # Source: epics-cycle-6.md
+  # All epics parallelizable (no inter-epic dependencies)
+  # ==========================================================================
+
+  # Epic 29: Accessibility & Inclusive Design
+  # FRs: Brainstorm #151, #153, #154
+  epic-29: backlog
+  29-1-screen-reader-first-agent-status: backlog
+  29-2-high-contrast-mode: backlog
+  29-3-reduced-motion-toggle: backlog
+  29-4-accessibility-audit-wcag-compliance: backlog
+  epic-29-retrospective: optional
+
+  # Epic 30: Compound Learning System
+  # FRs: Brainstorm #43, #50, #56, #176
+  epic-30: backlog
+  30-1-cross-sprint-pattern-detection: backlog
+  30-2-failure-analysis-knowledge-base: backlog
+  30-3-recommendation-improvement-from-feedback: backlog
+  30-4-learning-dashboard-panel: backlog
+  epic-30-retrospective: optional
+
+  # Epic 31: IDE & CI Integrations
+  # FRs: Brainstorm #123, #125, #124
+  epic-31: backlog
+  31-1-vscode-extension-orchestrator-sidebar: backlog
+  31-2-github-action-cicd-orchestration: backlog
+  31-3-git-hook-integration: backlog
+  epic-31-retrospective: optional
+
+  # Epic 32: Developer Psychology & Engagement
+  # FRs: Brainstorm #201, #204, #206
+  epic-32: backlog
+  32-1-flow-state-protector: backlog
+  32-2-celebration-moments: backlog
+  32-3-streak-counter: backlog
+  epic-32-retrospective: optional
+
+  # Epic 33: Multi-User Collaboration v2
+  # FRs: Brainstorm #113, #114, #116 (deferred from Cycle 5 MVP)
+  epic-33: backlog
+  33-1-shared-annotations-on-artifacts: backlog
+  33-2-role-based-agent-ownership: backlog
+  33-3-handoff-protocol: backlog
+  33-4-collaboration-integration-test: backlog
+  epic-33-retrospective: optional
+
 # Known Limitations & Feature Flags
-# Documented interface methods that don't exist but are commonly assumed
 limitations:
-  # Runtime Interface Methods - RESOLVED 2026-03-10
-  # getExitCode() and getSignal() have been added to Runtime interface
-  # Implementation status:
-  # - runtime-process: Full implementation (uses child.exitCode and child.signalCode)
-  # - runtime-tmux: Partial implementation (returns null if alive, undefined if dead - tmux doesn't natively track exit codes)
   runtime-exit-code-detection:
     flag_name: RUNTIME_EXIT_CODE_DETECTION
     limitation: "RESOLVED - Runtime.getExitCode() added to interface (2026-03-10)"
@@ -165,23 +429,14 @@ limitations:
     resolved_in: "2026-03-10"
     affected_stories: "1-6-agent-completion-detection, 1-7-cli-resume-blocked-story"
     epic_reference: "Epic 4 (Error Handling epic)"
-    resolution_notes: |
-      - Added getExitCode() optional method to Runtime interface
-      - Implemented in runtime-process plugin (returns actual exit code)
-      - Implemented in runtime-tmux plugin (returns null if alive, undefined if dead)
   runtime-signal-detection:
     flag_name: RUNTIME_SIGNAL_DETECTION
     limitation: "RESOLVED - Runtime.getSignal() added to interface (2026-03-10)"
     discovered_in: "2-1-2-interface-validation-checklist"
     resolved_in: "2026-03-10"
     epic_reference: "Epic 4 (Error Handling epic)"
-    resolution_notes: |
-      - Added getSignal() optional method to Runtime interface
-      - Implemented in runtime-process plugin (returns actual signal code)
-      - Implemented in runtime-tmux plugin (returns null if alive, undefined if dead)
 
 # Dependency Security Approvals
-# Tracks all approved dependencies with security review status
 dependencies:
   chokidar:
     version: "4.0.3"
@@ -189,650 +444,21 @@ dependencies:
     approved: true
     reviewed_at: "2026-03-09"
     added_in: "Story 2-6 (YAML File Watcher)"
-    review_link: "_bmad/docs/dependency-reviews/chokidar-4.0.3.md"
   proper-lockfile:
     version: "4.1.2"
     license: MIT
     approved: true
     reviewed_at: "2026-03-09"
     added_in: "Story 2-1-7 (File Locking Mechanism)"
-    review_link: "_bmad/docs/dependency-reviews/proper-lockfile-4.1.2.md"
   yaml:
     version: "2.8.2"
     license: ISC
     approved: true
     reviewed_at: "2026-03-09"
     added_in: "Story 2-5 (State Manager Write-Through Cache)"
-    review_link: "_bmad/docs/dependency-reviews/yaml-2.8.2.md"
   zod:
     version: "3.25.76"
     license: MIT
     approved: true
     reviewed_at: "2026-03-09"
     added_in: "Story 2-1-1 (Integration Test Framework)"
-    review_link: "_bmad/docs/dependency-reviews/zod-3.25.76.md"
-
-# ============================================================================
-# ACTION ITEMS FROM RETROSPECTIVES
-# ============================================================================
-# Tracked items identified during epic retrospectives that need follow-up.
-# Priority levels:
-#   - HIGH: Must fix before production deployment
-#   - MEDIUM: Should fix in next release
-#   - LOW: Nice to have, future enhancement
-# Status:
-#   - pending: Not yet started
-#   - in-progress: Currently being worked on
-#   - done: Completed
-# ============================================================================
-
-action_items:
-  # ---------------------------------------------------------------------------
-  # HIGH PRIORITY - Must Fix Before Production
-  # ---------------------------------------------------------------------------
-  high_priority:
-    # Epic 4 Action Items
-    E4-A1:
-      title: "Complete Health Check Service Integration"
-      description: |
-        - Implement actual event bus ping/latency measurement
-        - Add agent registry file availability check
-        - Wire up lifecycle manager integration
-        - Remove fake 0ms latency placeholder
-      epic: 4
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Before production deployment"
-      completed_at: "2026-03-10"
-
-    E4-A2:
-      title: "Update Story 4-1 Task Records"
-      description: |
-        - Mark completed tasks in story file
-        - Add Dev Agent Record section
-        - Document implementation summary
-      epic: 4
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Immediate"
-      completed_at: "2026-03-10"
-
-    E4-A3:
-      title: "Implement Service-Specific DLQ Replay"
-      description: |
-        - Create replay handlers for bmad_sync
-        - Create replay handlers for event_publish
-        - Wire up CLI retry command to handlers
-      epic: 4
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Before production deployment"
-      completed_at: "2026-03-10"
-
-    # Epic 5 Action Items
-    E5-A1:
-      title: "Complete Event Publisher Integration"
-      description: |
-        - Wire up conflict.detected event publishing
-        - Wire up conflict.resolved event publishing
-        - Ensure event bus lifecycle is complete
-        - Test event delivery to subscribers
-      epic: 5
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Before production deployment"
-      completed_at: "2026-03-10"
-
-    E5-A2:
-      title: "Implement Startup Conflict Detection"
-      description: |
-        - Detect existing conflicts on system start
-        - Show startup summary with conflict count
-        - Auto-resolve if configured
-        - Log startup validation results
-      epic: 5
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Before production deployment"
-      completed_at: "2026-03-10"
-
-    E5-A3:
-      title: "Test with All Runtime Plugins"
-      description: |
-        - Verify termination works with runtime-tmux
-        - Verify termination works with runtime-process
-        - Test graceful shutdown scenarios
-        - Document any plugin-specific handling
-      epic: 5
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Before production deployment"
-      completed_at: "2026-03-10"
-      notes: |
-        Verified termination behavior for both runtime plugins:
-        - runtime-process: SIGTERM → SIGKILL (5s timeout), process groups
-        - runtime-tmux: tmux kill-session (immediate)
-        Created TERMINATION.md documentation in runtime-process package.
-
-    # Epic 6 Action Items
-    E6-A1:
-      title: "Implement Permission Prompts in CLI"
-      description: |
-        - Interactive prompt when plugin requests permissions
-        - Show what permissions are being requested
-        - Allow user to grant/deny
-        - Update config with grant decisions
-      epic: 6
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Before production deployment"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented interactive permission prompts using @inquirer/prompts:
-        - Shows permission descriptions during install
-        - Prompts user to grant all or select specific permissions
-        - Added --grant-permissions flag for non-interactive mode
-        - Added getPermissionDescription() helper for human-readable descriptions
-
-    E6-A2:
-      title: "Implement Dependency Checking"
-      description: |
-        - Check plugin dependencies before uninstall
-        - Prevent breaking dependent plugins
-        - Show warning if dependencies exist
-        - Provide force option
-      epic: 6
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Before production deployment"
-      completed_at: "2026-03-10"
-
-    E6-A3:
-      title: "Perform Code Review for Epic 6"
-      description: |
-        - Review all 6 stories for quality issues
-        - Document any findings
-        - Fix any identified problems
-      epic: 6
-      owner: "Alex (QA)"
-      status: done
-      due: "Immediate"
-      completed_at: "2026-03-10"
-
-  # ---------------------------------------------------------------------------
-  # MEDIUM PRIORITY - Should Fix Soon
-  # ---------------------------------------------------------------------------
-  medium_priority:
-    # Epic 4
-    E4-A4:
-      title: "Custom Health Check Rules Engine"
-      description: |
-        - Per-component threshold configuration
-        - Weighted health aggregation
-        - Custom health check function support
-      epic: 4
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Next release"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented health check rules engine in health-check-rules.ts:
-        - Per-component threshold configuration (ComponentThresholds)
-        - Weighted health aggregation with customizable component weights
-        - Critical component support (unhealthy = overall unhealthy)
-        - Custom health check function registration
-        - Health score calculation (0-1 scale)
-        - Configurable healthy/degraded thresholds
-        - CommonHealthRules factory for predefined checks (memory, CPU, event loop, filesystem)
-
-    E4-A5:
-      title: "Error Context Storage"
-      description: |
-        - Store operation context in error logs
-        - Enable automatic retry from error ID
-        - Include operation type and payload
-      epic: 4
-      owner: "Alex (QA)"
-      status: done
-      due: "Next release"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented error context storage in error-logger.ts:
-        - Added operationType and operationPayload to ErrorLogEntry
-        - Added registerRetryHandler() for registering operation-specific handlers
-        - Added retryFromErrorId() to retry operations from stored error context
-        - Added getRetryableErrors() to list errors with retry context
-        - Added retryCount tracking for each error
-        - Handlers wrap simple RetryOperationHandler (returns boolean) to internal RetryHandler
-
-    E4-A6:
-      title: "Metadata Backup Retention"
-      description: |
-        - Implement backup rotation (keep last N)
-        - Configurable retention policy
-        - Automatic cleanup of old backups
-      epic: 4
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Next release"
-      completed_at: "2026-03-10"
-      notes: |
-        Enhanced file-watcher.ts with backup retention:
-        - Added maxBackupAgeMs config option (default: 7 days)
-        - Added cleanupIntervalMs config option (default: 1 hour)
-        - cleanupOldBackups now removes expired backups based on age
-        - Added startPeriodicCleanup() for automatic scheduled cleanup
-        - Added stopPeriodicCleanup() called in close() method
-        - Updated FileWatcherConfig interface with new options
-
-    # Epic 5
-    E5-A4:
-      title: "Extend Audit Trail for Conflict History"
-      description: |
-        - Store conflict events in audit log
-        - Store resolution events in audit log
-        - Enable historical conflict queries
-        - Support time-range filtering
-      epic: 5
-      owner: "Alex (QA)"
-      status: done
-      due: "Next release"
-      completed_at: "2026-03-10"
-      notes: |
-        Extended audit-trail.ts with conflict history support:
-        - Added ConflictHistoryParams and ConflictHistoryEntry interfaces to types.ts
-        - Added queryConflicts() method to AuditTrail interface
-        - Implemented queryConflicts() in AuditTrailImpl:
-          - Queries conflict.detected and conflict.resolved events
-          - Groups events by conflictId
-          - Filters by storyId, agentIds, time range
-          - Returns entries with conflict details and resolution info
-          - Supports limit parameter
-
-    E5-A5:
-      title: "Implement Conflict Pattern Analysis"
-      description: |
-        - Track conflict frequency by story
-        - Identify systemic conflict causes
-        - Generate prevention recommendations
-        - Dashboard trends visualization
-      epic: 5
-      owner: "Sam (PM)"
-      status: done
-      due: "Next release"
-      completed_at: "2026-03-10"
-      notes: |
-        Created conflict-patterns.ts with comprehensive pattern analysis:
-        - ConflictPatternType: 7 pattern types (resource_contention, timing_issue, agent_pairing, story_hotspot, workload_imbalance, priority_confusion, stale_assignment)
-        - analyzePatterns(): Detects all pattern types from conflict history
-        - getFrequencyMetrics(): Returns frequency metrics by story, agent, agent pairs, day of week, hour of day
-        - generateRecommendations(): Creates actionable recommendations for each pattern
-        - getTrendData(): Returns daily trend data for dashboard visualization
-        - getHotspotStories(): Returns most problematic stories
-        - getConflictingAgents(): Returns agents with most conflicts and win rates
-
-    E5-A6:
-      title: "Per-Project Configuration Overrides"
-      description: |
-        - Support project-specific conflict config
-        - Override autoResolve per project
-        - Override tieBreaker per project
-        - Configuration validation
-      epic: 5
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Next release"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented per-project configuration overrides:
-        - Added ProjectConflictConfig interface to types.ts
-        - Added ConfigValidationResult, ConfigValidationError, ConfigValidationWarning interfaces
-        - Extended ConflictResolutionConfig with projectOverrides map
-        - Added new methods to ConflictResolutionService interface:
-          - resolveForProject(conflict, projectId)
-          - canAutoResolveForProject(projectId)
-          - getResolutionStrategyForProject(projectId)
-          - setProjectConfig(config)
-          - getProjectConfig(projectId)
-          - removeProjectConfig(projectId)
-          - validateConfig(config)
-        - Implemented all methods in ConflictResolutionServiceImpl
-        - Added validateProjectConfig() private method
-        - Added mergeWithProjectConfig() private method
-        - Configuration validation includes warnings for potential issues
-
-    # Epic 6
-    E6-A4:
-      title: "Implement Plugin Lifecycle Hooks"
-      description: |
-        - Call init() after loading
-        - Call shutdown() before unloading
-        - Handle errors gracefully
-      epic: 6
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Next release"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented lifecycle hooks in plugin-registry.ts:
-        - Added PluginLifecycle interface with init() and shutdown() methods
-        - Updated PluginModule interface to include optional lifecycle hooks
-        - Added shutdown() and shutdownAll() methods to PluginRegistry
-        - Calls init() asynchronously after registration
-        - Supports both module-level and instance-level lifecycle hooks
-        - Handles errors gracefully without crashing the system
-
-    E6-A5:
-      title: "Implement Plugin Sandboxing"
-      description: |
-        - Run plugins in separate processes
-        - Limit resource access
-        - Implement proper timeouts
-      epic: 6
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Next release"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented plugin sandboxing in plugin-sandbox.ts:
-        - Created PluginSandbox interface for isolated plugin execution
-        - Runs plugins in child processes with restricted permissions
-        - Configurable memory limits (maxMemoryMB), timeouts, and resource access
-        - File system path restrictions (allowedReadPaths, allowedWritePaths)
-        - Network and spawn process restrictions
-        - SandboxManager for managing multiple plugin sandboxes
-        - IPC communication between host and sandbox
-        - Proper timeout handling and error recovery
-        - Resource usage tracking across all sandboxes
-
-    E6-A6:
-      title: "Complete Event Bus Integration"
-      description: |
-        - Connect triggers to event bus
-        - Auto-evaluate on story/event changes
-        - Connect workflow engine to events
-      epic: 6
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Next release"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented event bus integration in event-bus-integration.ts:
-        - Created EventBusIntegration interface for connecting triggers/workflows to events
-        - Event subscription and processing with debouncing
-        - Trigger evaluation on incoming events
-        - Automatic workflow execution when triggers fire
-        - Concurrent workflow execution with configurable limits
-        - Event queue management with processing state
-        - Statistics tracking (events processed, triggers evaluated, workflows executed)
-        - EventFactory helper for creating common event types
-        - storyAttributesFromEvent helper for extracting story data from events
-
-  # ---------------------------------------------------------------------------
-  # LOW PRIORITY - Nice to Have
-  # ---------------------------------------------------------------------------
-  low_priority:
-    # Epic 4
-    E4-A7:
-      title: "Watch Mode SIGKILL Cleanup"
-      description: "Handle SIGKILL for watch mode intervals, prevent orphaned timers"
-      epic: 4
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Future enhancement"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented graceful signal handling in file-watcher.ts:
-        - Static signal handler registration (prevents duplicate handlers)
-        - Handles SIGTERM and SIGINT for graceful cleanup
-        - cleanupSync() for synchronous timer cleanup
-        - Active watchers set for cleanup on signal
-        - Note: SIGKILL cannot be caught in Node.js (by design)
-
-    E4-A8:
-      title: "Health Check Rate Limiting"
-      description: "Prevent health check spam, throttle rapid check requests"
-      epic: 4
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Future enhancement"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented rate limiting in health-check.ts:
-        - minCheckIntervalMs: Minimum time between checks (default 1s)
-        - rateLimitWindowMs: Time window for tracking frequency (default 60s)
-        - maxChecksPerWindow: Max checks per window (default 60)
-        - pruneOldCheckTimestamps() for cleaning old entries
-        - isRateLimited() and getRateLimitStatus() methods
-        - Returns cached status when rate limited
-        - rateLimited and rateLimitMessage fields in HealthCheckResult
-
-    E4-A9:
-      title: "Web Dashboard for Error Management"
-      description: "DLQ viewer in dashboard, health metrics panel enhancement"
-      epic: 4
-      owner: "Alex (QA)"
-      status: done
-      due: "Future enhancement"
-      completed_at: "2026-03-10"
-      notes: |
-        Enhanced DeadLetterQueueViewer component with:
-        - Operation type filtering (dropdown filter)
-        - Individual retry functionality with POST /api/dlq/[errorId]/retry
-        - Retry result display (success/failure feedback)
-        - Integration with replay handlers from @composio/ao-core
-        - Auto-refresh after successful retry
-
-    # Epic 5
-    E5-A7:
-      title: "Conflict Notification Integration"
-      description: "Push notifications on conflict detection/resolution, desktop/slack integration"
-      epic: 5
-      owner: "Alex (QA)"
-      status: done
-      due: "Future enhancement"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented conflict-notification.ts with:
-        - Event bus subscription for conflict.detected and conflict.resolved events
-        - Notification service integration for push notifications
-        - Configurable notification channels (desktop, slack, webhook)
-        - Severity-based filtering (minSeverity threshold)
-        - Optional notification on auto-resolution
-        - Statistics tracking for sent/failed notifications
-
-    E5-A8:
-      title: "Conflict Prevention Metrics"
-      description: "Track conflicts prevented, auto-resolutions, manual resolutions"
-      epic: 5
-      owner: "Sam (PM)"
-      status: done
-      due: "Future enhancement"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented conflict-metrics.ts with:
-        - Record conflict detection, prevention, auto-resolution, manual resolution
-        - Track resolution time (time from detection to resolution)
-        - Calculate prevention rate and auto-resolution rate
-        - Breakdown by severity and resolution type
-        - Export metrics as JSON
-        - Audit trail integration for persistent storage
-
-    E5-A9:
-      title: "Web-Based Conflict Resolution"
-      description: "Allow resolution from dashboard with real-time updates via SSE"
-      epic: 5
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Future enhancement"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented web-based conflict resolution in packages/web:
-        - Created /app/conflicts/page.tsx with full conflict resolution UI
-        - GET /api/conflicts endpoint returning conflict data
-        - POST /api/conflicts/[conflictId] endpoint for resolution actions
-        - Summary cards showing total, pending, resolved, critical counts
-        - Active conflicts list with severity badges and priority scores
-        - Resolution action selector (keep-existing, replace-with-new, manual)
-        - Conflict detail modal with full information
-        - Resolution results display with success feedback
-        - Auto-refresh every 30 seconds
-
-    # Epic 6
-    E6-A7:
-      title: "Plugin Hot-Swap (Reload Individual)"
-      description: "Reload single plugin without full reload, preserve plugin state"
-      epic: 6
-      owner: "Charlie (Senior Dev)"
-      status: done
-      due: "Future enhancement"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented plugin hot-swap in plugin-registry.ts:
-        - reload(slot, name, importFn?) method for reloading individual plugins
-        - State preservation via captureState()/restoreState() pattern
-        - Plugin lifecycle hooks support (init, shutdown, getState, setState)
-        - getPluginState(slot, name) to retrieve preserved state
-        - isRegistered(slot, name) to check registration status
-        - Module cache clearing for proper hot-reload
-        - Config and package path tracking for reload
-        - Updated test mocks with new methods
-
-    E6-A8:
-      title: "Plugin Version Compatibility Matrix"
-      description: "Document version compatibility, show warnings for incompatible versions"
-      epic: 6
-      owner: "Sam (PM)"
-      status: done
-      due: "Future enhancement"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented plugin-version-compatibility.ts with:
-        - Semantic version parsing and comparison (compareVersions, parseSemver)
-        - isValidSemver() for version format validation
-        - CompatibilityStatus types: compatible, warning, incompatible, deprecated, unknown
-        - CompatibilityRange interface with min/max/deprecated/knownIssues
-        - PluginCompatibilityEntry for registering plugin compatibility
-        - Built-in plugins registered with known compatibility ranges
-        - check(pluginName, version) returns full CompatibilityResult
-        - isDeprecated(pluginName, version) for deprecation detection
-        - getRecommendedVersion(pluginName) for upgrade guidance
-        - register() for adding new plugin entries
-        - 19 unit tests covering all scenarios
-
-    E6-A9:
-      title: "Plugin Marketplace/Registry"
-      description: "Integrate with public plugin registry, search/install from marketplace"
-      epic: 6
-      owner: "Sam (PM)"
-      status: done
-      due: "Future enhancement"
-      completed_at: "2026-03-10"
-      notes: |
-        Implemented plugin-marketplace.ts with:
-        - PluginCategory types: runtime, agent, workspace, tracker, scm, notifier, terminal, integration, utility
-        - PluginRating and PluginReview interfaces
-        - MarketplacePlugin interface with full metadata
-        - MarketplaceSearchOptions with query, category, tag, sortBy, featured, verified filters
-        - search(options) with relevance, downloads, rating, recent sorting
-        - getPlugin(name) for individual plugin details
-        - getReviews(name, limit) for plugin reviews
-        - getFeatured() for featured plugins list
-        - getByCategory(category) for category browsing
-        - getPopular() and getRecentlyUpdated() for discovery
-        - getCategories() and getTags() for navigation
-        - Configurable cache TTL for performance
-        - Mock ratings data for built-in plugins
-
-  # ---------------------------------------------------------------------------
-  # SUMMARY
-  # ---------------------------------------------------------------------------
-  summary:
-    total_items: 27
-    by_priority:
-      high: 9
-      medium: 9
-      low: 9
-    by_epic:
-      epic_4: 9
-      epic_5: 9
-      epic_6: 9
-    by_status:
-      pending: 0
-      in_progress: 0
-      done: 27
-    notes: |
-      ALL ACTION ITEMS COMPLETED as of 2026-03-10.
-      All HIGH, MEDIUM, and LOW priority items are now done.
-      Project retrospectives complete for all 10 epics.
-
-  # ---------------------------------------------------------------------------
-  # WORKFLOW DASHBOARD ACTION ITEMS (Epics 7-10 Retrospectives)
-  # ---------------------------------------------------------------------------
-  workflow_dashboard:
-    WD-A1:
-      title: "Document vi.hoisted() mock pattern"
-      description: "Document test convention with copy-paste example"
-      epic: 7
-      owner: "Charlie (Senior Dev)"
-      status: done
-      completed_at: "2026-03-15"
-      notes: "Documented in docs/TESTING-CONVENTIONS.md"
-
-    WD-A2:
-      title: "Establish test precision standard"
-      description: "Standard covers differentiated mock states, realistic error types, shape assertions"
-      epic: 7
-      owner: "Dana (QA Engineer)"
-      status: done
-      completed_at: "2026-03-15"
-      notes: "Documented in docs/TESTING-CONVENTIONS.md — Test Precision Standard section"
-
-    WD-A3:
-      title: "Document describe.skipIf integration test pattern"
-      description: "Pattern for environment-dependent tests"
-      epic: 7
-      owner: "Charlie (Senior Dev)"
-      status: done
-      completed_at: "2026-03-15"
-      notes: "Documented in docs/TESTING-CONVENTIONS.md"
-
-    WD-A4:
-      title: "Document component pattern from PhaseBar"
-      description: "Props-only pattern, semantic HTML, ARIA labels, loading/empty states"
-      epic: 7
-      owner: "Elena (Junior Dev)"
-      status: done
-      completed_at: "2026-03-15"
-      notes: "Documented in docs/TESTING-CONVENTIONS.md — Component Test Patterns section"
-
-    WD-A5:
-      title: "Fix hasType() substring false-positive"
-      description: "buildContext() uses segment-start regex instead of .includes()"
-      epic: 8
-      owner: "Charlie (Senior Dev)"
-      status: done
-      completed_at: "2026-03-15"
-      notes: |
-        Changed hasType() in recommendation-engine.ts from .includes() to
-        segment-start regex: (?:^|[._\-\s])pattern (case-insensitive).
-        Prevents "debriefing" matching "brief" while allowing "epics" to match "epic".
-        All 19 recommendation engine tests pass.
-
-    WD-A6:
-      title: "Document 'count your columns' verification"
-      description: "DOM structure verification for table components"
-      epic: 9
-      owner: "Dana (QA Engineer)"
-      status: done
-      completed_at: "2026-03-15"
-      notes: "Documented in docs/TESTING-CONVENTIONS.md — DOM Structure Verification section"
-
-    WD-A7:
-      title: "Document WD-7 three-layer error resilience pattern"
-      description: "Reusable architecture pattern for dashboards backed by file system reads"
-      epic: 10
-      owner: "Charlie (Senior Dev)"
-      status: done
-      completed_at: "2026-03-15"
-      notes: "Documented in docs/TESTING-CONVENTIONS.md — Architecture section"

@@ -45,6 +45,8 @@ const RULES: Rule[] = [
         observation: "No BMAD artifacts detected in this project",
         implication: "Starting with analysis phase would establish project foundations",
         phase: "analysis",
+        reasoning: "No artifacts found in any BMAD phase (R1)",
+        blockers: [],
       };
     },
   },
@@ -57,6 +59,8 @@ const RULES: Rule[] = [
         observation: "No product brief found",
         implication: "A product brief captures core project vision and constraints",
         phase: "analysis",
+        reasoning: "Product brief not found in analysis artifacts (R2)",
+        blockers: [{ guardId: "has-brief", description: "Product brief exists", satisfied: false }],
       };
     },
   },
@@ -69,6 +73,11 @@ const RULES: Rule[] = [
         observation: "Product brief present. No PRD found",
         implication: "A PRD translates the brief into detailed requirements",
         phase: "planning",
+        reasoning: "PRD not found in planning artifacts (R3)",
+        blockers: [
+          { guardId: "has-brief", description: "Product brief exists", satisfied: true },
+          { guardId: "has-prd", description: "PRD exists", satisfied: false },
+        ],
       };
     },
   },
@@ -81,6 +90,15 @@ const RULES: Rule[] = [
         observation: "PRD present. Architecture spec not found",
         implication: "Architecture decisions guide consistent implementation",
         phase: "solutioning",
+        reasoning: "Architecture document not found in solutioning artifacts (R4)",
+        blockers: [
+          { guardId: "has-prd", description: "PRD exists", satisfied: true },
+          {
+            guardId: "has-architecture",
+            description: "Architecture document exists",
+            satisfied: false,
+          },
+        ],
       };
     },
   },
@@ -93,6 +111,19 @@ const RULES: Rule[] = [
         observation: "Architecture spec present. No epic or story files found",
         implication: "Epics break requirements into implementable stories",
         phase: "solutioning",
+        reasoning: "Epics document not found in solutioning artifacts (R5)",
+        blockers: [
+          {
+            guardId: "has-architecture",
+            description: "Architecture document exists",
+            satisfied: true,
+          },
+          {
+            guardId: "has-epics",
+            description: "Epics & stories document exists",
+            satisfied: false,
+          },
+        ],
       };
     },
   },
@@ -106,6 +137,17 @@ const RULES: Rule[] = [
         observation: "All solutioning artifacts present. Implementation phase active",
         implication: "Sprint execution is underway",
         phase: "implementation",
+        reasoning: "All prerequisite artifacts present, implementation phase is active (R6)",
+        blockers: [
+          { guardId: "has-brief", description: "Product brief exists", satisfied: true },
+          { guardId: "has-prd", description: "PRD exists", satisfied: true },
+          {
+            guardId: "has-architecture",
+            description: "Architecture document exists",
+            satisfied: true,
+          },
+          { guardId: "has-epics", description: "Epics & stories document exists", satisfied: true },
+        ],
       };
     },
   },

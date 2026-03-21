@@ -305,7 +305,14 @@ describe("getRecommendation", () => {
       );
       expect(result).not.toBeNull();
       const keys = Object.keys(result!).sort();
-      expect(keys).toEqual(["implication", "observation", "phase", "tier"]);
+      expect(keys).toEqual([
+        "blockers",
+        "implication",
+        "observation",
+        "phase",
+        "reasoning",
+        "tier",
+      ]);
       expect(typeof result!.tier).toBe("number");
       expect(typeof result!.observation).toBe("string");
       expect(typeof result!.implication).toBe("string");

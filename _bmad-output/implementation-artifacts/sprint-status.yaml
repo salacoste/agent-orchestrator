@@ -326,10 +326,10 @@ previous_cycle:
   # Epic 25a: API Backend Wiring
   # FRs: FR-C5-4, FR-C5-5, FR-C5-6
   # Priority: Second — backend before frontend
-  epic-25a: in-progress
+  epic-25a: done
   25a-1-agent-recovery-api-endpoints: done
   25a-2-jsonl-recommendation-feedback-persistence: done
-  25a-3-state-machine-recommendation-full-integration: backlog
+  25a-3-state-machine-recommendation-full-integration: done
   epic-25a-retrospective: optional
 
   # Epic 25b: Dashboard Component Wiring

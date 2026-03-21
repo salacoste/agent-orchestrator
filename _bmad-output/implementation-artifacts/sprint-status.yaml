@@ -364,11 +364,11 @@ previous_cycle:
   # Epic 28: SDK & Headless Mode
   # FRs: Brainstorm #83, #85
   # Depends on: Epic 25a (stable API)
-  epic-28: backlog
-  28-1-sdk-public-api-surface: backlog
-  28-2-sdk-client-implementation: backlog
-  28-3-headless-daemon-mode: backlog
-  28-4-sdk-documentation-examples: backlog
+  epic-28: done
+  28-1-sdk-public-api-surface: done
+  28-2-sdk-client-implementation: done
+  28-3-headless-daemon-mode: done
+  28-4-sdk-documentation-examples: done
   epic-28-retrospective: optional
 
   # ==========================================================================

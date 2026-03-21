@@ -428,7 +428,7 @@ previous_cycle:
   # Epic 34: SDK Package & Production Wiring
   epic-34: in-progress
   34-1-create-packages-sdk-workspace: done
-  34-2-sdk-integration-tests: backlog
+  34-2-sdk-integration-tests: done
   34-3-sdk-readme-quickstart: backlog
   epic-34-retrospective: optional
 

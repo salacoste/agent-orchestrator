@@ -149,7 +149,8 @@ export function createOrchestrator(config: OrchestratorConfig): AgentOrchestrato
 
     onEvent(_eventType, _handler) {
       // SSE subscription — full implementation requires EventSource
-      // Stub: returns no-op unsubscribe
+      // TODO(Story 34.2): Implement SSE via EventSource when available
+      console.warn("[@composio/ao-sdk] onEvent is not yet implemented — SSE subscription pending");
       return () => {};
     },
 

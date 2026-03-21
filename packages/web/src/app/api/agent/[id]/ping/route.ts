@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  * Checks agent session liveness and returns current status.
  * Used by the recovery action buttons in AgentSessionCard.
  */
-export async function POST(
+export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {

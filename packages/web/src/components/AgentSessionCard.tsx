@@ -327,7 +327,7 @@ export default function AgentSessionCard({ agentId, onClose }: AgentSessionCardP
                         className="px-2.5 py-1 text-[11px] font-medium rounded border border-[var(--color-border-default)] hover:bg-[var(--color-bg-hover)] transition-colors"
                         data-testid="recovery-ping"
                         onClick={() => {
-                          fetch(`/api/agent/${agentId}/ping`, { method: "POST" }).catch(() => {});
+                          fetch(`/api/agent/${agentId}/ping`).catch(() => {});
                         }}
                       >
                         Ping

@@ -36,7 +36,9 @@ export async function POST(
     return NextResponse.json({
       success: true,
       agentId,
-      message: `Agent ${agentId} killed. Respawn with context pending full SessionManager integration.`,
+      action: "killed",
+      respawnPending: true,
+      message: `Agent ${agentId} terminated. Auto-respawn requires full SessionManager integration — manually respawn via CLI: ao spawn --story <storyId>`,
       previousStatus: session.status,
     });
   } catch (err) {

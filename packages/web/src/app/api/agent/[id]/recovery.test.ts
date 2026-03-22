@@ -200,11 +200,35 @@ describe("POST /api/agent/[id]/resume (Story 38.4)", () => {
     expect(data.success).toBe(true);
   });
 
-  it("handles restore failure with 409", async () => {
+  it("resumes changes_requested agent", async () => {
+    mockGet.mockResolvedValueOnce({ status: "changes_requested" });
+    mockRestore.mockResolvedValueOnce({ id: "agent-1", status: "working" });
+
+    const res = await resumeHandler(makeRequest() as never, makeParams("agent-1"));
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(data.previousStatus).toBe("changes_requested");
+  });
+
+  it("handles restore failure with 409 via error.name", async () => {
     mockGet.mockResolvedValueOnce({ status: "blocked" });
-    mockRestore.mockRejectedValueOnce(new Error("Session not restorable"));
+    const err = new Error("Session agent-1 cannot be restored: status is merged");
+    err.name = "SessionNotRestorableError";
+    mockRestore.mockRejectedValueOnce(err);
 
     const res = await resumeHandler(makeRequest() as never, makeParams("agent-1"));
     expect(res.status).toBe(409);
+  });
+
+  it("handles workspace missing with 422 via error.name", async () => {
+    mockGet.mockResolvedValueOnce({ status: "blocked" });
+    const err = new Error("Workspace missing at /tmp/worktree");
+    err.name = "WorkspaceMissingError";
+    mockRestore.mockRejectedValueOnce(err);
+
+    const res = await resumeHandler(makeRequest() as never, makeParams("agent-1"));
+    expect(res.status).toBe(422);
   });
 });

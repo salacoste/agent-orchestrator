@@ -4,6 +4,9 @@ import { getServices } from "@/lib/services";
 
 export const dynamic = "force-dynamic";
 
+/** Statuses that allow resume — module-level constant to avoid per-request allocation. */
+const RESUMABLE_STATUSES = new Set(["blocked", "ci_failed", "changes_requested"]);
+
 /**
  * POST /api/agent/[id]/resume — Resume a blocked agent (Story 38.4)
  *
@@ -31,8 +34,7 @@ export async function POST(
     }
 
     // Check if agent is in a resumable state
-    const resumableStatuses = new Set(["blocked", "ci_failed", "changes_requested"]);
-    if (!resumableStatuses.has(session.status)) {
+    if (!RESUMABLE_STATUSES.has(session.status)) {
       return NextResponse.json(
         {
           success: false,
@@ -46,8 +48,10 @@ export async function POST(
     // Parse optional user message from request body
     let userMessage: string | undefined;
     try {
-      const body = (await request.json()) as { message?: string };
-      userMessage = body.message;
+      const body = (await request.json()) as Record<string, unknown>;
+      if (typeof body.message === "string") {
+        userMessage = body.message;
+      }
     } catch {
       // No body or invalid JSON — proceed without message
     }
@@ -74,11 +78,11 @@ export async function POST(
   } catch (err) {
     const error = err as Error;
 
-    // Handle specific error types from session manager
-    if (error.message.includes("not restorable") || error.message.includes("Not restorable")) {
+    // Handle specific error classes from session manager
+    if (error.name === "SessionNotRestorableError") {
       return NextResponse.json({ success: false, error: error.message }, { status: 409 });
     }
-    if (error.message.includes("Workspace missing")) {
+    if (error.name === "WorkspaceMissingError") {
       return NextResponse.json(
         { success: false, error: `Workspace missing for agent ${agentId}: ${error.message}` },
         { status: 422 },

@@ -6,6 +6,7 @@
 import type { CircuitBreakerManager } from "./circuit-breaker-manager.js";
 import type { DegradedModeService } from "./degraded-mode.js";
 import type { LearningStore } from "./learning-store.js";
+import type { SpawnQueue } from "./spawn-queue.js";
 import type { BMADTracker, EventPublisher } from "./types.js";
 
 interface ServiceRegistry {
@@ -14,6 +15,7 @@ interface ServiceRegistry {
   bmadTracker?: BMADTracker;
   circuitBreakerManager?: CircuitBreakerManager;
   learningStore?: LearningStore;
+  spawnQueue?: SpawnQueue;
 }
 
 // Global registry instance
@@ -96,6 +98,16 @@ export function registerLearningStore(store: LearningStore): void {
  */
 export function getLearningStore(): LearningStore | undefined {
   return registry.learningStore;
+}
+
+/** Register the SpawnQueue instance (Story 43.3). */
+export function registerSpawnQueue(queue: SpawnQueue): void {
+  registry.spawnQueue = queue;
+}
+
+/** Get the registered SpawnQueue instance. */
+export function getSpawnQueue(): SpawnQueue | undefined {
+  return registry.spawnQueue;
 }
 
 /**

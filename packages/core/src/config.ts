@@ -133,6 +133,7 @@ const OrchestratorConfigSchema = z.object({
   defaults: DefaultPluginsSchema.default({}),
   health: HealthConfigSchema.optional(),
   workflow: WorkflowConfigSchema.optional(),
+  maxConcurrentAgents: z.number().int().positive().optional(),
   projects: z.record(ProjectConfigSchema),
   notifiers: z.record(NotifierConfigSchema).default({}),
   notificationRouting: z.record(z.array(z.string())).default({

@@ -274,8 +274,14 @@ export {
   getCircuitBreakerManager,
   registerLearningStore,
   getLearningStore,
+  registerSpawnQueue,
+  getSpawnQueue,
   clearServiceRegistry,
 } from "./service-registry.js";
+
+// Spawn Queue — WIP-limited agent spawning (Story 43.3)
+export { createSpawnQueue } from "./spawn-queue.js";
+export type { SpawnQueue, SpawnQueueState, SpawnQueueConfig } from "./spawn-queue.js";
 
 // Dead Letter Queue — persistent storage for failed operations
 export { createDeadLetterQueue } from "./dead-letter-queue.js";

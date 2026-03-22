@@ -521,8 +521,8 @@ previous_cycle:
   # Epic 43: Autonomous Pipeline
   # Autopilot, forecasting, WIP limits, queue, loop detection, scope creep
   # Build order: 43.3 → 43.1 → [43.2, 43.5, 43.6] → 43.4 → [43.7, 43.8]
-  epic-43: backlog
-  43-3-wip-limits-spawn-queue: backlog
+  epic-43: in-progress
+  43-3-wip-limits-spawn-queue: done
   43-1-autopilot-mode: backlog
   43-2-sprint-forecaster: backlog
   43-5-infinite-loop-detector: backlog

@@ -905,6 +905,9 @@ export interface OrchestratorConfig {
 
   /** BMAD workflow configuration (Story 16.3). Omit for default BMAD workflow. */
   workflow?: WorkflowConfig;
+
+  /** Maximum concurrent running agents. Omit for unlimited. (Story 43.3) */
+  maxConcurrentAgents?: number;
 }
 
 /**

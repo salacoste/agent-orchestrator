@@ -287,6 +287,10 @@ export type { SpawnQueue, SpawnQueueState, SpawnQueueConfig } from "./spawn-queu
 export { computeForecast } from "./sprint-forecaster.js";
 export type { SprintForecast, BacklogStory, ConfidenceLevel } from "./sprint-forecaster.js";
 
+// Loop Detector — agent restart cycle breaker (Story 43.5)
+export { createLoopDetector } from "./loop-detector.js";
+export type { LoopDetector, LoopStatus } from "./loop-detector.js";
+
 // Autopilot — supervised workflow advancement (Story 43.1)
 export { createAutopilot } from "./autopilot.js";
 export type {

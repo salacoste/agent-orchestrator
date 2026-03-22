@@ -501,8 +501,8 @@ previous_cycle:
 
   # Epic 42: Spec-to-Implementation Completion
   # Implement all spec-only stories from Cycles 6-7
-  epic-42: backlog
-  42-1-shared-annotation-ui-component: backlog
+  epic-42: in-progress
+  42-1-shared-annotation-ui-component: done
   42-2-role-based-agent-ownership-ui: backlog
   42-3-handoff-protocol-implementation: backlog
   42-4-dead-button-eslint-rule: backlog

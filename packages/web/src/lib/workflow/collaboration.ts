@@ -139,6 +139,43 @@ export function getRecentDecisions(count: number): Decision[] {
 }
 
 // ---------------------------------------------------------------------------
+// Story 42.1: Shared Annotations
+// ---------------------------------------------------------------------------
+
+/** An annotation on an artifact. */
+export interface Annotation {
+  id: string;
+  artifactId: string;
+  author: string;
+  text: string;
+  timestamp: string;
+}
+
+const annotations: Annotation[] = [];
+
+/** Add an annotation to an artifact. */
+export function addAnnotation(annotation: Omit<Annotation, "id" | "timestamp">): Annotation {
+  const entry: Annotation = {
+    ...annotation,
+    id: `annotation-${annotations.length + 1}`,
+    timestamp: new Date().toISOString(),
+  };
+  annotations.push(entry);
+  notify({ type: "annotation", action: "add", data: entry, timestamp: entry.timestamp });
+  return entry;
+}
+
+/** Get all annotations for a specific artifact. */
+export function getAnnotations(artifactId: string): Annotation[] {
+  return annotations.filter((a) => a.artifactId === artifactId);
+}
+
+/** Get all annotations. */
+export function getAllAnnotations(): readonly Annotation[] {
+  return annotations;
+}
+
+// ---------------------------------------------------------------------------
 // Story 39.1: Change Broadcasting
 // ---------------------------------------------------------------------------
 
@@ -146,7 +183,8 @@ export function getRecentDecisions(count: number): Decision[] {
 export type CollaborationEvent =
   | { type: "presence"; action: "update" | "remove"; data: UserPresence; timestamp: string }
   | { type: "claim"; action: "claim" | "unclaim"; data: ReviewClaim; timestamp: string }
-  | { type: "decision"; action: "log"; data: Decision; timestamp: string };
+  | { type: "decision"; action: "log"; data: Decision; timestamp: string }
+  | { type: "annotation"; action: "add"; data: Annotation; timestamp: string };
 
 export type CollaborationSubscriber = (event: CollaborationEvent) => void;
 
@@ -180,5 +218,6 @@ export function _resetCollaboration(): void {
   presenceMap.clear();
   claims.clear();
   decisions.length = 0;
+  annotations.length = 0;
   subscribers.clear();
 }

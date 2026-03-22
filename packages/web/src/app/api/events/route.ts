@@ -3,7 +3,7 @@ import { sessionToDashboard } from "@/lib/serialize";
 import { getAttentionLevel } from "@/lib/types";
 import { subscribeWorkflowChanges } from "@/lib/workflow-watcher";
 import { subscribeCollaborationChanges } from "@/lib/workflow/collaboration";
-import { createWiredCascadeDetector } from "@/lib/workflow/cascade-detector-wired";
+import { getSharedCascadeDetector } from "@/lib/workflow/cascade-detector-shared";
 import { buildPhasePresence, scanAllArtifacts } from "@/lib/workflow/scan-artifacts";
 import { computePhaseStates } from "@/lib/workflow/compute-state";
 import type { PhaseEntry } from "@/lib/workflow/types";
@@ -28,8 +28,8 @@ export async function GET(): Promise<Response> {
   // Track previous phase states for transition detection (Story 16.5)
   let prevPhases: PhaseEntry[] | null = null;
 
-  // Cascade failure detector — auto-records from session snapshots (Story 39.3)
-  const cascadeDetector = createWiredCascadeDetector();
+  // Shared cascade detector — accessible by both SSE route and resume endpoint (Story 40.1)
+  const cascadeDetector = getSharedCascadeDetector();
 
   const stream = new ReadableStream({
     start(controller) {

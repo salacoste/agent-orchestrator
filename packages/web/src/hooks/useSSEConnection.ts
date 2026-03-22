@@ -7,6 +7,7 @@ export interface SSEEventHandlers {
   onStoryCompleted?: (data: { storyId: string }) => void;
   onStoryBlocked?: (data: { storyId: string; reason: string }) => void;
   onAgentStatusChanged?: (data: { agentId: string; status: string }) => void;
+  onCascadeTriggered?: (data: { failureCount: number }) => void;
   onReconnected?: () => void;
 }
 
@@ -74,6 +75,9 @@ export function useSSEConnection(handlers?: SSEEventHandlers, options?: UseSSECo
             handlersRef.current?.onAgentStatusChanged?.(
               data.data as { agentId: string; status: string },
             );
+            break;
+          case "cascade.triggered":
+            handlersRef.current?.onCascadeTriggered?.(data as unknown as { failureCount: number });
             break;
         }
       } catch {

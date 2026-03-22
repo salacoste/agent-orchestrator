@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 
+import { useCascadeStatus } from "@/hooks/useCascadeStatus";
 import { CascadeAlert } from "@/components/CascadeAlert";
 import { ConflictCheckpointPanel } from "@/components/ConflictCheckpointPanel";
 import { ProjectChatPanel } from "@/components/ProjectChatPanel";
@@ -34,6 +35,8 @@ function buildPresenceFromPhases(phases: WorkflowResponse["phases"]): Record<Pha
 }
 
 export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
+  const { status: cascadeStatus, resume: cascadeResume } = useCascadeStatus();
+
   const nudges = useMemo(
     () => detectAntiPatterns(data.artifacts, data.phases, buildPresenceFromPhases(data.phases)),
     [data.artifacts, data.phases],
@@ -53,7 +56,7 @@ export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
 
       {/* Row 2: Alerts (full width, conditional) */}
       <div className="md:col-span-3">
-        <CascadeAlert status={null} />
+        <CascadeAlert status={cascadeStatus} onResume={cascadeResume} />
       </div>
       {nudges.length > 0 && (
         <div className="md:col-span-3 space-y-2" data-testid="anti-pattern-nudges">

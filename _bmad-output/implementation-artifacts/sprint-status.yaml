@@ -483,17 +483,17 @@ previous_cycle:
 
   # Epic 40: Dashboard Real Data Integration
   # Wire placeholder components to actual data sources
-  epic-40: in-progress
+  epic-40: done
   40-1-cascade-alert-real-status: done
   40-2-sprint-cost-panel-real-token-data: done
   40-3-conflict-checkpoint-panel-real-git-data: done
-  40-4-project-chat-panel-llm-integration: review
+  40-4-project-chat-panel-llm-integration: done
   epic-40-retrospective: optional
 
   # Epic 41: SDK & Integration Completion
   # SSE client, VS Code testing, GitHub Action CI, git hook installation
-  epic-41: backlog
-  41-1-sdk-eventsource-sse-client: backlog
+  epic-41: in-progress
+  41-1-sdk-eventsource-sse-client: review
   41-2-vscode-extension-vsce-package-testing: backlog
   41-3-github-action-ci-workflow-testing: backlog
   41-4-git-hook-installation-command: backlog

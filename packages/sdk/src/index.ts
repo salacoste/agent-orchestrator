@@ -128,6 +128,59 @@ export function createOrchestrator(config: OrchestratorConfig): AgentOrchestrato
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // SSE Event Subscription (Story 41.1)
+  // ---------------------------------------------------------------------------
+  let eventSource: EventSource | null = null;
+  const handlers = new Map<string, Set<EventHandler>>();
+
+  /** Lazily connect EventSource on first onEvent call. */
+  function ensureSSE(): void {
+    if (eventSource) return;
+    if (typeof EventSource === "undefined") {
+      // eslint-disable-next-line no-console
+      console.warn("[@composio/ao-sdk] EventSource not available — SSE events disabled");
+      return;
+    }
+    eventSource = new EventSource(`${baseUrl}/api/events`);
+    eventSource.onmessage = (msg: MessageEvent) => {
+      try {
+        const parsed = JSON.parse(msg.data as string) as { type?: string };
+        if (!parsed.type) return;
+        const typeHandlers = handlers.get(parsed.type);
+        if (typeHandlers) {
+          const event: OrchestratorEvent = {
+            type: parsed.type as EventType,
+            timestamp:
+              ((parsed as Record<string, unknown>).timestamp as string) ?? new Date().toISOString(),
+            data: parsed as Record<string, unknown>,
+          };
+          for (const handler of typeHandlers) {
+            try {
+              handler(event);
+            } catch {
+              // Handler errors are non-fatal
+            }
+          }
+        }
+      } catch {
+        // Malformed SSE message — ignore
+      }
+    };
+  }
+
+  /** Close SSE if no handlers remain. */
+  function maybeCloseSSE(): void {
+    let totalHandlers = 0;
+    for (const set of handlers.values()) {
+      totalHandlers += set.size;
+    }
+    if (totalHandlers === 0 && eventSource) {
+      eventSource.close();
+      eventSource = null;
+    }
+  }
+
   return {
     async spawn(spawnConfig) {
       return fetchJSON<{ sessionId: string }>("/api/sessions", {
@@ -147,11 +200,21 @@ export function createOrchestrator(config: OrchestratorConfig): AgentOrchestrato
       return data.recommendation;
     },
 
-    onEvent(_eventType, _handler) {
-      // SSE subscription — full implementation requires EventSource
-      // TODO(Story 34.2): Implement SSE via EventSource when available
-      console.warn("[@composio/ao-sdk] onEvent is not yet implemented — SSE subscription pending");
-      return () => {};
+    onEvent(eventType, handler) {
+      ensureSSE();
+      if (!handlers.has(eventType)) {
+        handlers.set(eventType, new Set());
+      }
+      handlers.get(eventType)!.add(handler);
+
+      return () => {
+        const set = handlers.get(eventType);
+        if (set) {
+          set.delete(handler);
+          if (set.size === 0) handlers.delete(eventType);
+        }
+        maybeCloseSSE();
+      };
     },
 
     async listSessions() {
@@ -160,7 +223,11 @@ export function createOrchestrator(config: OrchestratorConfig): AgentOrchestrato
     },
 
     disconnect() {
-      // Clean up SSE connections when implemented
+      handlers.clear();
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
     },
   };
 }

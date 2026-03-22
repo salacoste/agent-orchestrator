@@ -122,6 +122,19 @@ describe("GitHub Action run()", () => {
       expect(core.setFailed).toHaveBeenCalledWith(expect.stringContaining("Unknown command"));
     });
 
+    it("fails on non-ok HTTP response", async () => {
+      const core = createMockCore({
+        command: "spawn",
+        "ao-url": "http://localhost:5000",
+        "story-id": "S-1",
+      });
+      mockFetch.mockReturnValueOnce(Promise.resolve({ ok: false, status: 500 }));
+
+      await run(core);
+
+      expect(core.setFailed).toHaveBeenCalledWith(expect.stringContaining("500"));
+    });
+
     it("fails on API error", async () => {
       const core = createMockCore({
         command: "spawn",

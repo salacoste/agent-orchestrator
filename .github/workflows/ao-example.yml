@@ -24,8 +24,8 @@ jobs:
         uses: ./packages/github-action
         id: ao
         with:
-          command: ${{ github.event.inputs.command }}
-          story-id: ${{ github.event.inputs.story-id }}
+          command: ${{ inputs.command }}
+          story-id: ${{ inputs.story-id }}
           project-id: default
           ao-url: ${{ secrets.AO_URL }}
           ao-api-key: ${{ secrets.AO_API_KEY }}

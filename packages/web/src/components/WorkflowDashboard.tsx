@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useCascadeStatus } from "@/hooks/useCascadeStatus";
 import { useSprintCost } from "@/hooks/useSprintCost";
 import { useConflictCheckpoint } from "@/hooks/useConflictCheckpoint";
+import { useProjectChat } from "@/hooks/useProjectChat";
 import { CascadeAlert } from "@/components/CascadeAlert";
 import { ConflictCheckpointPanel } from "@/components/ConflictCheckpointPanel";
 import { ProjectChatPanel } from "@/components/ProjectChatPanel";
@@ -40,6 +41,7 @@ export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
   const { status: cascadeStatus, resume: cascadeResume } = useCascadeStatus();
   const { cost: sprintCost, clock: sprintClock } = useSprintCost();
   const { conflicts, timeline } = useConflictCheckpoint();
+  const { messages: chatMessages, sendMessage: chatSend } = useProjectChat();
 
   const nudges = useMemo(
     () => detectAntiPatterns(data.artifacts, data.phases, buildPresenceFromPhases(data.phases)),
@@ -107,7 +109,17 @@ export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
 
       {/* Row 6: Chat panel (full width) */}
       <div className="md:col-span-3">
-        <ProjectChatPanel insights={insights} />
+        <ProjectChatPanel
+          insights={[
+            ...insights,
+            ...chatMessages.map((m, i) => ({
+              id: `chat-${i}`,
+              text: `${m.role === "user" ? "You" : "Assistant"}: ${m.content}`,
+              severity: "info" as const,
+            })),
+          ]}
+          onAskQuestion={chatSend}
+        />
       </div>
     </div>
   );

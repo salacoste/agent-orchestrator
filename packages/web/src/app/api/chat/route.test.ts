@@ -1,11 +1,20 @@
 /**
  * POST /api/chat — Project chat API tests (Story 40.4).
  */
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
-// Mock fetch for Anthropic API calls
-const originalFetch = globalThis.fetch;
+// Mock external fetch for Anthropic API calls
 const mockExternalFetch = vi.fn();
+
+vi.mock("@/lib/services", () => ({
+  getServices: vi.fn().mockResolvedValue({
+    sessionManager: {
+      list: vi
+        .fn()
+        .mockResolvedValue([{ status: "working" }, { status: "merged" }, { status: "working" }]),
+    },
+  }),
+}));
 
 vi.mock("@/lib/workflow/project-context-aggregator", () => ({
   aggregateProjectContext: () => ({
@@ -31,8 +40,11 @@ function makeRequest(body: unknown): Request {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // Remove API key by default
   delete process.env.ANTHROPIC_API_KEY;
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
 });
 
 describe("POST /api/chat", () => {
@@ -60,9 +72,7 @@ describe("POST /api/chat", () => {
 
   it("calls Anthropic API when key is configured", async () => {
     process.env.ANTHROPIC_API_KEY = "test-key-123";
-
-    // Mock the global fetch for Anthropic API call
-    globalThis.fetch = mockExternalFetch;
+    vi.stubGlobal("fetch", mockExternalFetch);
     mockExternalFetch.mockResolvedValueOnce({
       ok: true,
       json: () =>
@@ -78,20 +88,17 @@ describe("POST /api/chat", () => {
     expect(data.fallback).toBeUndefined();
     expect(mockExternalFetch).toHaveBeenCalledWith(
       "https://api.anthropic.com/v1/messages",
-      expect.objectContaining({ method: "POST" }),
+      expect.objectContaining({ method: "POST", signal: expect.any(AbortSignal) }),
     );
-
-    globalThis.fetch = originalFetch;
   });
 
-  it("handles Anthropic API error gracefully", async () => {
+  it("handles Anthropic API error without leaking details", async () => {
     process.env.ANTHROPIC_API_KEY = "test-key-123";
-
-    globalThis.fetch = mockExternalFetch;
+    vi.stubGlobal("fetch", mockExternalFetch);
     mockExternalFetch.mockResolvedValueOnce({
       ok: false,
       status: 401,
-      text: () => Promise.resolve("Invalid API key"),
+      text: () => Promise.resolve("Sensitive: Invalid API key sk-ant-xxx"),
     });
 
     const res = await POST(makeRequest({ question: "Status?" }) as never);
@@ -99,8 +106,8 @@ describe("POST /api/chat", () => {
 
     expect(data.fallback).toBe(true);
     expect(data.answer).toContain("failed");
-
-    globalThis.fetch = originalFetch;
+    // Should NOT leak the sensitive error text to client
+    expect(data.error).toBeUndefined();
   });
 
   it("validates question is a string", async () => {

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getServices } from "@/lib/services";
 import { aggregateProjectContext } from "@/lib/workflow/project-context-aggregator";
 
 export const dynamic = "force-dynamic";
@@ -39,32 +40,53 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       });
     }
 
-    // Build project context for system prompt.
-    // Use minimal context since we don't have live phase/artifact data in this route.
-    // A production version would query the workflow API for real data.
-    const context = aggregateProjectContext([], [], 0, 0, 0);
+    // Build project context from real session data
+    let storiesDone = 0;
+    let storiesTotal = 0;
+    let activeAgents = 0;
+    try {
+      const { sessionManager } = await getServices();
+      const sessions = await sessionManager.list();
+      storiesTotal = sessions.length;
+      storiesDone = sessions.filter((s) => s.status === "merged" || s.status === "cleanup").length;
+      activeAgents = sessions.filter((s) => s.status === "working").length;
+    } catch {
+      // Services unavailable — proceed with zero context
+    }
+    const context = aggregateProjectContext([], [], storiesDone, storiesTotal, activeAgents);
 
-    // Call Anthropic Messages API
-    const response = await fetch(ANTHROPIC_API_URL, {
-      method: "POST",
-      headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: DEFAULT_MODEL,
-        max_tokens: 1024,
-        system: `You are a helpful project assistant for an agent orchestrator dashboard. ${context.fullContext}`,
-        messages: [{ role: "user", content: question }],
-      }),
-    });
+    // Call Anthropic Messages API with 30s timeout
+    const abortController = new AbortController();
+    const timeout = setTimeout(() => abortController.abort(), 30_000);
+
+    let response: Response;
+    try {
+      response = await fetch(ANTHROPIC_API_URL, {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: DEFAULT_MODEL,
+          max_tokens: 1024,
+          system: `You are a helpful project assistant for an agent orchestrator dashboard. ${context.fullContext}`,
+          messages: [{ role: "user", content: question }],
+        }),
+        signal: abortController.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
-      const errorText = await response.text();
+      // Log full error server-side, return generic message to client
+      const errorText = await response.text().catch(() => "unknown");
+      // eslint-disable-next-line no-console
+      console.error(`[chat] Anthropic API error (${response.status}):`, errorText);
       return NextResponse.json({
         answer: `LLM request failed (${response.status}). Check your API key and try again.`,
-        error: errorText,
         fallback: true,
       });
     }

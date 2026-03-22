@@ -149,13 +149,14 @@ export function createOrchestrator(config: OrchestratorConfig): AgentOrchestrato
         if (!parsed.type) return;
         const typeHandlers = handlers.get(parsed.type);
         if (typeHandlers) {
+          const ts = (parsed as Record<string, unknown>).timestamp;
           const event: OrchestratorEvent = {
             type: parsed.type as EventType,
-            timestamp:
-              ((parsed as Record<string, unknown>).timestamp as string) ?? new Date().toISOString(),
+            timestamp: typeof ts === "string" ? ts : new Date().toISOString(),
             data: parsed as Record<string, unknown>,
           };
-          for (const handler of typeHandlers) {
+          // Snapshot to avoid issues if a handler calls unsubscribe during iteration
+          for (const handler of [...typeHandlers]) {
             try {
               handler(event);
             } catch {
@@ -166,6 +167,11 @@ export function createOrchestrator(config: OrchestratorConfig): AgentOrchestrato
       } catch {
         // Malformed SSE message — ignore
       }
+    };
+    // Reconnect on connection loss — clear dead reference so ensureSSE() reconnects
+    eventSource.onerror = () => {
+      eventSource?.close();
+      eventSource = null;
     };
   }
 

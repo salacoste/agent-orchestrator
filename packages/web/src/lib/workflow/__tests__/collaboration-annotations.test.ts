@@ -19,7 +19,7 @@ describe("Annotation store", () => {
   it("addAnnotation creates annotation with id and timestamp", () => {
     const a = addAnnotation({ artifactId: "prd.md", author: "Alice", text: "Looks good" });
 
-    expect(a.id).toBe("annotation-1");
+    expect(a.id).toMatch(/^annotation-\d+-\d+$/);
     expect(a.artifactId).toBe("prd.md");
     expect(a.author).toBe("Alice");
     expect(a.text).toBe("Looks good");

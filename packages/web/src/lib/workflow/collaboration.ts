@@ -152,12 +152,22 @@ export interface Annotation {
 }
 
 const annotations: Annotation[] = [];
+let annotationCounter = 0;
+
+/** Maximum annotation text length. */
+const MAX_ANNOTATION_LENGTH = 1000;
 
 /** Add an annotation to an artifact. */
 export function addAnnotation(annotation: Omit<Annotation, "id" | "timestamp">): Annotation {
+  annotationCounter++;
+  const text =
+    annotation.text.length > MAX_ANNOTATION_LENGTH
+      ? annotation.text.slice(0, MAX_ANNOTATION_LENGTH)
+      : annotation.text;
   const entry: Annotation = {
     ...annotation,
-    id: `annotation-${annotations.length + 1}`,
+    text,
+    id: `annotation-${Date.now()}-${annotationCounter}`,
     timestamp: new Date().toISOString(),
   };
   annotations.push(entry);
@@ -165,7 +175,8 @@ export function addAnnotation(annotation: Omit<Annotation, "id" | "timestamp">):
   return entry;
 }
 
-/** Get all annotations for a specific artifact. */
+/** Get all annotations for a specific artifact. Creates a filtered copy each call.
+ * If performance becomes a concern with many annotations, index by artifactId in a Map. */
 export function getAnnotations(artifactId: string): Annotation[] {
   return annotations.filter((a) => a.artifactId === artifactId);
 }

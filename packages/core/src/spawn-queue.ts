@@ -52,7 +52,7 @@ export function createSpawnQueue(config: SpawnQueueConfig): SpawnQueue {
   const limit = config.maxConcurrentAgents ?? null;
   const queue: QueueEntry[] = [];
   let processing = false;
-  let insertionCounter = 0;
+  let insertionCounter = 0; // Grows indefinitely — safe up to Number.MAX_SAFE_INTEGER (9 quadrillion)
 
   // Note: calls sessionManager.list() on each check. Acceptable for current scale;
   // if session count grows large, consider caching with short TTL.
@@ -76,6 +76,7 @@ export function createSpawnQueue(config: SpawnQueueConfig): SpawnQueue {
       }
 
       // Pick highest-priority entry (Story 43.4). Stable: equal priority → FIFO.
+      // O(n) scan + splice. Acceptable for queues <100 items. Upgrade to heap if needed.
       if (queue.length === 0) {
         processing = false;
         return;

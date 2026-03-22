@@ -2,6 +2,7 @@ import { getServices } from "@/lib/services";
 import { sessionToDashboard } from "@/lib/serialize";
 import { getAttentionLevel } from "@/lib/types";
 import { subscribeWorkflowChanges } from "@/lib/workflow-watcher";
+import { subscribeCollaborationChanges } from "@/lib/workflow/collaboration";
 import { buildPhasePresence, scanAllArtifacts } from "@/lib/workflow/scan-artifacts";
 import { computePhaseStates } from "@/lib/workflow/compute-state";
 import type { PhaseEntry } from "@/lib/workflow/types";
@@ -21,12 +22,28 @@ export async function GET(): Promise<Response> {
   let updates: ReturnType<typeof setInterval> | undefined;
 
   let unsubWorkflow: (() => void) | undefined;
+  let unsubCollab: (() => void) | undefined;
 
   // Track previous phase states for transition detection (Story 16.5)
   let prevPhases: PhaseEntry[] | null = null;
 
   const stream = new ReadableStream({
     start(controller) {
+      // Subscribe to collaboration changes (Story 39.1).
+      // Broadcasts full event data — collaboration types contain only display-safe fields
+      // (userId, displayName, page, itemId, decision text). No secrets or internal paths.
+      unsubCollab = subscribeCollaborationChanges((event) => {
+        try {
+          controller.enqueue(
+            encoder.encode(
+              `data: ${JSON.stringify({ type: `collaboration.${event.type}`, action: event.action, data: event.data, timestamp: event.timestamp })}\n\n`,
+            ),
+          );
+        } catch {
+          // Stream closed — will be cleaned up by cancel()
+        }
+      });
+
       // Subscribe to workflow file-change notifications (WD-5 + Story 16.5)
       unsubWorkflow = subscribeWorkflowChanges(() => {
         try {
@@ -157,6 +174,7 @@ export async function GET(): Promise<Response> {
       clearInterval(heartbeat);
       clearInterval(updates);
       unsubWorkflow?.();
+      unsubCollab?.();
     },
   });
 

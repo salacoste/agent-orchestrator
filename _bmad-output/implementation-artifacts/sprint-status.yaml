@@ -464,18 +464,18 @@ previous_cycle:
 
   # Epic 38: API Route Production Wiring
   # Replace all stub API routes with real SessionManager/Runtime integration
-  epic-38: backlog
-  38-1-agent-data-api-real-sessionmanager-integration: backlog
-  38-2-agent-activity-api-activitydetection-integration: backlog
-  38-3-agent-logs-api-runtime-getoutput-integration: backlog
-  38-4-agent-resume-api-full-resume-implementation: backlog
-  38-5-agent-restart-api-kill-respawn-with-context: backlog
+  epic-38: done
+  38-1-agent-data-api-real-sessionmanager-integration: done
+  38-2-agent-activity-api-activitydetection-integration: done
+  38-3-agent-logs-api-runtime-getoutput-integration: done
+  38-4-agent-resume-api-full-resume-implementation: done
+  38-5-agent-restart-api-kill-respawn-with-context: done
   epic-38-retrospective: optional
 
   # Epic 39: Module Persistence & Real-Time
   # Add JSONL/WebSocket persistence to in-memory-only modules
-  epic-39: backlog
-  39-1-collaboration-websocket-broadcasting: backlog
+  epic-39: in-progress
+  39-1-collaboration-websocket-broadcasting: review
   39-2-collaboration-jsonl-persistence: backlog
   39-3-cascade-detector-event-bus-integration: backlog
   39-4-compound-learning-real-data-connection: backlog

@@ -1,8 +1,8 @@
 /**
- * Multi-user collaboration module (Stories 27.1, 27.2, 27.3).
+ * Multi-user collaboration module (Stories 27.1, 27.2, 27.3, 39.1).
  *
  * Team presence, review claims, and decision logging.
- * Pure module — works with provided data.
+ * Story 39.1: Change broadcasting via subscriber callbacks.
  */
 
 // ---------------------------------------------------------------------------
@@ -23,6 +23,12 @@ const presenceMap = new Map<string, UserPresence>();
 
 export function updatePresence(presence: UserPresence): void {
   presenceMap.set(presence.userId, presence);
+  notify({
+    type: "presence",
+    action: "update",
+    data: presence,
+    timestamp: new Date().toISOString(),
+  });
 }
 
 export function getPresenceForPage(page: string): UserPresence[] {
@@ -30,7 +36,16 @@ export function getPresenceForPage(page: string): UserPresence[] {
 }
 
 export function removePresence(userId: string): void {
+  const removed = presenceMap.get(userId);
   presenceMap.delete(userId);
+  if (removed) {
+    notify({
+      type: "presence",
+      action: "remove",
+      data: removed,
+      timestamp: new Date().toISOString(),
+    });
+  }
 }
 
 export function getAllPresence(): UserPresence[] {
@@ -59,11 +74,21 @@ export function claimItem(itemId: string, userId: string, description: string): 
     itemDescription: description,
   };
   claims.set(itemId, claim);
+  notify({ type: "claim", action: "claim", data: claim, timestamp: claim.claimedAt });
   return claim;
 }
 
 export function unclaimItem(itemId: string): void {
+  const removed = claims.get(itemId);
   claims.delete(itemId);
+  if (removed) {
+    notify({
+      type: "claim",
+      action: "unclaim",
+      data: removed,
+      timestamp: new Date().toISOString(),
+    });
+  }
 }
 
 export function getClaimForItem(itemId: string): ReviewClaim | null {
@@ -101,6 +126,7 @@ export function logDecision(decision: Omit<Decision, "id" | "timestamp">): Decis
     timestamp: new Date().toISOString(),
   };
   decisions.push(entry);
+  notify({ type: "decision", action: "log", data: entry, timestamp: entry.timestamp });
   return entry;
 }
 
@@ -112,8 +138,47 @@ export function getRecentDecisions(count: number): Decision[] {
   return decisions.slice(-count);
 }
 
+// ---------------------------------------------------------------------------
+// Story 39.1: Change Broadcasting
+// ---------------------------------------------------------------------------
+
+/** A collaboration change event emitted to subscribers (discriminated union). */
+export type CollaborationEvent =
+  | { type: "presence"; action: "update" | "remove"; data: UserPresence; timestamp: string }
+  | { type: "claim"; action: "claim" | "unclaim"; data: ReviewClaim; timestamp: string }
+  | { type: "decision"; action: "log"; data: Decision; timestamp: string };
+
+export type CollaborationSubscriber = (event: CollaborationEvent) => void;
+
+const subscribers = new Set<CollaborationSubscriber>();
+
+/** Subscribe to collaboration changes. Returns an unsubscribe function. */
+export function subscribeCollaborationChanges(cb: CollaborationSubscriber): () => void {
+  subscribers.add(cb);
+  return () => {
+    subscribers.delete(cb);
+  };
+}
+
+/** Notify all subscribers of a collaboration change. */
+function notify(event: CollaborationEvent): void {
+  // Snapshot to avoid issues if a callback modifies the subscriber set
+  for (const cb of [...subscribers]) {
+    try {
+      cb(event);
+    } catch {
+      // Subscriber errors are non-fatal
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Reset (testing)
+// ---------------------------------------------------------------------------
+
 export function _resetCollaboration(): void {
   presenceMap.clear();
   claims.clear();
   decisions.length = 0;
+  subscribers.clear();
 }

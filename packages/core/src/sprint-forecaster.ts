@@ -63,29 +63,29 @@ export function computeForecast(
     };
   }
 
-  // Collect duration samples per story, domain-matched
-  const allDurations: number[] = [];
+  // Filter completed sessions once (M1 fix — avoid re-filtering per story)
+  const completed = learnings.filter((l) => l.outcome === "completed" && l.durationMs > 0);
+  const confidence = getConfidence(completed.length);
+
+  // Compute per-story percentiles from actual data distribution (H1 fix)
+  let totalP50 = 0;
+  let totalP80 = 0;
+  let totalP95 = 0;
 
   for (const story of backlogStories) {
-    const storyDuration = estimateStoryDuration(
+    const percentiles = estimateStoryPercentiles(
       story.domainTags ?? [],
-      learnings,
+      completed,
       defaultDurationMs,
     );
-    allDurations.push(storyDuration.duration);
+    totalP50 += percentiles.p50;
+    totalP80 += percentiles.p80;
+    totalP95 += percentiles.p95;
   }
 
-  const totalSampleCount = learnings.filter((l) => l.outcome === "completed").length;
-  const confidence = getConfidence(totalSampleCount);
-
-  // Sum durations for total remaining work estimate
-  const totalMs = allDurations.reduce((sum, d) => sum + d, 0);
-
-  // Apply variance factor for percentile spread
-  // P50 = base estimate, P80 = 1.3x, P95 = 1.7x (empirical software estimation factors)
-  const p50Ms = Math.round(totalMs);
-  const p80Ms = Math.round(totalMs * 1.3);
-  const p95Ms = Math.round(totalMs * 1.7);
+  const p50Ms = Math.round(totalP50);
+  const p80Ms = Math.round(totalP80);
+  const p95Ms = Math.round(totalP95);
 
   const now = Date.now();
 
@@ -94,7 +94,7 @@ export function computeForecast(
     p80Ms,
     p95Ms,
     backlogCount: backlogStories.length,
-    sampleCount: totalSampleCount,
+    sampleCount: completed.length,
     confidence,
     p50Date: new Date(now + p50Ms).toISOString(),
     p80Date: new Date(now + p80Ms).toISOString(),
@@ -102,16 +102,14 @@ export function computeForecast(
   };
 }
 
-/** Estimate duration for a single story based on domain-matched historical data. */
-function estimateStoryDuration(
+/** Estimate P50/P80/P95 duration for a single story from actual data distribution. */
+function estimateStoryPercentiles(
   domainTags: string[],
-  learnings: SessionLearning[],
+  completed: SessionLearning[],
   defaultDurationMs: number,
-): { duration: number; matched: number } {
-  const completed = learnings.filter((l) => l.outcome === "completed" && l.durationMs > 0);
-
+): { p50: number; p80: number; p95: number } {
   if (completed.length === 0) {
-    return { duration: defaultDurationMs, matched: 0 };
+    return { p50: defaultDurationMs, p80: defaultDurationMs, p95: defaultDurationMs };
   }
 
   // Domain-matched: find sessions with overlapping domain tags
@@ -120,14 +118,18 @@ function estimateStoryDuration(
     matched = completed.filter((l) => l.domainTags.some((tag) => domainTags.includes(tag)));
   }
 
-  // Fall back to all completed sessions if no domain matches
+  // Fall back to all completed sessions if fewer than 3 domain matches
   const pool = matched.length >= 3 ? matched : completed;
 
-  // Use median duration from the pool
+  // Sort durations and compute actual percentiles
   const durations = pool.map((l) => l.durationMs).sort((a, b) => a - b);
-  const median = durations[Math.floor(durations.length / 2)];
+  const len = durations.length;
 
-  return { duration: median, matched: matched.length };
+  return {
+    p50: durations[Math.floor(0.5 * (len - 1))],
+    p80: durations[Math.floor(0.8 * (len - 1))],
+    p95: durations[Math.min(Math.floor(0.95 * (len - 1)), len - 1)],
+  };
 }
 
 /** Determine confidence level from sample count. */

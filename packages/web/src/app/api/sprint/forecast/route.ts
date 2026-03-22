@@ -17,7 +17,8 @@ export async function GET(): Promise<NextResponse> {
     const store = getLearningStore();
     const learnings = store?.list() ?? [];
 
-    // Count backlog stories from sessions (simplified — production would read sprint-status.yaml)
+    // v1: Count in-progress sessions as remaining work. A future improvement would
+    // read sprint-status.yaml for actual backlog stories (not-yet-started).
     const backlogStories: BacklogStory[] = [];
     const { sessionManager } = await getServices();
     const sessions = await sessionManager.list();

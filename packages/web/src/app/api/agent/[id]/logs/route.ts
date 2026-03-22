@@ -48,7 +48,6 @@ export async function GET(
       return NextResponse.json({
         logs: logLines,
         source: "primary",
-        path: logPath,
       });
     }
 
@@ -60,7 +59,6 @@ export async function GET(
         return NextResponse.json({
           logs: logLines,
           source: "previous",
-          path: previousLogsPath,
         });
       }
     }

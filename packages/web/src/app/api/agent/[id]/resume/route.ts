@@ -78,7 +78,7 @@ export async function POST(
     if (error.message.includes("not restorable") || error.message.includes("Not restorable")) {
       return NextResponse.json({ success: false, error: error.message }, { status: 409 });
     }
-    if (error.message.includes("Workspace missing") || error.message.includes("workspace")) {
+    if (error.message.includes("Workspace missing")) {
       return NextResponse.json(
         { success: false, error: `Workspace missing for agent ${agentId}: ${error.message}` },
         { status: 422 },

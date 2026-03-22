@@ -33,11 +33,13 @@ export async function POST(
     const storyId = session.issueId;
     const branch = session.branch;
 
-    // Kill the stuck session
+    // Kill the stuck session — kill() archives metadata before deleting it
     await sessionManager.kill(agentId);
 
-    // Attempt to respawn with same context via restore
-    // restore() reads archived metadata and re-spawns with accumulated context
+    // Attempt to respawn with same context via restore.
+    // restore() reads archived metadata and re-spawns with accumulated context.
+    // NOTE: kill→restore is sequential and not atomic. A concurrent request
+    // between these calls could see the session as missing.
     let newSession = null;
     let respawnError: string | null = null;
 

@@ -1,7 +1,7 @@
 /**
  * Event log reader — reads agent events from JSONL backup log.
  */
-import { readFile } from "node:fs/promises";
+import { readFile, stat, open } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
@@ -19,6 +19,9 @@ export interface ActivityEvent {
   metadata: Record<string, unknown>;
 }
 
+/** Maximum bytes to read from the tail of events.jsonl (512KB). */
+const MAX_READ_BYTES = 512 * 1024;
+
 /**
  * Read events for a specific agent from the JSONL event backup log.
  */
@@ -29,8 +32,11 @@ export async function readAgentEvents(
 ): Promise<ActivityEvent[]> {
   const events: ActivityEvent[] = [];
 
-  // Look for events.jsonl in the config directory
-  const configDir = configPath ? join(configPath, "..") : process.cwd();
+  // Resolve events.jsonl path from config directory
+  if (!configPath || typeof configPath !== "string") {
+    return events;
+  }
+  const configDir = join(configPath, "..");
   const eventsLogPath = join(configDir, "events.jsonl");
 
   if (!existsSync(eventsLogPath)) {
@@ -38,12 +44,35 @@ export async function readAgentEvents(
   }
 
   try {
-    const content = await readFile(eventsLogPath, "utf-8");
+    // Read only the last MAX_READ_BYTES to avoid loading a full 10MB file
+    const stats = await stat(eventsLogPath);
+    const fileSize = stats.size;
+    let content: string;
+
+    if (fileSize <= MAX_READ_BYTES) {
+      content = await readFile(eventsLogPath, "utf-8");
+    } else {
+      // Read only the tail of the file
+      const buffer = Buffer.alloc(MAX_READ_BYTES);
+      const fh = await open(eventsLogPath, "r");
+      try {
+        await fh.read(buffer, 0, MAX_READ_BYTES, fileSize - MAX_READ_BYTES);
+      } finally {
+        await fh.close();
+      }
+      // Drop the first partial line (we likely started mid-line)
+      const raw = buffer.toString("utf-8");
+      const firstNewline = raw.indexOf("\n");
+      content = firstNewline >= 0 ? raw.slice(firstNewline + 1) : raw;
+    }
+
     const lines = content.trim().split("\n").filter(Boolean);
 
     for (const line of lines) {
       try {
         const entry = JSON.parse(line) as EventLogEntry;
+        // Shape guard: skip entries missing required fields
+        if (!entry.eventType || !entry.timestamp) continue;
         const meta = entry.metadata ?? {};
 
         if (

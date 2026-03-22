@@ -19,9 +19,8 @@ export async function GET(
     const { id: agentId } = await params;
     const { sessionManager, config } = await getServices();
 
-    // Verify agent exists
-    const session = await sessionManager.get(agentId);
-    if (!session) {
+    // Verify agent exists (session data not needed beyond 404 check)
+    if (!(await sessionManager.get(agentId))) {
       return NextResponse.json({ error: `Agent ${agentId} not found` }, { status: 404 });
     }
 

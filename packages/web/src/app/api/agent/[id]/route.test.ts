@@ -1,7 +1,7 @@
 /**
  * GET /api/agent/[id] — Agent data API tests (Story 38.1)
  */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const mockGet = vi.fn();
 
@@ -14,6 +14,10 @@ vi.mock("@/lib/services", () => ({
 }));
 
 const { GET } = await import("./route");
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 function makeRequest(): Request {
   return new Request("http://localhost/api/agent/test-1", { method: "GET" });

@@ -33,7 +33,7 @@ describe("computeHistoricalAverages", () => {
 
     const avg = computeHistoricalAverages(learnings);
 
-    expect(avg.avgFilesPerStory).toBe(3); // (2+4)/2
+    expect(avg.avgFilesPerStory).toBe(3); // (2+4)/2 = 3.0
     expect(avg.avgTokensPerStory).toBeGreaterThan(0);
     expect(avg.sampleCount).toBe(2);
   });

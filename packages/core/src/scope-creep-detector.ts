@@ -35,26 +35,32 @@ export interface SessionUsage {
 
 /**
  * Compute historical averages from completed learning records.
+ *
+ * @param learnings — session learning records
+ * @param tokenEstimator — function to estimate token count per session.
+ *   Default: uses durationMs as proxy (configurable rate, default 50K tokens/hour).
+ *   Callers with actual CostEstimate data should pass a custom estimator.
  */
-export function computeHistoricalAverages(learnings: SessionLearning[]): HistoricalAverages {
+export function computeHistoricalAverages(
+  learnings: SessionLearning[],
+  tokenEstimator?: (learning: SessionLearning) => number,
+): HistoricalAverages {
   const completed = learnings.filter((l) => l.outcome === "completed");
 
   if (completed.length === 0) {
     return { avgTokensPerStory: 0, avgFilesPerStory: 0, sampleCount: 0 };
   }
 
-  const totalTokens = completed.reduce((sum, l) => {
-    // Estimate tokens from durationMs if no explicit token count
-    // SessionLearning doesn't have tokens directly — use durationMs as proxy
-    // 1 hour ≈ 50K tokens is a rough estimate for agent sessions
-    return sum + (l.durationMs / 3_600_000) * 50_000;
-  }, 0);
+  // Default estimator: duration-based proxy. Callers with real token data should override.
+  const estimateTokens =
+    tokenEstimator ?? ((l: SessionLearning) => (l.durationMs / 3_600_000) * 50_000);
 
+  const totalTokens = completed.reduce((sum, l) => sum + estimateTokens(l), 0);
   const totalFiles = completed.reduce((sum, l) => sum + l.filesModified.length, 0);
 
   return {
-    avgTokensPerStory: Math.round(totalTokens / completed.length),
-    avgFilesPerStory: Math.round(totalFiles / completed.length),
+    avgTokensPerStory: totalTokens / completed.length, // No rounding — keep precision
+    avgFilesPerStory: totalFiles / completed.length, // No rounding — keep precision
     sampleCount: completed.length,
   };
 }
@@ -89,7 +95,7 @@ export function checkScopeCreep(
       current: usage.tokensUsed,
       average: averages.avgTokensPerStory,
       threshold: averages.avgTokensPerStory * multiplier,
-      suggestion: `Token usage (${usage.tokensUsed.toLocaleString()}) exceeds ${multiplier}x average (${averages.avgTokensPerStory.toLocaleString()}). Consider reviewing story scope or agent approach.`,
+      suggestion: `Token usage (${usage.tokensUsed}) exceeds ${multiplier}x average (${Math.round(averages.avgTokensPerStory)}). Consider reviewing story scope or agent approach.`,
     });
   }
 
@@ -104,7 +110,7 @@ export function checkScopeCreep(
       current: usage.filesModified,
       average: averages.avgFilesPerStory,
       threshold: averages.avgFilesPerStory * multiplier,
-      suggestion: `Files modified (${usage.filesModified}) exceeds ${multiplier}x average (${averages.avgFilesPerStory}). Agent may be touching code outside story scope.`,
+      suggestion: `Files modified (${usage.filesModified}) exceeds ${multiplier}x average (${Math.round(averages.avgFilesPerStory)}). Agent may be touching code outside story scope.`,
     });
   }
 

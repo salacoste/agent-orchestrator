@@ -503,7 +503,7 @@ previous_cycle:
   # Implement all spec-only stories from Cycles 6-7
   epic-42: in-progress
   42-1-shared-annotation-ui-component: done
-  42-2-role-based-agent-ownership-ui: backlog
+  42-2-role-based-agent-ownership-ui: done
   42-3-handoff-protocol-implementation: backlog
   42-4-dead-button-eslint-rule: backlog
   42-5-test-per-story-convention-enforcement: backlog

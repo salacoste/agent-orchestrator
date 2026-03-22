@@ -187,6 +187,56 @@ export function getAllAnnotations(): readonly Annotation[] {
 }
 
 // ---------------------------------------------------------------------------
+// Story 42.2: Agent Ownership
+// ---------------------------------------------------------------------------
+
+/** Agent owner assignment. */
+export interface AgentOwner {
+  agentId: string;
+  owner: string;
+  assignedAt: string;
+}
+
+const owners = new Map<string, AgentOwner>();
+
+/** Assign an owner to an agent session. */
+export function assignOwner(agentId: string, owner: string): AgentOwner {
+  const entry: AgentOwner = { agentId, owner, assignedAt: new Date().toISOString() };
+  owners.set(agentId, entry);
+  notify({ type: "ownership", action: "assign", data: entry, timestamp: entry.assignedAt });
+  return entry;
+}
+
+/** Remove owner assignment from an agent session. */
+export function removeOwner(agentId: string): void {
+  const removed = owners.get(agentId);
+  owners.delete(agentId);
+  if (removed) {
+    notify({
+      type: "ownership",
+      action: "remove",
+      data: removed,
+      timestamp: new Date().toISOString(),
+    });
+  }
+}
+
+/** Get owner of an agent session. */
+export function getOwner(agentId: string): AgentOwner | null {
+  return owners.get(agentId) ?? null;
+}
+
+/** Get all agents owned by a specific person. */
+export function getAgentsByOwner(owner: string): AgentOwner[] {
+  return [...owners.values()].filter((o) => o.owner === owner);
+}
+
+/** Get all owner assignments. */
+export function getAllOwners(): AgentOwner[] {
+  return [...owners.values()];
+}
+
+// ---------------------------------------------------------------------------
 // Story 39.1: Change Broadcasting
 // ---------------------------------------------------------------------------
 
@@ -195,7 +245,8 @@ export type CollaborationEvent =
   | { type: "presence"; action: "update" | "remove"; data: UserPresence; timestamp: string }
   | { type: "claim"; action: "claim" | "unclaim"; data: ReviewClaim; timestamp: string }
   | { type: "decision"; action: "log"; data: Decision; timestamp: string }
-  | { type: "annotation"; action: "add"; data: Annotation; timestamp: string };
+  | { type: "annotation"; action: "add"; data: Annotation; timestamp: string }
+  | { type: "ownership"; action: "assign" | "remove"; data: AgentOwner; timestamp: string };
 
 export type CollaborationSubscriber = (event: CollaborationEvent) => void;
 
@@ -230,5 +281,6 @@ export function _resetCollaboration(): void {
   claims.clear();
   decisions.length = 0;
   annotations.length = 0;
+  owners.clear();
   subscribers.clear();
 }

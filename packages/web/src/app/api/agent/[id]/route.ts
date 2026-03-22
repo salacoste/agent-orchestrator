@@ -4,6 +4,15 @@ import { getServices } from "@/lib/services";
 
 export const dynamic = "force-dynamic";
 
+/** Safely convert a Date to ISO string, returning fallback for Invalid Date. */
+function safeISOString(date: Date): string {
+  try {
+    return date.toISOString();
+  } catch {
+    return new Date(0).toISOString();
+  }
+}
+
 /**
  * GET /api/agent/[id] — Get agent session data (Story 38.1)
  *
@@ -33,11 +42,12 @@ export async function GET(
       pr: session.pr
         ? { number: session.pr.number, url: session.pr.url, title: session.pr.title }
         : null,
-      workspacePath: session.workspacePath,
+      hasWorkspace: session.workspacePath !== null,
       agentInfo: session.agentInfo,
-      createdAt: session.createdAt.toISOString(),
-      lastActivityAt: session.lastActivityAt.toISOString(),
-      restoredAt: session.restoredAt?.toISOString() ?? null,
+      createdAt: safeISOString(session.createdAt),
+      lastActivityAt: safeISOString(session.lastActivityAt),
+      restoredAt: session.restoredAt ? safeISOString(session.restoredAt) : null,
+      // Metadata allowlist — only expose safe fields, not internal paths/ports
       metadata: {
         agent: session.metadata["agent"] ?? null,
         summary: session.metadata["summary"] ?? null,

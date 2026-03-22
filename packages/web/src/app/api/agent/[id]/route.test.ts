@@ -37,7 +37,7 @@ describe("GET /api/agent/[id]", () => {
       branch: "feat/story-1",
       issueId: "PROJ-1",
       pr: { number: 42, url: "https://github.com/org/repo/pull/42", title: "feat: story 1" },
-      workspacePath: "/tmp/worktree-1",
+      workspacePath: "/tmp/worktree-1", // not exposed in response — hasWorkspace instead
       agentInfo: { summary: "Working on story 1", agentSessionId: null },
       createdAt: new Date("2026-03-22T00:00:00Z"),
       lastActivityAt: new Date("2026-03-22T01:00:00Z"),
@@ -57,6 +57,8 @@ describe("GET /api/agent/[id]", () => {
     expect(data.pr.number).toBe(42);
     expect(data.createdAt).toBe("2026-03-22T00:00:00.000Z");
     expect(data.lastActivityAt).toBe("2026-03-22T01:00:00.000Z");
+    expect(data.hasWorkspace).toBe(true);
+    expect(data.workspacePath).toBeUndefined(); // internal path not exposed
     expect(data.metadata.agent).toBe("claude-code");
   });
 
@@ -93,5 +95,16 @@ describe("GET /api/agent/[id]", () => {
     expect(res.status).toBe(200);
     expect(data.pr).toBeNull();
     expect(data.restoredAt).toBeNull();
+    expect(data.hasWorkspace).toBe(false);
+  });
+
+  it("returns 500 when sessionManager.get() throws", async () => {
+    mockGet.mockRejectedValueOnce(new Error("DB connection failed"));
+
+    const res = await GET(makeRequest() as never, makeParams("agent-1"));
+    expect(res.status).toBe(500);
+
+    const data = await res.json();
+    expect(data.error).toBe("DB connection failed");
   });
 });

@@ -287,6 +287,14 @@ export type { SpawnQueue, SpawnQueueState, SpawnQueueConfig } from "./spawn-queu
 export { computeForecast } from "./sprint-forecaster.js";
 export type { SprintForecast, BacklogStory, ConfidenceLevel } from "./sprint-forecaster.js";
 
+// Scope Creep Detector — token/file budget monitoring (Story 43.6)
+export { computeHistoricalAverages, checkScopeCreep } from "./scope-creep-detector.js";
+export type {
+  HistoricalAverages,
+  ScopeCreepWarning,
+  SessionUsage,
+} from "./scope-creep-detector.js";
+
 // Loop Detector — agent restart cycle breaker (Story 43.5)
 export { createLoopDetector } from "./loop-detector.js";
 export type { LoopDetector, LoopStatus } from "./loop-detector.js";

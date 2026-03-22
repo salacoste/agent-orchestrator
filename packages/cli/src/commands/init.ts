@@ -146,11 +146,25 @@ const HOOK_SCRIPT = `#!/bin/sh
 # Agent Orchestrator commit tagger (installed by ao init --hooks)
 # Appends [story:X-Y] [agent:session-id] tags to commit messages.
 # See: packages/cli/src/hooks/commit-tag.ts
+# Note: Windows may need manual chmod +x on this file.
 
 COMMIT_MSG_FILE="$1"
-# Only tag if ao CLI is available
-if command -v ao >/dev/null 2>&1; then
-  ao hook commit-tag "$COMMIT_MSG_FILE" 2>/dev/null || true
+# Only run if node is available; fail silently to never block commits
+if command -v node >/dev/null 2>&1; then
+  node -e '
+    const fs = require("fs");
+    const path = require("path");
+    const msgFile = process.argv[1];
+    if (!msgFile || !fs.existsSync(msgFile)) process.exit(0);
+    try {
+      const { tagCommitMessage } = require("@composio/ao-cli/dist/hooks/commit-tag.js");
+      const msg = fs.readFileSync(msgFile, "utf-8");
+      const tagged = tagCommitMessage(msg, null, null);
+      if (tagged !== msg) fs.writeFileSync(msgFile, tagged);
+    } catch (e) {
+      // Module not found or error — silently skip tagging
+    }
+  ' "$COMMIT_MSG_FILE" 2>/dev/null || true
 fi
 `;
 
@@ -161,6 +175,8 @@ fi
  * to append story/agent tags to commit messages.
  */
 async function installGitHooks(force: boolean): Promise<void> {
+  // Note: Uses cwd()/.git directly. In submodules or worktrees, .git may be a file
+  // pointing elsewhere. A future enhancement could use `git rev-parse --git-dir`.
   const gitDir = join(process.cwd(), ".git");
   if (!existsSync(gitDir)) {
     console.error(chalk.red("Error: Not in a git repository (.git not found)"));

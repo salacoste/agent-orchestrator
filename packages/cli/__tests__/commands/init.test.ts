@@ -215,7 +215,7 @@ describe("init command", () => {
 
     const content = readFileSync(hookPath, "utf-8");
     expect(content).toContain("#!/bin/sh");
-    expect(content).toContain("commit-tag");
+    expect(content).toContain("tagCommitMessage");
 
     // Verify executable permission (mode includes 0o111)
     const mode = statSync(hookPath).mode;
@@ -262,7 +262,7 @@ describe("init command", () => {
 
     const content = readFileSync(join(tmpDir, ".git", "hooks", "prepare-commit-msg"), "utf-8");
     expect(content).toContain("#!/bin/sh");
-    expect(content).toContain("commit-tag");
+    expect(content).toContain("tagCommitMessage");
     expect(content).not.toContain("old hook");
   });
 

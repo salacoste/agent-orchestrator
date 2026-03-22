@@ -504,7 +504,7 @@ previous_cycle:
   epic-42: in-progress
   42-1-shared-annotation-ui-component: done
   42-2-role-based-agent-ownership-ui: done
-  42-3-handoff-protocol-implementation: backlog
+  42-3-handoff-protocol-implementation: done
   42-4-dead-button-eslint-rule: backlog
   42-5-test-per-story-convention-enforcement: backlog
   42-6-renders-in-parent-ac-convention: backlog

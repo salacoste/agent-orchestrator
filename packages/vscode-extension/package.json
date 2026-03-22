@@ -31,12 +31,18 @@
       { "command": "ao.recommend", "title": "AO: Get Recommendation" }
     ]
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/salacoste/agent-orchestrator"
+  },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "package": "vsce package"
+    "build": "pnpm exec tsc -p tsconfig.json",
+    "package": "pnpm exec vsce package --no-dependencies",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0"
   }
 }

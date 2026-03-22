@@ -49,6 +49,8 @@ export function createSpawnQueue(config: SpawnQueueConfig): SpawnQueue {
   const queue: QueueEntry[] = [];
   let processing = false;
 
+  // Note: calls sessionManager.list() on each check. Acceptable for current scale;
+  // if session count grows large, consider caching with short TTL.
   async function getRunningCount(): Promise<number> {
     const sessions = await config.sessionManager.list();
     return sessions.filter((s) => s.status === "working" || s.status === "spawning").length;
@@ -84,26 +86,22 @@ export function createSpawnQueue(config: SpawnQueueConfig): SpawnQueue {
       processing = false;
     }
 
-    // Check if more queued items can be processed
+    // Check if more queued items can be processed.
+    // Use queueMicrotask to break recursion stack with large queues.
     if (queue.length > 0) {
-      void processNext();
+      queueMicrotask(() => void processNext());
     }
   }
 
   const spawnQueue: SpawnQueue = {
     async enqueue(spawnConfig: SessionSpawnConfig): Promise<Session> {
-      // If no limit or under limit, try to spawn immediately
+      // No limit = bypass queue entirely (unlimited mode)
       if (limit === null) {
         return config.sessionManager.spawn(spawnConfig);
       }
 
-      const running = await getRunningCount();
-      if (running < limit && queue.length === 0) {
-        // Under limit and no queue backlog — spawn directly
-        return config.sessionManager.spawn(spawnConfig);
-      }
-
-      // At limit or queue has items — enqueue
+      // ALL limited spawns go through queue to prevent race conditions.
+      // processNext() handles sequential WIP checking + spawning.
       return new Promise<Session>((resolve, reject) => {
         queue.push({
           config: spawnConfig,
@@ -111,6 +109,8 @@ export function createSpawnQueue(config: SpawnQueueConfig): SpawnQueue {
           reject,
           enqueuedAt: new Date().toISOString(),
         });
+        // Trigger processing (may spawn immediately if under limit)
+        queueMicrotask(() => void processNext());
       });
     },
 
@@ -138,6 +138,8 @@ export function createSpawnQueue(config: SpawnQueueConfig): SpawnQueue {
     },
   };
 
+  // Auto-register in service registry. Only one queue should be created per process.
+  // Tests should call clearServiceRegistry() in beforeEach.
   registerSpawnQueue(spawnQueue);
   return spawnQueue;
 }

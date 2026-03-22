@@ -42,10 +42,18 @@ export interface HandoffBundle {
  * @param recipient — who is receiving
  * @param message — optional context/instructions
  */
-export function createHandoff(sender: string, recipient: string, message?: string): HandoffBundle {
+export function createHandoff(
+  sender: string,
+  recipient: string,
+  message?: string,
+): HandoffBundle | null {
+  const trimmedSender = sender.trim();
+  const trimmedRecipient = recipient.trim();
+  if (!trimmedSender || !trimmedRecipient) return null;
+
   return {
-    sender,
-    recipient,
+    sender: trimmedSender,
+    recipient: trimmedRecipient,
     createdAt: new Date().toISOString(),
     message,
     decisions: [...getDecisionLog()],
@@ -74,7 +82,9 @@ export function deserializeHandoff(json: string): HandoffBundle | null {
       typeof parsed.recipient !== "string" ||
       typeof parsed.createdAt !== "string" ||
       !Array.isArray(parsed.decisions) ||
-      !Array.isArray(parsed.claims)
+      !Array.isArray(parsed.claims) ||
+      !Array.isArray(parsed.annotations) ||
+      !Array.isArray(parsed.owners)
     ) {
       return null;
     }

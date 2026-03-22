@@ -19,15 +19,16 @@ describe("createHandoff", () => {
   it("creates bundle with sender, recipient, and timestamp", () => {
     const bundle = createHandoff("Alice", "Bob");
 
-    expect(bundle.sender).toBe("Alice");
-    expect(bundle.recipient).toBe("Bob");
-    expect(bundle.createdAt).toBeDefined();
-    expect(bundle.message).toBeUndefined();
+    expect(bundle).not.toBeNull();
+    expect(bundle!.sender).toBe("Alice");
+    expect(bundle!.recipient).toBe("Bob");
+    expect(bundle!.createdAt).toBeDefined();
+    expect(bundle!.message).toBeUndefined();
   });
 
   it("includes optional message", () => {
     const bundle = createHandoff("Alice", "Bob", "Check the auth module");
-    expect(bundle.message).toBe("Check the auth module");
+    expect(bundle!.message).toBe("Check the auth module");
   });
 
   it("captures current decisions", () => {
@@ -36,8 +37,8 @@ describe("createHandoff", () => {
 
     const bundle = createHandoff("Alice", "Bob");
 
-    expect(bundle.decisions).toHaveLength(2);
-    expect(bundle.decisions[0].what).toBe("Use JWT");
+    expect(bundle!.decisions).toHaveLength(2);
+    expect(bundle!.decisions[0].what).toBe("Use JWT");
   });
 
   it("captures current claims", () => {
@@ -45,8 +46,8 @@ describe("createHandoff", () => {
 
     const bundle = createHandoff("Alice", "Bob");
 
-    expect(bundle.claims).toHaveLength(1);
-    expect(bundle.claims[0].itemId).toBe("pr-1");
+    expect(bundle!.claims).toHaveLength(1);
+    expect(bundle!.claims[0].itemId).toBe("pr-1");
   });
 
   it("captures current annotations", () => {
@@ -54,8 +55,8 @@ describe("createHandoff", () => {
 
     const bundle = createHandoff("Alice", "Bob");
 
-    expect(bundle.annotations).toHaveLength(1);
-    expect(bundle.annotations[0].text).toBe("Needs update");
+    expect(bundle!.annotations).toHaveLength(1);
+    expect(bundle!.annotations[0].text).toBe("Needs update");
   });
 
   it("captures current ownership", () => {
@@ -63,17 +64,30 @@ describe("createHandoff", () => {
 
     const bundle = createHandoff("Alice", "Bob");
 
-    expect(bundle.owners).toHaveLength(1);
-    expect(bundle.owners[0].owner).toBe("Alice");
+    expect(bundle!.owners).toHaveLength(1);
+    expect(bundle!.owners[0].owner).toBe("Alice");
   });
 
   it("returns empty arrays when no collaboration state exists", () => {
     const bundle = createHandoff("Alice", "Bob");
 
-    expect(bundle.decisions).toEqual([]);
-    expect(bundle.claims).toEqual([]);
-    expect(bundle.annotations).toEqual([]);
-    expect(bundle.owners).toEqual([]);
+    expect(bundle).not.toBeNull();
+    expect(bundle!.decisions).toEqual([]);
+    expect(bundle!.claims).toEqual([]);
+    expect(bundle!.annotations).toEqual([]);
+    expect(bundle!.owners).toEqual([]);
+  });
+
+  it("returns null for empty sender or recipient", () => {
+    expect(createHandoff("", "Bob")).toBeNull();
+    expect(createHandoff("Alice", "")).toBeNull();
+    expect(createHandoff("  ", "Bob")).toBeNull();
+  });
+
+  it("trims sender and recipient whitespace", () => {
+    const bundle = createHandoff("  Alice  ", "  Bob  ");
+    expect(bundle!.sender).toBe("Alice");
+    expect(bundle!.recipient).toBe("Bob");
   });
 });
 

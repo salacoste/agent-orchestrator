@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  rmSync,
+  existsSync,
+  statSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createServer } from "node:net";
@@ -186,6 +194,95 @@ describe("init command", () => {
     const smartOption = initCmd!.options.find((o) => o.long === "--smart");
     expect(smartOption).toBeDefined();
     expect(smartOption!.description).toContain("coming soon");
+  });
+
+  it("--hooks installs prepare-commit-msg hook in .git/hooks/", async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "ao-init-hooks-"));
+    // Create fake .git/hooks structure
+    mkdirSync(join(tmpDir, ".git", "hooks"), { recursive: true });
+
+    const program = new Command();
+    program.exitOverride();
+    registerInit(program);
+
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+
+    await program.parseAsync(["node", "test", "init", "--hooks"]);
+
+    const hookPath = join(tmpDir, ".git", "hooks", "prepare-commit-msg");
+    expect(existsSync(hookPath)).toBe(true);
+
+    const content = readFileSync(hookPath, "utf-8");
+    expect(content).toContain("#!/bin/sh");
+    expect(content).toContain("commit-tag");
+
+    // Verify executable permission (mode includes 0o111)
+    const mode = statSync(hookPath).mode;
+    expect(mode & 0o111).toBeGreaterThan(0);
+  });
+
+  it("--hooks warns and exits if hook already exists without --force", async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "ao-init-hooks-"));
+    mkdirSync(join(tmpDir, ".git", "hooks"), { recursive: true });
+    writeFileSync(join(tmpDir, ".git", "hooks", "prepare-commit-msg"), "existing hook\n");
+
+    const program = new Command();
+    program.exitOverride();
+    registerInit(program);
+
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    vi.spyOn(process, "exit").mockImplementation((code) => {
+      throw new Error(`process.exit(${code})`);
+    });
+
+    await expect(program.parseAsync(["node", "test", "init", "--hooks"])).rejects.toThrow(
+      "process.exit(1)",
+    );
+
+    // Original hook should be untouched
+    const content = readFileSync(join(tmpDir, ".git", "hooks", "prepare-commit-msg"), "utf-8");
+    expect(content).toBe("existing hook\n");
+  });
+
+  it("--hooks --force overwrites existing hook", async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "ao-init-hooks-"));
+    mkdirSync(join(tmpDir, ".git", "hooks"), { recursive: true });
+    writeFileSync(join(tmpDir, ".git", "hooks", "prepare-commit-msg"), "old hook\n");
+
+    const program = new Command();
+    program.exitOverride();
+    registerInit(program);
+
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+
+    await program.parseAsync(["node", "test", "init", "--hooks", "--force"]);
+
+    const content = readFileSync(join(tmpDir, ".git", "hooks", "prepare-commit-msg"), "utf-8");
+    expect(content).toContain("#!/bin/sh");
+    expect(content).toContain("commit-tag");
+    expect(content).not.toContain("old hook");
+  });
+
+  it("--hooks fails if not in a git repository", async () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "ao-init-hooks-"));
+    // No .git directory
+
+    const program = new Command();
+    program.exitOverride();
+    registerInit(program);
+
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    vi.spyOn(process, "exit").mockImplementation((code) => {
+      throw new Error(`process.exit(${code})`);
+    });
+
+    await expect(program.parseAsync(["node", "test", "init", "--hooks"])).rejects.toThrow(
+      "process.exit(1)",
+    );
   });
 
   it("auto mode sessionPrefix uses core generateSessionPrefix heuristics", async () => {

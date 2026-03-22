@@ -492,11 +492,11 @@ previous_cycle:
 
   # Epic 41: SDK & Integration Completion
   # SSE client, VS Code testing, GitHub Action CI, git hook installation
-  epic-41: in-progress
+  epic-41: done
   41-1-sdk-eventsource-sse-client: done
   41-2-vscode-extension-vsce-package-testing: done
   41-3-github-action-ci-workflow-testing: done
-  41-4-git-hook-installation-command: backlog
+  41-4-git-hook-installation-command: done
   epic-41-retrospective: optional
 
   # Epic 42: Spec-to-Implementation Completion

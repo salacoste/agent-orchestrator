@@ -1,6 +1,6 @@
 import { createInterface } from "node:readline/promises";
-import { writeFileSync, existsSync } from "node:fs";
-import { resolve, basename } from "node:path";
+import { writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { resolve, basename, join } from "node:path";
 import { cwd } from "node:process";
 import { stringify as yamlStringify } from "yaml";
 import chalk from "chalk";
@@ -141,6 +141,58 @@ async function detectEnvironment(workingDir: string): Promise<EnvironmentInfo> {
   };
 }
 
+/** Hook script content for prepare-commit-msg. */
+const HOOK_SCRIPT = `#!/bin/sh
+# Agent Orchestrator commit tagger (installed by ao init --hooks)
+# Appends [story:X-Y] [agent:session-id] tags to commit messages.
+# See: packages/cli/src/hooks/commit-tag.ts
+
+COMMIT_MSG_FILE="$1"
+# Only tag if ao CLI is available
+if command -v ao >/dev/null 2>&1; then
+  ao hook commit-tag "$COMMIT_MSG_FILE" 2>/dev/null || true
+fi
+`;
+
+/**
+ * Install git hooks (Story 41.4).
+ *
+ * Writes a prepare-commit-msg hook that calls tagCommitMessage()
+ * to append story/agent tags to commit messages.
+ */
+async function installGitHooks(force: boolean): Promise<void> {
+  const gitDir = join(process.cwd(), ".git");
+  if (!existsSync(gitDir)) {
+    console.error(chalk.red("Error: Not in a git repository (.git not found)"));
+    process.exit(1);
+  }
+
+  const hooksDir = join(gitDir, "hooks");
+  const hookPath = join(hooksDir, "prepare-commit-msg");
+
+  // Check for existing hook
+  if (existsSync(hookPath)) {
+    if (!force) {
+      console.log(chalk.yellow(`Hook already exists: ${hookPath}`));
+      console.log(chalk.dim("Use --force to overwrite: ao init --hooks --force"));
+      process.exit(1);
+    }
+    console.log(chalk.yellow(`Overwriting existing hook: ${hookPath}`));
+  }
+
+  // Ensure hooks directory exists
+  if (!existsSync(hooksDir)) {
+    mkdirSync(hooksDir, { recursive: true });
+  }
+
+  // Write hook script
+  writeFileSync(hookPath, HOOK_SCRIPT, { mode: 0o755 });
+
+  console.log(chalk.green(`\n✓ Git hook installed: ${hookPath}`));
+  console.log(chalk.dim("  Commits will be tagged with [story:X-Y] [agent:session-id]"));
+  console.log(chalk.dim("  when made during an active agent session.\n"));
+}
+
 export function registerInit(program: Command): void {
   program
     .command("init")
@@ -148,249 +200,269 @@ export function registerInit(program: Command): void {
     .option("-o, --output <path>", "Output file path", "agent-orchestrator.yaml")
     .option("--auto", "Auto-generate config with sensible defaults (no prompts)")
     .option("--smart", "Analyze project and generate custom rules (coming soon — requires --auto)")
-    .action(async (opts: { output: string; auto?: boolean; smart?: boolean }) => {
-      const outputPath = resolve(opts.output);
-
-      if (existsSync(outputPath)) {
-        console.log(chalk.yellow(`Config already exists: ${outputPath}`));
-        console.log("Delete it first or specify a different path with --output.");
-        process.exit(1);
-      }
-
-      // Validate --smart requires --auto
-      if (opts.smart && !opts.auto) {
-        console.error(chalk.red("Error: --smart requires --auto"));
-        console.log(chalk.dim("Use: ao init --auto --smart"));
-        process.exit(1);
-      }
-
-      // Handle --auto mode
-      if (opts.auto) {
-        await handleAutoMode(outputPath, opts.smart || false);
-        return;
-      }
-
-      console.log(chalk.bold.cyan("\n  Agent Orchestrator — Setup Wizard\n"));
-      console.log(chalk.dim("  Detecting environment...\n"));
-
-      const workingDir = cwd();
-      const env = await detectEnvironment(workingDir);
-
-      // Show detection results
-      if (env.isGitRepo) {
-        console.log(chalk.green("  ✓ Git repository detected"));
-        if (env.ownerRepo) {
-          console.log(chalk.dim(`    Remote: ${env.ownerRepo}`));
+    .option("--hooks", "Install git hooks (prepare-commit-msg for story/agent tagging)")
+    .option("--force", "Overwrite existing hooks (use with --hooks)")
+    .action(
+      async (opts: {
+        output: string;
+        auto?: boolean;
+        smart?: boolean;
+        hooks?: boolean;
+        force?: boolean;
+      }) => {
+        // Handle --hooks mode separately (Story 41.4)
+        if (opts.hooks) {
+          await installGitHooks(opts.force ?? false);
+          return;
         }
-        if (env.currentBranch) {
-          console.log(chalk.dim(`    Branch: ${env.currentBranch}`));
-        }
-      } else {
-        console.log(chalk.dim("  ○ Not in a git repository"));
-      }
 
-      if (env.hasTmux) {
-        console.log(chalk.green("  ✓ tmux available"));
-      } else {
-        console.log(chalk.yellow("  ⚠ tmux not found"));
-        console.log(chalk.dim("    Install with: brew install tmux"));
-      }
+        const outputPath = resolve(opts.output);
 
-      if (env.hasGh) {
-        if (env.ghAuthed) {
-          console.log(chalk.green("  ✓ GitHub CLI authenticated"));
-        } else {
-          console.log(chalk.yellow("  ⚠ GitHub CLI not authenticated"));
-          console.log(chalk.dim("    Run: gh auth login"));
-        }
-      } else {
-        console.log(chalk.yellow("  ⚠ GitHub CLI not found"));
-        console.log(chalk.dim("    Install with: brew install gh"));
-      }
-
-      if (env.hasLinearKey) {
-        console.log(chalk.green("  ✓ LINEAR_API_KEY detected"));
-      }
-
-      if (env.hasSlackWebhook) {
-        console.log(chalk.green("  ✓ SLACK_WEBHOOK_URL detected"));
-      }
-
-      console.log();
-
-      const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
-
-      try {
-        // Basic config
-        console.log(chalk.bold("  Configuration\n"));
-        const dataDir = await prompt(
-          rl,
-          "Data directory (session metadata)",
-          "~/.agent-orchestrator",
-        );
-        const worktreeDir = await prompt(rl, "Worktree directory", "~/.worktrees");
-        const freePort = await findFreePort(DEFAULT_PORT);
-        if (freePort === null) {
-          console.log(
-            chalk.yellow(
-              `\n⚠ No free port found in range ${DEFAULT_PORT}–${DEFAULT_PORT + MAX_PORT_SCAN - 1}.`,
-            ),
-          );
-          console.log(chalk.dim("  Please specify a port manually.\n"));
-        } else if (freePort !== DEFAULT_PORT) {
-          console.log(
-            chalk.yellow(`\n⚠ Port ${DEFAULT_PORT} is busy — suggesting ${freePort} instead.`),
-          );
-          console.log(chalk.dim("  Press Enter to accept, or type a different port.\n"));
-        }
-        const portStr = await prompt(rl, "Dashboard port", String(freePort ?? DEFAULT_PORT));
-        const port = parseInt(portStr, 10);
-        if (isNaN(port) || port < 1 || port > 65535) {
-          console.error(chalk.red("\nInvalid port number. Must be 1-65535."));
-          rl.close();
+        if (existsSync(outputPath)) {
+          console.log(chalk.yellow(`Config already exists: ${outputPath}`));
+          console.log("Delete it first or specify a different path with --output.");
           process.exit(1);
         }
 
-        // Default plugins
-        console.log(chalk.bold("\n  Default Plugins\n"));
-        const runtime = await prompt(rl, "Runtime (tmux, process)", "tmux");
-        const agent = await prompt(rl, "Agent (claude-code, glm, codex, aider)", "claude-code");
-        const workspace = await prompt(rl, "Workspace (worktree, clone)", "worktree");
-        const notifiersStr = await prompt(
-          rl,
-          "Notifiers (comma-separated: desktop, slack)",
-          "desktop",
-        );
-        const notifiers = notifiersStr.split(",").map((s) => s.trim());
+        // Validate --smart requires --auto
+        if (opts.smart && !opts.auto) {
+          console.error(chalk.red("Error: --smart requires --auto"));
+          console.log(chalk.dim("Use: ao init --auto --smart"));
+          process.exit(1);
+        }
 
-        // First project
-        console.log(chalk.bold("\n  First Project\n"));
-        const defaultProjectId = env.isGitRepo ? basename(workingDir) : "";
-        const projectId = await prompt(
-          rl,
-          "Project ID (short name, e.g. my-app)",
-          defaultProjectId,
-        );
+        // Handle --auto mode
+        if (opts.auto) {
+          await handleAutoMode(outputPath, opts.smart || false);
+          return;
+        }
 
-        const config: Record<string, unknown> = {
-          dataDir,
-          worktreeDir,
-          port,
-          defaults: { runtime, agent, workspace, notifiers },
-          projects: {} as Record<string, unknown>,
-        };
+        console.log(chalk.bold.cyan("\n  Agent Orchestrator — Setup Wizard\n"));
+        console.log(chalk.dim("  Detecting environment...\n"));
 
-        let projectPath = "";
-        if (projectId) {
-          const repo = await prompt(rl, "GitHub repo (owner/repo)", env.ownerRepo || "");
-          projectPath = await prompt(
-            rl,
-            "Local path to repo",
-            env.isGitRepo ? workingDir : `~/${projectId}`,
-          );
-          const defaultBranch = await prompt(rl, "Default branch", env.defaultBranch || "main");
+        const workingDir = cwd();
+        const env = await detectEnvironment(workingDir);
 
-          // Ask about tracker
-          console.log(chalk.bold("\n  Issue Tracker\n"));
-          if (env.hasLinearKey) {
-            console.log(chalk.dim("  (LINEAR_API_KEY detected)\n"));
+        // Show detection results
+        if (env.isGitRepo) {
+          console.log(chalk.green("  ✓ Git repository detected"));
+          if (env.ownerRepo) {
+            console.log(chalk.dim(`    Remote: ${env.ownerRepo}`));
           }
-          const tracker = await prompt(
+          if (env.currentBranch) {
+            console.log(chalk.dim(`    Branch: ${env.currentBranch}`));
+          }
+        } else {
+          console.log(chalk.dim("  ○ Not in a git repository"));
+        }
+
+        if (env.hasTmux) {
+          console.log(chalk.green("  ✓ tmux available"));
+        } else {
+          console.log(chalk.yellow("  ⚠ tmux not found"));
+          console.log(chalk.dim("    Install with: brew install tmux"));
+        }
+
+        if (env.hasGh) {
+          if (env.ghAuthed) {
+            console.log(chalk.green("  ✓ GitHub CLI authenticated"));
+          } else {
+            console.log(chalk.yellow("  ⚠ GitHub CLI not authenticated"));
+            console.log(chalk.dim("    Run: gh auth login"));
+          }
+        } else {
+          console.log(chalk.yellow("  ⚠ GitHub CLI not found"));
+          console.log(chalk.dim("    Install with: brew install gh"));
+        }
+
+        if (env.hasLinearKey) {
+          console.log(chalk.green("  ✓ LINEAR_API_KEY detected"));
+        }
+
+        if (env.hasSlackWebhook) {
+          console.log(chalk.green("  ✓ SLACK_WEBHOOK_URL detected"));
+        }
+
+        console.log();
+
+        const rl = createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+
+        try {
+          // Basic config
+          console.log(chalk.bold("  Configuration\n"));
+          const dataDir = await prompt(
             rl,
-            "Tracker (github, linear, none)",
-            env.hasLinearKey ? "linear" : "github",
+            "Data directory (session metadata)",
+            "~/.agent-orchestrator",
+          );
+          const worktreeDir = await prompt(rl, "Worktree directory", "~/.worktrees");
+          const freePort = await findFreePort(DEFAULT_PORT);
+          if (freePort === null) {
+            console.log(
+              chalk.yellow(
+                `\n⚠ No free port found in range ${DEFAULT_PORT}–${DEFAULT_PORT + MAX_PORT_SCAN - 1}.`,
+              ),
+            );
+            console.log(chalk.dim("  Please specify a port manually.\n"));
+          } else if (freePort !== DEFAULT_PORT) {
+            console.log(
+              chalk.yellow(`\n⚠ Port ${DEFAULT_PORT} is busy — suggesting ${freePort} instead.`),
+            );
+            console.log(chalk.dim("  Press Enter to accept, or type a different port.\n"));
+          }
+          const portStr = await prompt(rl, "Dashboard port", String(freePort ?? DEFAULT_PORT));
+          const port = parseInt(portStr, 10);
+          if (isNaN(port) || port < 1 || port > 65535) {
+            console.error(chalk.red("\nInvalid port number. Must be 1-65535."));
+            rl.close();
+            process.exit(1);
+          }
+
+          // Default plugins
+          console.log(chalk.bold("\n  Default Plugins\n"));
+          const runtime = await prompt(rl, "Runtime (tmux, process)", "tmux");
+          const agent = await prompt(rl, "Agent (claude-code, glm, codex, aider)", "claude-code");
+          const workspace = await prompt(rl, "Workspace (worktree, clone)", "worktree");
+          const notifiersStr = await prompt(
+            rl,
+            "Notifiers (comma-separated: desktop, slack)",
+            "desktop",
+          );
+          const notifiers = notifiersStr.split(",").map((s) => s.trim());
+
+          // First project
+          console.log(chalk.bold("\n  First Project\n"));
+          const defaultProjectId = env.isGitRepo ? basename(workingDir) : "";
+          const projectId = await prompt(
+            rl,
+            "Project ID (short name, e.g. my-app)",
+            defaultProjectId,
           );
 
-          const projectConfig: Record<string, unknown> = {
-            name: projectId,
-            sessionPrefix: generateSessionPrefix(projectId),
-            repo,
-            path: projectPath,
-            defaultBranch,
+          const config: Record<string, unknown> = {
+            dataDir,
+            worktreeDir,
+            port,
+            defaults: { runtime, agent, workspace, notifiers },
+            projects: {} as Record<string, unknown>,
           };
 
-          if (tracker === "linear") {
-            if (!env.hasLinearKey) {
-              console.log(chalk.yellow("\nWarning: LINEAR_API_KEY not found in environment"));
-              console.log(chalk.dim("Set it in your shell profile or .env file"));
-              console.log(chalk.dim("Get your key at: https://linear.app/settings/api\n"));
+          let projectPath = "";
+          if (projectId) {
+            const repo = await prompt(rl, "GitHub repo (owner/repo)", env.ownerRepo || "");
+            projectPath = await prompt(
+              rl,
+              "Local path to repo",
+              env.isGitRepo ? workingDir : `~/${projectId}`,
+            );
+            const defaultBranch = await prompt(rl, "Default branch", env.defaultBranch || "main");
+
+            // Ask about tracker
+            console.log(chalk.bold("\n  Issue Tracker\n"));
+            if (env.hasLinearKey) {
+              console.log(chalk.dim("  (LINEAR_API_KEY detected)\n"));
+            }
+            const tracker = await prompt(
+              rl,
+              "Tracker (github, linear, none)",
+              env.hasLinearKey ? "linear" : "github",
+            );
+
+            const projectConfig: Record<string, unknown> = {
+              name: projectId,
+              sessionPrefix: generateSessionPrefix(projectId),
+              repo,
+              path: projectPath,
+              defaultBranch,
+            };
+
+            if (tracker === "linear") {
+              if (!env.hasLinearKey) {
+                console.log(chalk.yellow("\nWarning: LINEAR_API_KEY not found in environment"));
+                console.log(chalk.dim("Set it in your shell profile or .env file"));
+                console.log(chalk.dim("Get your key at: https://linear.app/settings/api\n"));
+              }
+
+              const teamId = await prompt(
+                rl,
+                "Linear team ID (find at linear.app/settings/api)",
+                "",
+              );
+              if (teamId) {
+                projectConfig.tracker = { plugin: "linear", teamId };
+              }
+            } else if (tracker === "none") {
+              // Don't add tracker config
+            } else {
+              // Default to github (no explicit config needed)
             }
 
-            const teamId = await prompt(rl, "Linear team ID (find at linear.app/settings/api)", "");
-            if (teamId) {
-              projectConfig.tracker = { plugin: "linear", teamId };
+            (config.projects as Record<string, unknown>)[projectId] = projectConfig;
+          }
+
+          const yamlContent = yamlStringify(config, { indent: 2 });
+          writeFileSync(outputPath, yamlContent);
+
+          // Validation checks
+          console.log(chalk.bold("\n  Validating Setup...\n"));
+
+          const checks = [
+            { name: "Git", pass: (await execSilent("git", ["--version"])) !== null },
+            { name: "tmux", pass: env.hasTmux },
+            { name: "GitHub CLI", pass: env.hasGh },
+            ...(projectPath
+              ? [
+                  {
+                    name: "Repo path exists",
+                    pass: existsSync(projectPath.replace(/^~/, process.env.HOME || "")),
+                  },
+                ]
+              : []),
+          ];
+
+          for (const { name, pass } of checks) {
+            if (pass) {
+              console.log(chalk.green(`  ✓ ${name}`));
+            } else {
+              console.log(chalk.yellow(`  ⚠ ${name} not found`));
             }
-          } else if (tracker === "none") {
-            // Don't add tracker config
-          } else {
-            // Default to github (no explicit config needed)
           }
 
-          (config.projects as Record<string, unknown>)[projectId] = projectConfig;
-        }
-
-        const yamlContent = yamlStringify(config, { indent: 2 });
-        writeFileSync(outputPath, yamlContent);
-
-        // Validation checks
-        console.log(chalk.bold("\n  Validating Setup...\n"));
-
-        const checks = [
-          { name: "Git", pass: (await execSilent("git", ["--version"])) !== null },
-          { name: "tmux", pass: env.hasTmux },
-          { name: "GitHub CLI", pass: env.hasGh },
-          ...(projectPath
-            ? [
-                {
-                  name: "Repo path exists",
-                  pass: existsSync(projectPath.replace(/^~/, process.env.HOME || "")),
-                },
-              ]
-            : []),
-        ];
-
-        for (const { name, pass } of checks) {
-          if (pass) {
-            console.log(chalk.green(`  ✓ ${name}`));
-          } else {
-            console.log(chalk.yellow(`  ⚠ ${name} not found`));
-          }
-        }
-
-        // Success message and next steps
-        console.log(chalk.green(`\n✓ Config written to ${outputPath}\n`));
-        console.log(chalk.bold("Next steps:\n"));
-        console.log("  1. Review the config (optional):");
-        console.log(chalk.cyan(`     nano ${outputPath}\n`));
-        console.log("  2. Start orchestrator + dashboard:");
-        console.log(chalk.cyan("     ao start\n"));
-
-        if (projectId) {
-          console.log("  3. Spawn agent sessions:");
-          console.log(chalk.cyan(`     ao spawn ${projectId} ISSUE-123\n`));
-        } else {
-          console.log("  3. Add a project to the config:");
+          // Success message and next steps
+          console.log(chalk.green(`\n✓ Config written to ${outputPath}\n`));
+          console.log(chalk.bold("Next steps:\n"));
+          console.log("  1. Review the config (optional):");
           console.log(chalk.cyan(`     nano ${outputPath}\n`));
-        }
+          console.log("  2. Start orchestrator + dashboard:");
+          console.log(chalk.cyan("     ao start\n"));
 
-        console.log(chalk.dim("See SETUP.md for detailed configuration options.\n"));
+          if (projectId) {
+            console.log("  3. Spawn agent sessions:");
+            console.log(chalk.cyan(`     ao spawn ${projectId} ISSUE-123\n`));
+          } else {
+            console.log("  3. Add a project to the config:");
+            console.log(chalk.cyan(`     nano ${outputPath}\n`));
+          }
 
-        if (!env.hasTmux) {
-          console.log(chalk.yellow("Note: tmux is required for the default runtime."));
-          console.log(chalk.dim("Install with: brew install tmux\n"));
-        }
+          console.log(chalk.dim("See SETUP.md for detailed configuration options.\n"));
 
-        if (!env.ghAuthed && env.hasGh) {
-          console.log(chalk.yellow("Note: Authenticate GitHub CLI for full functionality."));
-          console.log(chalk.dim("Run: gh auth login\n"));
+          if (!env.hasTmux) {
+            console.log(chalk.yellow("Note: tmux is required for the default runtime."));
+            console.log(chalk.dim("Install with: brew install tmux\n"));
+          }
+
+          if (!env.ghAuthed && env.hasGh) {
+            console.log(chalk.yellow("Note: Authenticate GitHub CLI for full functionality."));
+            console.log(chalk.dim("Run: gh auth login\n"));
+          }
+        } finally {
+          rl.close();
         }
-      } finally {
-        rl.close();
-      }
-    });
+      },
+    );
 }
 
 async function handleAutoMode(outputPath: string, smart: boolean): Promise<void> {

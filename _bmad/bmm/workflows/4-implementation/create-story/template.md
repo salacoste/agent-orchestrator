@@ -12,6 +12,7 @@ so that {{benefit}}.
 
 ## Acceptance Criteria
 
+<!-- For component stories: always include "Component renders correctly in parent layout/page" -->
 1. [Add acceptance criteria from epics/PRD]
 
 ## Tasks / Subtasks

@@ -501,13 +501,13 @@ previous_cycle:
 
   # Epic 42: Spec-to-Implementation Completion
   # Implement all spec-only stories from Cycles 6-7
-  epic-42: in-progress
+  epic-42: done
   42-1-shared-annotation-ui-component: done
   42-2-role-based-agent-ownership-ui: done
   42-3-handoff-protocol-implementation: done
-  42-4-dead-button-eslint-rule: backlog
-  42-5-test-per-story-convention-enforcement: backlog
-  42-6-renders-in-parent-ac-convention: backlog
+  42-4-dead-button-eslint-rule: done
+  42-5-test-per-story-convention-enforcement: done
+  42-6-renders-in-parent-ac-convention: done
   epic-42-retrospective: optional
 
 # Known Limitations & Feature Flags

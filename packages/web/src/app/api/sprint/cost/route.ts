@@ -34,11 +34,12 @@ export async function GET(): Promise<NextResponse> {
     for (const session of sessions) {
       const cost = session.agentInfo?.cost;
       if (cost) {
+        const rawDuration = session.lastActivityAt.getTime() - session.createdAt.getTime();
         usages.push({
           agentId: session.id,
           storyId: session.issueId ?? undefined,
           tokensUsed: cost.inputTokens + cost.outputTokens,
-          durationMs: session.lastActivityAt.getTime() - session.createdAt.getTime(),
+          durationMs: Number.isFinite(rawDuration) ? Math.max(1, rawDuration) : 1,
           timestamp: session.lastActivityAt.toISOString(),
         });
       }
@@ -53,19 +54,21 @@ export async function GET(): Promise<NextResponse> {
     // Compute cost summary
     const costSummary = computeSprintCost(usages);
 
-    // Compute sprint clock — use earliest session creation as sprint start
-    const earliestSession = sessions.reduce(
-      (earliest, s) => (s.createdAt < earliest ? s.createdAt : earliest),
-      new Date(),
-    );
-    const sprintEndDate = new Date(earliestSession.getTime() + SPRINT_DURATION_MS);
-
-    const clock = computeSprintClock(
-      sprintEndDate,
-      storiesDone,
-      Math.max(storiesTotal, 1),
-      DEFAULT_AVG_STORY_DURATION_MS,
-    );
+    // Compute sprint clock — null when no sessions (no sprint to track)
+    let clock = null;
+    if (sessions.length > 0) {
+      const earliestSession = sessions.reduce(
+        (earliest, s) => (s.createdAt < earliest ? s.createdAt : earliest),
+        new Date(),
+      );
+      const sprintEndDate = new Date(earliestSession.getTime() + SPRINT_DURATION_MS);
+      clock = computeSprintClock(
+        sprintEndDate,
+        storiesDone,
+        Math.max(storiesTotal, 1),
+        DEFAULT_AVG_STORY_DURATION_MS,
+      );
+    }
 
     return NextResponse.json(
       { cost: costSummary, clock, timestamp: new Date().toISOString() },

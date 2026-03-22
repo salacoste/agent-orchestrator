@@ -18,11 +18,17 @@ export function useSprintCost(): {
   const [cost, setCost] = useState<SprintCostSummary | null>(null);
   const [clock, setClock] = useState<SprintClock | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     async function fetchCost() {
+      // Abort previous in-flight request
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       try {
-        const res = await fetch("/api/sprint/cost");
+        const res = await fetch("/api/sprint/cost", { signal: controller.signal });
         if (!res.ok) return;
         const data = (await res.json()) as {
           cost: SprintCostSummary | null;
@@ -31,7 +37,7 @@ export function useSprintCost(): {
         setCost(data.cost);
         setClock(data.clock);
       } catch {
-        // Fetch failure — retain previous data
+        // Fetch failure or abort — retain previous data
       }
     }
 
@@ -45,6 +51,7 @@ export function useSprintCost(): {
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      abortRef.current?.abort();
     };
   }, []);
 

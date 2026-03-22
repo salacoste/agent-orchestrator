@@ -10,9 +10,6 @@ vi.mock("@/lib/services", () => ({
     sessionManager: {
       list: (...args: unknown[]) => mockList(...args),
     },
-    config: {
-      generated: "2026-03-20",
-    },
   }),
 }));
 

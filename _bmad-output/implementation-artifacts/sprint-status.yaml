@@ -495,7 +495,7 @@ previous_cycle:
   epic-41: in-progress
   41-1-sdk-eventsource-sse-client: done
   41-2-vscode-extension-vsce-package-testing: done
-  41-3-github-action-ci-workflow-testing: backlog
+  41-3-github-action-ci-workflow-testing: done
   41-4-git-hook-installation-command: backlog
   epic-41-retrospective: optional
 

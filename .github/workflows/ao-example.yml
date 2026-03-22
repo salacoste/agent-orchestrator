@@ -1,0 +1,37 @@
+# Example: Agent Orchestrator GitHub Action usage
+# This workflow demonstrates spawn/status/recommend commands.
+# Requires AO_URL and AO_API_KEY secrets configured in the repository.
+
+name: Agent Orchestrator Example
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "Command to run (spawn, status, recommend)"
+        required: true
+        default: "status"
+      story-id:
+        description: "Story ID for spawn command"
+        required: false
+
+jobs:
+  orchestrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Agent Orchestrator
+        uses: ./packages/github-action
+        id: ao
+        with:
+          command: ${{ github.event.inputs.command }}
+          story-id: ${{ github.event.inputs.story-id }}
+          project-id: default
+          ao-url: ${{ secrets.AO_URL }}
+          ao-api-key: ${{ secrets.AO_API_KEY }}
+
+      - name: Show results
+        run: |
+          echo "Session ID: ${{ steps.ao.outputs.session-id }}"
+          echo "Status: ${{ steps.ao.outputs.status }}"
+          echo "Recommendation: ${{ steps.ao.outputs.recommendation }}"

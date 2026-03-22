@@ -37,7 +37,7 @@ export function createLoopDetector(threshold: number = 3): LoopDetector {
   const counts = new Map<string, { agentId: string; storyId: string; count: number }>();
 
   function getKey(agentId: string, storyId: string): string {
-    return `${agentId}:${storyId}`;
+    return `${agentId}\0${storyId}`; // Null byte separator avoids ID collision
   }
 
   return {
@@ -50,26 +50,30 @@ export function createLoopDetector(threshold: number = 3): LoopDetector {
     },
 
     getStatus(agentId: string): LoopStatus | null {
-      // Find any entry for this agent
-      for (const [, entry] of counts) {
-        if (entry.agentId === agentId) {
-          return {
-            agentId: entry.agentId,
-            storyId: entry.storyId,
-            restartCount: entry.count,
-            threshold,
-            isLooping: entry.count >= threshold,
-          };
+      // Find entry with highest restart count for this agent
+      let worst: { agentId: string; storyId: string; count: number } | null = null;
+      for (const entry of counts.values()) {
+        if (entry.agentId === agentId && (!worst || entry.count > worst.count)) {
+          worst = entry;
         }
       }
-      return null;
+      if (!worst) return null;
+      return {
+        agentId: worst.agentId,
+        storyId: worst.storyId,
+        restartCount: worst.count,
+        threshold,
+        isLooping: worst.count >= threshold,
+      };
     },
 
     reset(agentId: string): void {
-      for (const [key, entry] of counts) {
-        if (entry.agentId === agentId) {
-          counts.delete(key);
-        }
+      // Collect keys first to avoid mutating Map during iteration
+      const keysToDelete = [...counts.entries()]
+        .filter(([, entry]) => entry.agentId === agentId)
+        .map(([key]) => key);
+      for (const key of keysToDelete) {
+        counts.delete(key);
       }
     },
 

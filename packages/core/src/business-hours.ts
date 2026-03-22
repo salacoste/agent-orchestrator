@@ -39,7 +39,8 @@ export function isWithinBusinessHours(
   // Get current time in the configured timezone
   const currentMinutes = getCurrentMinutesInTimezone(now, config.timezone);
 
-  // Handle normal hours (e.g., 09:00-18:00) and overnight (e.g., 22:00-06:00)
+  // Handle normal hours (e.g., 09:00-18:00) and overnight (e.g., 22:00-06:00).
+  // Equal start/end (e.g., 09:00-09:00) = always outside hours (no valid window).
   if (startMinutes <= endMinutes) {
     // Normal: within hours if start <= current < end
     return currentMinutes >= startMinutes && currentMinutes < endMinutes;
@@ -78,7 +79,8 @@ function getCurrentMinutesInTimezone(now: Date, timezone?: string): number {
       hour12: false,
     });
     const parts = formatter.formatToParts(now);
-    const hour = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10);
+    // Some engines return "24" for midnight with hour12:false — clamp to 0-23
+    const hour = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0", 10) % 24;
     const minute = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0", 10);
     return hour * 60 + minute;
   } catch {

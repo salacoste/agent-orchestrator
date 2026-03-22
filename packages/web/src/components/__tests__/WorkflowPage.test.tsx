@@ -42,6 +42,7 @@ function okResponse(data: unknown) {
   });
 }
 
+// Note: fetch counts include +1 for useSprintCost hook's mount fetch (Story 40.2)
 describe("WorkflowPage SSE integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -52,9 +53,9 @@ describe("WorkflowPage SSE integration", () => {
   it("re-fetches data when SSE callback fires", async () => {
     render(<WorkflowPage projects={["proj-a"]} />);
 
-    // Wait for initial fetch
+    // Wait for initial fetch (workflow + sprint cost)
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
     expect(mockFetch).toHaveBeenCalledWith(
       "/api/workflow/proj-a",
@@ -68,7 +69,7 @@ describe("WorkflowPage SSE integration", () => {
     sseCallback!();
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledTimes(3);
     });
   });
 
@@ -77,7 +78,7 @@ describe("WorkflowPage SSE integration", () => {
 
     // Wait for initial load to complete and dashboard to render
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
     await waitFor(() => {
       // Dashboard rendered — no loading skeleton (animate-pulse elements)
@@ -94,7 +95,7 @@ describe("WorkflowPage SSE integration", () => {
     expect(container.querySelector(".animate-pulse")).not.toBeInTheDocument();
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledTimes(3);
     });
 
     // Dashboard should still be rendered after SSE refetch completes
@@ -142,7 +143,7 @@ describe("WorkflowPage SSE integration", () => {
     render(<WorkflowPage projects={["proj-a"]} />);
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
     // Fire SSE callback rapidly 3 times
@@ -157,17 +158,17 @@ describe("WorkflowPage SSE integration", () => {
       sseCallback!();
     });
 
-    // All 3 calls were made (fetch is called immediately), but first two were aborted
+    // All 3 SSE calls + 2 initial (workflow + sprint cost) = 5 total
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledTimes(4); // 1 initial + 3 SSE
+      expect(mockFetch).toHaveBeenCalledTimes(5);
     });
 
-    // Verify earlier fetches had their AbortSignals aborted
-    // Calls: [0]=initial, [1]=SSE-1 (aborted), [2]=SSE-2 (aborted), [3]=SSE-3 (kept)
+    // Verify earlier SSE fetches had their AbortSignals aborted
+    // Calls: [0]=workflow, [1]=sprint-cost, [2]=SSE-1 (aborted), [3]=SSE-2 (aborted), [4]=SSE-3 (kept)
     const calls = mockFetch.mock.calls;
-    const signal1 = (calls[1]![1] as { signal: AbortSignal }).signal;
-    const signal2 = (calls[2]![1] as { signal: AbortSignal }).signal;
-    const signal3 = (calls[3]![1] as { signal: AbortSignal }).signal;
+    const signal1 = (calls[2]![1] as { signal: AbortSignal }).signal;
+    const signal2 = (calls[3]![1] as { signal: AbortSignal }).signal;
+    const signal3 = (calls[4]![1] as { signal: AbortSignal }).signal;
     expect(signal1.aborted).toBe(true);
     expect(signal2.aborted).toBe(true);
     expect(signal3.aborted).toBe(false);
@@ -178,7 +179,7 @@ describe("WorkflowPage SSE integration", () => {
 
     // Wait for initial successful load
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
     // Make SSE-triggered fetch fail
@@ -187,7 +188,7 @@ describe("WorkflowPage SSE integration", () => {
     sseCallback!();
 
     await waitFor(() => {
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledTimes(3);
     });
 
     // Error alert should NOT appear (silent failure keeps LKG data)

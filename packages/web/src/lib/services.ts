@@ -10,10 +10,14 @@
  * bundle them correctly.
  */
 
+import { join } from "node:path";
 import {
   loadConfig,
   createPluginRegistry,
   createSessionManager,
+  createLearningStore,
+  registerLearningStore,
+  getSessionsDir,
   type OrchestratorConfig,
   type PluginRegistry,
   type SessionManager,
@@ -74,6 +78,27 @@ async function initServices(): Promise<Services> {
   registry.register(pluginTrackerLinear);
 
   const sessionManager = createSessionManager({ config, registry });
+
+  // Initialize LearningStore for compound learning (Story 39.4).
+  // Uses the project matching cwd for deterministic selection in multi-project configs.
+  // Limitation: only one project's learnings are indexed. Multi-project aggregation
+  // would require a composite store (deferred).
+  const cwdPath = process.cwd();
+  const learningProject =
+    Object.values(config.projects).find((p) => p.path === cwdPath) ??
+    Object.values(config.projects)[0];
+  if (learningProject) {
+    try {
+      const sessionsDir = getSessionsDir(config.configPath, learningProject.path);
+      const learningStore = createLearningStore({
+        learningsPath: join(sessionsDir, "learnings.jsonl"),
+      });
+      await learningStore.start();
+      registerLearningStore(learningStore);
+    } catch {
+      // Learning store init failure is non-fatal — API returns empty data
+    }
+  }
 
   const services = { config, registry, sessionManager };
   globalForServices._aoServices = services;

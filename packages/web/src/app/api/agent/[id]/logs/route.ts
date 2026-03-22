@@ -1,16 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getServices } from "@/lib/services";
+import { readLastLogLines, getLogFilePath, hasLogFile, getSessionsDir } from "@composio/ao-core";
+
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/agent/[id]/logs — Get agent session logs
+ * GET /api/agent/[id]/logs — Get agent session logs (Story 38.3)
  *
- * Returns the last 100 log lines from the agent session.
- *
- * NOTE: This is a stub implementation. The actual implementation should:
- * - Read the agent's log file from the logs directory
- * - Return the last 100 lines (tail -100)
- * - Handle cases where log file doesn't exist
+ * Reads the last N log lines from the agent's log file via
+ * the core log-capture module. Falls back to metadata previousLogsPath.
  */
 export async function GET(
   request: NextRequest,
@@ -18,19 +17,59 @@ export async function GET(
 ): Promise<NextResponse> {
   try {
     const { id: agentId } = await params;
+    const { sessionManager, config } = await getServices();
 
-    // TODO: Implement actual log fetching
-    // - Construct log file path from agent ID and logs directory
-    // - Read last 100 lines from the log file
-    // - Return as array of log strings
-    // - Handle missing log files gracefully
+    // Verify agent exists and get session data
+    const session = await sessionManager.get(agentId);
+    if (!session) {
+      return NextResponse.json({ error: `Agent ${agentId} not found` }, { status: 404 });
+    }
 
-    // Stub response for development
+    // Parse line count from query params (default 100, max 1000)
+    const url = new URL(request.url);
+    const lines = Math.min(parseInt(url.searchParams.get("lines") ?? "100", 10), 1000);
+
+    // Find sessions dir for this project
+    const project = config.projects[session.projectId];
+    if (!project) {
+      return NextResponse.json({
+        logs: [],
+        source: "none",
+        message: "Project not found in config",
+      });
+    }
+
+    const sessionsDir = getSessionsDir(config.configPath, project.path);
+
+    // Try primary log file first
+    if (hasLogFile(sessionsDir, agentId)) {
+      const logPath = getLogFilePath(sessionsDir, agentId);
+      const logLines = readLastLogLines(logPath, lines);
+      return NextResponse.json({
+        logs: logLines,
+        source: "primary",
+        path: logPath,
+      });
+    }
+
+    // Fall back to previousLogsPath from metadata
+    const previousLogsPath = session.metadata["previousLogsPath"];
+    if (previousLogsPath) {
+      const logLines = readLastLogLines(previousLogsPath, lines);
+      if (logLines.length > 0) {
+        return NextResponse.json({
+          logs: logLines,
+          source: "previous",
+          path: previousLogsPath,
+        });
+      }
+    }
+
+    // No logs available
     return NextResponse.json({
-      logs: [
-        `[INFO] ${new Date().toISOString()}: Agent ${agentId} log file not yet implemented`,
-        `[DEBUG] This endpoint requires integration with the agent runtime log capture`,
-      ],
+      logs: [],
+      source: "none",
+      message: `No log file found for agent ${agentId}`,
     });
   } catch (err) {
     const error = err as Error;

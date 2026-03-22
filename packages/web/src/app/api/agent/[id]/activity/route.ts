@@ -1,16 +1,15 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { getServices } from "@/lib/services";
+import { readAgentEvents } from "./read-events";
+
 export const dynamic = "force-dynamic";
 
 /**
- * GET /api/agent/[id]/activity — Get agent activity timeline
+ * GET /api/agent/[id]/activity — Get agent activity timeline (Story 38.2)
  *
- * Returns the last 100 activity events for the agent session.
- *
- * NOTE: This is a stub implementation. The actual implementation should:
- * - Query the event log for events related to this agent
- * - Filter by agent ID and sort by timestamp (newest first)
- * - Return structured activity events with type, timestamp, and description
+ * Queries the JSONL event backup log for events matching this agent ID.
+ * Falls back to empty array if no events found.
  */
 export async function GET(
   request: NextRequest,
@@ -18,23 +17,22 @@ export async function GET(
 ): Promise<NextResponse> {
   try {
     const { id: agentId } = await params;
+    const { sessionManager, config } = await getServices();
 
-    // TODO: Implement actual activity data fetching
-    // - Query event audit log (events.jsonl) for this agent
-    // - Filter events where metadata.agentId === agentId
-    // - Sort by timestamp descending (newest first)
-    // - Transform to ActivityEvent format
+    // Verify agent exists
+    const session = await sessionManager.get(agentId);
+    if (!session) {
+      return NextResponse.json({ error: `Agent ${agentId} not found` }, { status: 404 });
+    }
 
-    // Stub response for development
-    return NextResponse.json({
-      events: [
-        {
-          timestamp: new Date().toISOString(),
-          type: "status",
-          description: `Agent ${agentId} session started`,
-        },
-      ],
-    });
+    // Parse limit from query params (default 100)
+    const url = new URL(request.url);
+    const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "100", 10), 500);
+
+    // Read events from JSONL backup log
+    const events = await readAgentEvents(agentId, config.configPath, limit);
+
+    return NextResponse.json({ events });
   } catch (err) {
     const error = err as Error;
     return NextResponse.json({ error: error.message }, { status: 500 });

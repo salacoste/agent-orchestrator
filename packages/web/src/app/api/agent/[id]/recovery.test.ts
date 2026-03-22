@@ -1,17 +1,21 @@
 /**
- * Agent recovery API endpoint tests (Story 25a.1).
+ * Agent recovery API endpoint tests (Stories 25a.1, 38.4, 38.5).
  */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 // Mock getServices
 const mockGet = vi.fn();
 const mockKill = vi.fn();
+const mockRestore = vi.fn();
+const mockSend = vi.fn();
 
 vi.mock("@/lib/services", () => ({
   getServices: vi.fn().mockResolvedValue({
     sessionManager: {
       get: (...args: unknown[]) => mockGet(...args),
       kill: (...args: unknown[]) => mockKill(...args),
+      restore: (...args: unknown[]) => mockRestore(...args),
+      send: (...args: unknown[]) => mockSend(...args),
     },
     config: {},
     registry: {},
@@ -22,16 +26,28 @@ vi.mock("@/lib/services", () => ({
 const { GET: pingHandler } = await import("./ping/route");
 const { POST: restartHandler } = await import("./restart/route");
 const { POST: reassignHandler } = await import("./reassign/route");
+const { POST: resumeHandler } = await import("./resume/route");
 
-function makeRequest(): Request {
-  return new Request("http://localhost/api/agent/test-agent/ping", { method: "POST" });
+function makeRequest(body?: unknown): Request {
+  if (body) {
+    return new Request("http://localhost/api/agent/test-agent/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  }
+  return new Request("http://localhost/api/agent/test-agent/action", { method: "POST" });
 }
 
 function makeParams(id: string) {
   return { params: Promise.resolve({ id }) };
 }
 
-describe("POST /api/agent/[id]/ping", () => {
+beforeEach(() => {
+  vi.clearAllMocks();
+});
+
+describe("GET /api/agent/[id]/ping", () => {
   it("returns 200 with status for existing agent", async () => {
     mockGet.mockResolvedValueOnce({ status: "working", lastActivityAt: "2026-03-21T00:00:00Z" });
 
@@ -51,10 +67,18 @@ describe("POST /api/agent/[id]/ping", () => {
   });
 });
 
-describe("POST /api/agent/[id]/restart", () => {
-  it("kills agent and returns confirmation", async () => {
-    mockGet.mockResolvedValueOnce({ status: "blocked" });
+describe("POST /api/agent/[id]/restart (Story 38.5)", () => {
+  it("kills and restores agent successfully", async () => {
+    mockGet.mockResolvedValueOnce({
+      status: "blocked",
+      issueId: "PROJ-1",
+      branch: "feat/story-1",
+    });
     mockKill.mockResolvedValueOnce(undefined);
+    mockRestore.mockResolvedValueOnce({
+      id: "agent-1-v2",
+      status: "spawning",
+    });
 
     const res = await restartHandler(makeRequest() as never, makeParams("agent-1"));
     const data = await res.json();
@@ -62,7 +86,29 @@ describe("POST /api/agent/[id]/restart", () => {
     expect(res.status).toBe(200);
     expect(data.success).toBe(true);
     expect(data.previousStatus).toBe("blocked");
+    expect(data.newStatus).toBe("spawning");
+    expect(data.agentId).toBe("agent-1-v2");
     expect(mockKill).toHaveBeenCalledWith("agent-1");
+    expect(mockRestore).toHaveBeenCalledWith("agent-1");
+  });
+
+  it("reports partial success when restore fails", async () => {
+    mockGet.mockResolvedValueOnce({
+      status: "blocked",
+      issueId: "PROJ-1",
+      branch: "feat/story-1",
+    });
+    mockKill.mockResolvedValueOnce(undefined);
+    mockRestore.mockRejectedValueOnce(new Error("Workspace missing"));
+
+    const res = await restartHandler(makeRequest() as never, makeParams("agent-1"));
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(data.action).toBe("killed");
+    expect(data.respawnFailed).toBe(true);
+    expect(data.respawnError).toContain("Workspace missing");
   });
 
   it("returns 404 for unknown agent", async () => {
@@ -91,5 +137,74 @@ describe("POST /api/agent/[id]/reassign", () => {
 
     const res = await reassignHandler(makeRequest() as never, makeParams("ghost"));
     expect(res.status).toBe(404);
+  });
+});
+
+describe("POST /api/agent/[id]/resume (Story 38.4)", () => {
+  it("resumes a blocked agent successfully", async () => {
+    mockGet.mockResolvedValueOnce({ status: "blocked" });
+    mockRestore.mockResolvedValueOnce({
+      id: "agent-1",
+      status: "working",
+    });
+
+    const res = await resumeHandler(makeRequest() as never, makeParams("agent-1"));
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(data.previousStatus).toBe("blocked");
+    expect(data.newStatus).toBe("working");
+  });
+
+  it("sends user message after resume", async () => {
+    mockGet.mockResolvedValueOnce({ status: "blocked" });
+    mockRestore.mockResolvedValueOnce({ id: "agent-1", status: "working" });
+    mockSend.mockResolvedValueOnce(undefined);
+
+    const res = await resumeHandler(
+      makeRequest({ message: "Please fix the CI" }) as never,
+      makeParams("agent-1"),
+    );
+    const data = await res.json();
+
+    expect(data.success).toBe(true);
+    expect(mockSend).toHaveBeenCalledWith("agent-1", "Please fix the CI");
+  });
+
+  it("returns 409 for non-resumable status", async () => {
+    mockGet.mockResolvedValueOnce({ status: "working" });
+
+    const res = await resumeHandler(makeRequest() as never, makeParams("agent-1"));
+    expect(res.status).toBe(409);
+
+    const data = await res.json();
+    expect(data.error).toContain("not resumable");
+  });
+
+  it("returns 404 for unknown agent", async () => {
+    mockGet.mockResolvedValueOnce(null);
+
+    const res = await resumeHandler(makeRequest() as never, makeParams("ghost"));
+    expect(res.status).toBe(404);
+  });
+
+  it("resumes ci_failed agent", async () => {
+    mockGet.mockResolvedValueOnce({ status: "ci_failed" });
+    mockRestore.mockResolvedValueOnce({ id: "agent-1", status: "working" });
+
+    const res = await resumeHandler(makeRequest() as never, makeParams("agent-1"));
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.success).toBe(true);
+  });
+
+  it("handles restore failure with 409", async () => {
+    mockGet.mockResolvedValueOnce({ status: "blocked" });
+    mockRestore.mockRejectedValueOnce(new Error("Session not restorable"));
+
+    const res = await resumeHandler(makeRequest() as never, makeParams("agent-1"));
+    expect(res.status).toBe(409);
   });
 });

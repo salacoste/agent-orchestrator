@@ -25,9 +25,10 @@ export async function GET(
       return NextResponse.json({ error: `Agent ${agentId} not found` }, { status: 404 });
     }
 
-    // Parse line count from query params (default 100, max 1000)
+    // Parse line count from query params (default 100, clamped 1-1000)
     const url = new URL(request.url);
-    const lines = Math.min(parseInt(url.searchParams.get("lines") ?? "100", 10), 1000);
+    const parsed = parseInt(url.searchParams.get("lines") ?? "100", 10);
+    const lines = Math.max(1, Math.min(Number.isNaN(parsed) ? 100 : parsed, 1000));
 
     // Find sessions dir for this project
     const project = config.projects[session.projectId];
@@ -41,7 +42,9 @@ export async function GET(
 
     const sessionsDir = getSessionsDir(config.configPath, project.path);
 
-    // Try primary log file first
+    // Try primary log file first.
+    // Note: readLastLogLines uses synchronous readFileSync (core API design).
+    // Acceptable for dashboard polling; async variant needed for high-traffic.
     if (hasLogFile(sessionsDir, agentId)) {
       const logPath = getLogFilePath(sessionsDir, agentId);
       const logLines = readLastLogLines(logPath, lines);
@@ -51,9 +54,10 @@ export async function GET(
       });
     }
 
-    // Fall back to previousLogsPath from metadata
+    // Fall back to previousLogsPath from metadata.
+    // Validate path is under sessions dir to prevent reading arbitrary files.
     const previousLogsPath = session.metadata["previousLogsPath"];
-    if (previousLogsPath) {
+    if (previousLogsPath && previousLogsPath.startsWith(sessionsDir)) {
       const logLines = readLastLogLines(previousLogsPath, lines);
       if (logLines.length > 0) {
         return NextResponse.json({

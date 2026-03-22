@@ -1,7 +1,7 @@
 /**
  * GET /api/agent/[id]/logs — Logs API tests (Story 38.3)
  */
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 const mockGet = vi.fn();
 
@@ -32,6 +32,10 @@ vi.mock("@composio/ao-core", () => ({
 }));
 
 const { GET } = await import("./route");
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 function makeRequest(lines?: number): Request {
   const url = lines
@@ -75,7 +79,7 @@ describe("GET /api/agent/[id]/logs", () => {
     mockGet.mockResolvedValueOnce({
       id: "agent-1",
       projectId: "my-project",
-      metadata: { previousLogsPath: "/tmp/old-logs/agent-1.log" },
+      metadata: { previousLogsPath: "/tmp/sessions/logs/agent-1-prev.log" },
     });
     mockGetSessionsDir.mockReturnValue("/tmp/sessions");
     mockHasLogFile.mockReturnValue(false);

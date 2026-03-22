@@ -42,7 +42,8 @@
 # epics-cycle-6.md — Epics 29-33 (18 stories), Planning Cycle 6
 # epics-cycle-7.md — Epics 34-37 (13 stories), Planning Cycle 7
 # epics-cycle-8.md — Epics 38-42 (23 stories), Planning Cycle 8
-# Total: 42 epics, 198 stories
+# epics-cycle-9.md — Epics 43-48 (43 stories), Planning Cycle 9
+# Total: 49 epics, 241 stories
 
 generated: 2026-03-21
 project: agent-orchestrator
@@ -509,6 +510,93 @@ previous_cycle:
   42-5-test-per-story-convention-enforcement: done
   42-6-renders-in-parent-ac-convention: done
   epic-42-retrospective: optional
+
+  # ==========================================================================
+  # CYCLE 9 — Autonomy, Scale & Frontier (Epics 43-48)
+  # Source: epics-cycle-9.md
+  # Phase 1: Epics 43, 44, 45, 46a, 48 (parallel)
+  # Phase 2: Epics 46b, 47 (after 46a)
+  # ==========================================================================
+
+  # Epic 43: Autonomous Pipeline
+  # Autopilot, forecasting, WIP limits, queue, loop detection, scope creep
+  # Build order: 43.3 → 43.1 → [43.2, 43.5, 43.6] → 43.4 → [43.7, 43.8]
+  epic-43: backlog
+  43-3-wip-limits-spawn-queue: backlog
+  43-1-autopilot-mode: backlog
+  43-2-sprint-forecaster: backlog
+  43-5-infinite-loop-detector: backlog
+  43-6-scope-creep-detector: backlog
+  43-4-priority-queue-upgrade: backlog
+  43-7-business-hours-awareness: backlog
+  43-8-deadline-pressure-adaptation: backlog
+  epic-43-retrospective: optional
+
+  # Epic 44: Power User Dashboard
+  # Executive view, split screen, log streaming, health score, progressive UI
+  epic-44: backlog
+  44-1-executive-view-widget-grid: backlog
+  44-2-split-screen-artifact-agent: backlog
+  44-3-agent-log-streaming: backlog
+  44-4-sprint-health-score: backlog
+  44-5-progressive-ui-complexity: backlog
+  44-6-focus-mode-single-story: backlog
+  44-7-notification-digest: backlog
+  44-8-mobile-companion-pwa: backlog
+  epic-44-retrospective: optional
+
+  # Epic 45: Intelligence & Replay
+  # Story replay, time travel, post-mortem, ROI, standup, confidence, reasoning, sprint diff
+  epic-45: backlog
+  45-1-story-replay-time-lapse: backlog
+  45-2-time-travel-historical-state: backlog
+  45-3-post-mortem-auto-generator: backlog
+  45-4-roi-calculator: backlog
+  45-5-meeting-summary-generator: backlog
+  45-6-confidence-indicators: backlog
+  45-7-reasoning-trail: backlog
+  45-8-sprint-diff-comparison: backlog
+  epic-45-retrospective: optional
+
+  # Epic 46a: Infrastructure Foundation (Phase 1)
+  # Audit log, state snapshots, inter-agent messaging
+  epic-46a: backlog
+  46a-1-immutable-audit-log: backlog
+  46a-2-state-snapshots-export-import: backlog
+  46a-3-inter-agent-messaging-bus: backlog
+  epic-46a-retrospective: optional
+
+  # Epic 46b: Team Features (Phase 2 — after 46a)
+  # Auth, approvals, resource pool, isolation
+  epic-46b: backlog
+  46b-1-auth-config-based-user-identity: backlog
+  46b-2-approval-workflows: backlog
+  46b-3-resource-pool-shared-capacity: backlog
+  46b-4-agent-isolation-levels: backlog
+  epic-46b-retrospective: optional
+
+  # Epic 47: Agent Autonomy v2 (Phase 2 — after 46a)
+  # Agent negotiation, sandbox, NLU, conflict wizard, hot-swap, pre-flight
+  epic-47: backlog
+  47-1-agent-collaboration-negotiation: backlog
+  47-2-agent-sandbox-permissions: backlog
+  47-3-nlu-orchestration: backlog
+  47-4-conflict-resolution-wizard: backlog
+  47-5-agent-hot-swap: backlog
+  47-6-pre-flight-check: backlog
+  epic-47-retrospective: optional
+
+  # Epic 48: Frontier & Simulation
+  # Monte Carlo simulator (impl) + 3 investigation spikes
+  # Build order: 48.1 → 48.2 → 48.3, spikes independent
+  epic-48: backlog
+  48-1-sprint-simulator-engine: backlog
+  48-2-sprint-simulator-dashboard: backlog
+  48-3-sprint-simulator-scenario-comparison: backlog
+  48-4-spike-3d-dependency-visualization: backlog
+  48-5-spike-voice-navigation: backlog
+  48-6-spike-swarm-intelligence: backlog
+  epic-48-retrospective: optional
 
 # Known Limitations & Feature Flags
 limitations:

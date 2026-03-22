@@ -1,5 +1,5 @@
 {
-  "name": "agent-orchestrator",
+  "name": "ao-vscode-extension",
   "displayName": "Agent Orchestrator",
   "description": "Manage AI coding agents from VS Code — sprint status, agent monitoring, workflow recommendations",
   "version": "0.1.0",

@@ -8,10 +8,12 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+// Note: These tests read source files via __dirname. This works because vitest
+// runs TypeScript directly (no compilation to dist/). If the test runner changes,
+// paths may need to be resolved from the project root instead.
+
 describe("VS Code extension structure", () => {
   it("extension.ts exports activate function", async () => {
-    // Dynamic import to verify the module structure
-    // Note: actual vscode module won't be available, so we test the source exists
     const src = readFileSync(join(__dirname, "extension.ts"), "utf-8");
     expect(src).toContain("export function activate");
   });

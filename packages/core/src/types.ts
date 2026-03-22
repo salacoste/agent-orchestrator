@@ -198,6 +198,8 @@ export interface SessionSpawnConfig {
   agent?: string;
   /** Pre-formatted story context from sprint-status.yaml + story file (routed to prompt builder Layer 2) */
   storyContext?: string;
+  /** Spawn priority for queue ordering. Higher = spawn first. (Story 43.4) */
+  priority?: number;
 }
 
 /** Config for creating an orchestrator session */

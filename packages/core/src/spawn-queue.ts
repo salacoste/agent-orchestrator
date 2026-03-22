@@ -14,6 +14,10 @@ interface QueueEntry {
   resolve: (session: Session) => void;
   reject: (error: Error) => void;
   enqueuedAt: string;
+  /** Higher number = higher priority. Default: 0. (Story 43.4) */
+  priority: number;
+  /** Insertion order for stable sort when priorities are equal. */
+  insertionOrder: number;
 }
 
 /** Queue state for API responses. */
@@ -21,7 +25,7 @@ export interface SpawnQueueState {
   pending: number;
   running: number;
   limit: number | null;
-  entries: Array<{ storyId?: string; enqueuedAt: string }>;
+  entries: Array<{ storyId?: string; enqueuedAt: string; priority: number }>;
 }
 
 /** Spawn queue interface. */
@@ -48,6 +52,7 @@ export function createSpawnQueue(config: SpawnQueueConfig): SpawnQueue {
   const limit = config.maxConcurrentAgents ?? null;
   const queue: QueueEntry[] = [];
   let processing = false;
+  let insertionCounter = 0;
 
   // Note: calls sessionManager.list() on each check. Acceptable for current scale;
   // if session count grows large, consider caching with short TTL.
@@ -70,11 +75,23 @@ export function createSpawnQueue(config: SpawnQueueConfig): SpawnQueue {
         }
       }
 
-      const entry = queue.shift();
-      if (!entry) {
+      // Pick highest-priority entry (Story 43.4). Stable: equal priority → FIFO.
+      if (queue.length === 0) {
         processing = false;
         return;
       }
+      let bestIdx = 0;
+      for (let i = 1; i < queue.length; i++) {
+        const best = queue[bestIdx];
+        const candidate = queue[i];
+        if (
+          candidate.priority > best.priority ||
+          (candidate.priority === best.priority && candidate.insertionOrder < best.insertionOrder)
+        ) {
+          bestIdx = i;
+        }
+      }
+      const entry = queue.splice(bestIdx, 1)[0];
 
       try {
         const session = await config.sessionManager.spawn(entry.config);
@@ -108,6 +125,8 @@ export function createSpawnQueue(config: SpawnQueueConfig): SpawnQueue {
           resolve,
           reject,
           enqueuedAt: new Date().toISOString(),
+          priority: spawnConfig.priority ?? 0,
+          insertionOrder: insertionCounter++,
         });
         // Trigger processing (may spawn immediately if under limit)
         queueMicrotask(() => void processNext());
@@ -116,13 +135,18 @@ export function createSpawnQueue(config: SpawnQueueConfig): SpawnQueue {
 
     async getState(): Promise<SpawnQueueState> {
       const running = await getRunningCount();
+      // Return entries sorted by priority (highest first) for display
+      const sorted = [...queue].sort((a, b) =>
+        b.priority !== a.priority ? b.priority - a.priority : a.insertionOrder - b.insertionOrder,
+      );
       return {
         pending: queue.length,
         running,
         limit,
-        entries: queue.map((e) => ({
+        entries: sorted.map((e) => ({
           storyId: e.config.issueId,
           enqueuedAt: e.enqueuedAt,
+          priority: e.priority,
         })),
       };
     },

@@ -158,4 +158,79 @@ describe("createSpawnQueue", () => {
     const state = await queue.getState();
     expect(state.limit).toBeNull();
   });
+
+  it("higher priority spawns before lower priority (Story 43.4)", async () => {
+    const running = [makeSession({ id: "a1" }), makeSession({ id: "a2" })];
+    const sm = createMockSessionManager(running);
+    const spawnOrder: string[] = [];
+    (sm.spawn as ReturnType<typeof vi.fn>).mockImplementation(async (cfg: SessionSpawnConfig) => {
+      spawnOrder.push(cfg.issueId ?? "unknown");
+      return makeSession({ id: `new-${cfg.issueId}` });
+    });
+
+    const queue = createSpawnQueue({ maxConcurrentAgents: 2, sessionManager: sm });
+
+    // Enqueue low priority first, then high
+    queue.enqueue({ projectId: "p", issueId: "low", priority: 10 } as SessionSpawnConfig);
+    queue.enqueue({ projectId: "p", issueId: "high", priority: 100 } as SessionSpawnConfig);
+
+    // Wait for enqueue microtasks
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Open slots — processNext chains automatically via queueMicrotask
+    (sm.list as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    await queue.processNext();
+    // Wait for chained microtask
+    await new Promise((r) => setTimeout(r, 10));
+
+    // "high" should have spawned first
+    expect(spawnOrder[0]).toBe("high");
+    expect(spawnOrder[1]).toBe("low");
+  });
+
+  it("equal priority preserves FIFO order (Story 43.4)", async () => {
+    const running = [makeSession({ id: "a1" }), makeSession({ id: "a2" })];
+    const sm = createMockSessionManager(running);
+    const spawnOrder: string[] = [];
+    (sm.spawn as ReturnType<typeof vi.fn>).mockImplementation(async (cfg: SessionSpawnConfig) => {
+      spawnOrder.push(cfg.issueId ?? "unknown");
+      return makeSession({ id: `new-${cfg.issueId}` });
+    });
+
+    const queue = createSpawnQueue({ maxConcurrentAgents: 2, sessionManager: sm });
+
+    // Enqueue three items with same priority
+    queue.enqueue({ projectId: "p", issueId: "first", priority: 50 } as SessionSpawnConfig);
+    queue.enqueue({ projectId: "p", issueId: "second", priority: 50 } as SessionSpawnConfig);
+    queue.enqueue({ projectId: "p", issueId: "third", priority: 50 } as SessionSpawnConfig);
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    // Open slots — processNext chains automatically
+    (sm.list as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+    await queue.processNext();
+    // Wait for all chained processing
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(spawnOrder).toEqual(["first", "second", "third"]);
+  });
+
+  it("getState shows priority in entries (Story 43.4)", async () => {
+    const running = [makeSession(), makeSession()];
+    const sm = createMockSessionManager(running);
+    const queue = createSpawnQueue({ maxConcurrentAgents: 2, sessionManager: sm });
+
+    queue.enqueue({ projectId: "p", issueId: "s-1", priority: 10 } as SessionSpawnConfig);
+    queue.enqueue({ projectId: "p", issueId: "s-2", priority: 90 } as SessionSpawnConfig);
+
+    await new Promise((r) => setTimeout(r, 10));
+
+    const state = await queue.getState();
+    expect(state.entries).toHaveLength(2);
+    // Sorted by priority — highest first
+    expect(state.entries[0].storyId).toBe("s-2");
+    expect(state.entries[0].priority).toBe(90);
+    expect(state.entries[1].storyId).toBe("s-1");
+    expect(state.entries[1].priority).toBe(10);
+  });
 });

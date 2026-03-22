@@ -527,7 +527,7 @@ previous_cycle:
   43-2-sprint-forecaster: done
   43-5-infinite-loop-detector: done
   43-6-scope-creep-detector: done
-  43-4-priority-queue-upgrade: backlog
+  43-4-priority-queue-upgrade: done
   43-7-business-hours-awareness: backlog
   43-8-deadline-pressure-adaptation: backlog
   epic-43-retrospective: optional

@@ -99,4 +99,15 @@ describe("Agent ownership store", () => {
 
     expect(getAllOwners()).toHaveLength(0);
   });
+
+  it("rejects empty owner name", () => {
+    expect(assignOwner("agent-1", "")).toBeNull();
+    expect(assignOwner("agent-1", "   ")).toBeNull();
+    expect(getAllOwners()).toHaveLength(0);
+  });
+
+  it("trims whitespace from owner name", () => {
+    const result = assignOwner("agent-1", "  Alice  ");
+    expect(result?.owner).toBe("Alice");
+  });
 });

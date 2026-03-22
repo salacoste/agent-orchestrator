@@ -199,9 +199,12 @@ export interface AgentOwner {
 
 const owners = new Map<string, AgentOwner>();
 
-/** Assign an owner to an agent session. */
-export function assignOwner(agentId: string, owner: string): AgentOwner {
-  const entry: AgentOwner = { agentId, owner, assignedAt: new Date().toISOString() };
+/** Assign an owner to an agent session. Owner must be non-empty.
+ * Owner names are case-sensitive — "Alice" and "alice" are different owners. */
+export function assignOwner(agentId: string, owner: string): AgentOwner | null {
+  const trimmed = owner.trim();
+  if (!trimmed) return null;
+  const entry: AgentOwner = { agentId, owner: trimmed, assignedAt: new Date().toISOString() };
   owners.set(agentId, entry);
   notify({ type: "ownership", action: "assign", data: entry, timestamp: entry.assignedAt });
   return entry;

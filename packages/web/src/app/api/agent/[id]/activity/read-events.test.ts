@@ -6,12 +6,13 @@
  */
 import { describe, expect, it, afterAll } from "vitest";
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { readAgentEvents } from "./read-events";
 
-// Create a temp directory for test fixtures
-const testDir = join(tmpdir(), `ao-read-events-test-${Date.now()}`);
+// Create a temp directory for test fixtures (UUID avoids parallel-run collisions)
+const testDir = join(tmpdir(), `ao-read-events-test-${randomUUID()}`);
 mkdirSync(testDir, { recursive: true });
 
 // The readAgentEvents function looks for events.jsonl at join(configPath, "..", "events.jsonl")
@@ -52,7 +53,7 @@ function writeEvents(
 
 describe("readAgentEvents", () => {
   it("returns empty array when events.jsonl does not exist", async () => {
-    const emptyDir = join(tmpdir(), `ao-empty-${Date.now()}`);
+    const emptyDir = join(tmpdir(), `ao-empty-${randomUUID()}`);
     mkdirSync(emptyDir, { recursive: true });
     const fakePath = join(emptyDir, "config.yaml");
     writeFileSync(fakePath, "# test", "utf-8");

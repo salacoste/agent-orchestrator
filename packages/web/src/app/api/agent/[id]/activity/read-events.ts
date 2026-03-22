@@ -32,14 +32,21 @@ export async function readAgentEvents(
 ): Promise<ActivityEvent[]> {
   const events: ActivityEvent[] = [];
 
-  // Resolve events.jsonl path from config directory
+  // Resolve events.jsonl path — check config directory first, then cwd.
+  // Audit trail writes to cwd-relative events.jsonl; config dir may differ in deployment.
   if (!configPath || typeof configPath !== "string") {
     return events;
   }
   const configDir = join(configPath, "..");
-  const eventsLogPath = join(configDir, "events.jsonl");
+  const candidates = [join(configDir, "events.jsonl")];
+  // Also check cwd if it differs from configDir (audit-trail uses cwd-relative path)
+  const cwdCandidate = join(process.cwd(), "events.jsonl");
+  if (cwdCandidate !== candidates[0]) {
+    candidates.push(cwdCandidate);
+  }
+  const eventsLogPath = candidates.find((p) => existsSync(p));
 
-  if (!existsSync(eventsLogPath)) {
+  if (!eventsLogPath) {
     return events;
   }
 
@@ -52,7 +59,9 @@ export async function readAgentEvents(
     if (fileSize <= MAX_READ_BYTES) {
       content = await readFile(eventsLogPath, "utf-8");
     } else {
-      // Read only the tail of the file
+      // Read only the tail of the file.
+      // Trade-off: 512KB alloc per request. Acceptable for dashboard polling (~5s interval).
+      // For high-traffic: switch to createReadStream with start offset.
       const buffer = Buffer.alloc(MAX_READ_BYTES);
       const fh = await open(eventsLogPath, "r");
       try {

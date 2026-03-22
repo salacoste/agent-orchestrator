@@ -99,4 +99,23 @@ describe("GET /api/agent/[id]/activity", () => {
 
     expect(mockReadAgentEvents).toHaveBeenCalledWith("agent-1", "/tmp/test-config.yaml", 500);
   });
+
+  it("defaults to 100 when limit is NaN", async () => {
+    mockGet.mockResolvedValueOnce({ id: "agent-1", status: "working" });
+    mockReadAgentEvents.mockResolvedValueOnce([]);
+
+    const req = new Request("http://localhost/api/agent/a1/activity?limit=abc", { method: "GET" });
+    await GET(req as never, makeParams("agent-1"));
+
+    expect(mockReadAgentEvents).toHaveBeenCalledWith("agent-1", "/tmp/test-config.yaml", 100);
+  });
+
+  it("clamps negative limit to 1", async () => {
+    mockGet.mockResolvedValueOnce({ id: "agent-1", status: "working" });
+    mockReadAgentEvents.mockResolvedValueOnce([]);
+
+    await GET(makeRequest(-5) as never, makeParams("agent-1"));
+
+    expect(mockReadAgentEvents).toHaveBeenCalledWith("agent-1", "/tmp/test-config.yaml", 1);
+  });
 });

@@ -24,9 +24,10 @@ export async function GET(
       return NextResponse.json({ error: `Agent ${agentId} not found` }, { status: 404 });
     }
 
-    // Parse limit from query params (default 100)
+    // Parse limit from query params (default 100, clamped 1-500)
     const url = new URL(request.url);
-    const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "100", 10), 500);
+    const parsed = parseInt(url.searchParams.get("limit") ?? "100", 10);
+    const limit = Math.max(1, Math.min(Number.isNaN(parsed) ? 100 : parsed, 500));
 
     // Read events from JSONL backup log
     const events = await readAgentEvents(agentId, config.configPath, limit);

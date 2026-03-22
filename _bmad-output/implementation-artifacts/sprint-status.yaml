@@ -485,8 +485,8 @@ previous_cycle:
   # Wire placeholder components to actual data sources
   epic-40: in-progress
   40-1-cascade-alert-real-status: done
-  40-2-sprint-cost-panel-real-token-data: review
-  40-3-conflict-checkpoint-panel-real-git-data: backlog
+  40-2-sprint-cost-panel-real-token-data: done
+  40-3-conflict-checkpoint-panel-real-git-data: in-progress
   40-4-project-chat-panel-llm-integration: backlog
   epic-40-retrospective: optional
 

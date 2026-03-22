@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import { useCascadeStatus } from "@/hooks/useCascadeStatus";
 import { useSprintCost } from "@/hooks/useSprintCost";
+import { useConflictCheckpoint } from "@/hooks/useConflictCheckpoint";
 import { CascadeAlert } from "@/components/CascadeAlert";
 import { ConflictCheckpointPanel } from "@/components/ConflictCheckpointPanel";
 import { ProjectChatPanel } from "@/components/ProjectChatPanel";
@@ -38,6 +39,7 @@ function buildPresenceFromPhases(phases: WorkflowResponse["phases"]): Record<Pha
 export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
   const { status: cascadeStatus, resume: cascadeResume } = useCascadeStatus();
   const { cost: sprintCost, clock: sprintClock } = useSprintCost();
+  const { conflicts, timeline } = useConflictCheckpoint();
 
   const nudges = useMemo(
     () => detectAntiPatterns(data.artifacts, data.phases, buildPresenceFromPhases(data.phases)),
@@ -97,7 +99,7 @@ export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
 
       {/* Row 5: Conflicts + Agents */}
       <div className="md:col-span-2">
-        <ConflictCheckpointPanel conflicts={[]} timeline={null} />
+        <ConflictCheckpointPanel conflicts={conflicts} timeline={timeline} />
       </div>
       <div>
         <WorkflowAgentsPanel agents={data.agents} />

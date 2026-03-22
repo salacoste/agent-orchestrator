@@ -31,11 +31,11 @@ export function useSprintCost(): {
         const res = await fetch("/api/sprint/cost", { signal: controller.signal });
         if (!res.ok) return;
         const data = (await res.json()) as {
-          cost: SprintCostSummary | null;
-          clock: SprintClock | null;
+          cost?: SprintCostSummary | null;
+          clock?: SprintClock | null;
         };
-        setCost(data.cost);
-        setClock(data.clock);
+        setCost(data.cost ?? null);
+        setClock(data.clock ?? null);
       } catch {
         // Fetch failure or abort — retain previous data
       }

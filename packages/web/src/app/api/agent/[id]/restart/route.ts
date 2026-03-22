@@ -34,7 +34,15 @@ export async function POST(
     const branch = session.branch;
 
     // Kill the stuck session — kill() archives metadata before deleting it
-    await sessionManager.kill(agentId);
+    try {
+      await sessionManager.kill(agentId);
+    } catch (killErr) {
+      const msg = killErr instanceof Error ? killErr.message : String(killErr);
+      return NextResponse.json(
+        { success: false, error: `Failed to terminate agent ${agentId}: ${msg}` },
+        { status: 500 },
+      );
+    }
 
     // Attempt to respawn with same context via restore.
     // restore() reads archived metadata and re-spawns with accumulated context.
@@ -63,18 +71,22 @@ export async function POST(
       });
     }
 
-    // Kill succeeded but respawn failed — report partial success
-    return NextResponse.json({
-      success: true,
-      agentId,
-      previousStatus,
-      action: "killed",
-      respawnFailed: true,
-      respawnError,
-      storyId,
-      branch,
-      message: `Agent ${agentId} terminated. Respawn failed: ${respawnError}. Use CLI: ao spawn --story ${storyId ?? "<storyId>"}`,
-    });
+    // Kill succeeded but respawn failed — partial success (207 Multi-Status)
+    return NextResponse.json(
+      {
+        success: false,
+        partial: true,
+        agentId,
+        previousStatus,
+        action: "killed",
+        respawnFailed: true,
+        respawnError,
+        storyId,
+        branch,
+        message: `Agent ${agentId} terminated. Respawn failed: ${respawnError}. Use CLI: ao spawn --story "${storyId ?? "<storyId>"}"`,
+      },
+      { status: 207 },
+    );
   } catch (err) {
     const error = err as Error;
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });

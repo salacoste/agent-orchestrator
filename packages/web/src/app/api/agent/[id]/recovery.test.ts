@@ -92,7 +92,7 @@ describe("POST /api/agent/[id]/restart (Story 38.5)", () => {
     expect(mockRestore).toHaveBeenCalledWith("agent-1");
   });
 
-  it("reports partial success when restore fails", async () => {
+  it("reports partial failure (207) when restore fails after kill", async () => {
     mockGet.mockResolvedValueOnce({
       status: "blocked",
       issueId: "PROJ-1",
@@ -104,11 +104,25 @@ describe("POST /api/agent/[id]/restart (Story 38.5)", () => {
     const res = await restartHandler(makeRequest() as never, makeParams("agent-1"));
     const data = await res.json();
 
-    expect(res.status).toBe(200);
-    expect(data.success).toBe(true);
+    expect(res.status).toBe(207);
+    expect(data.success).toBe(false);
+    expect(data.partial).toBe(true);
     expect(data.action).toBe("killed");
     expect(data.respawnFailed).toBe(true);
     expect(data.respawnError).toContain("Workspace missing");
+  });
+
+  it("returns 500 when kill() fails", async () => {
+    mockGet.mockResolvedValueOnce({ status: "blocked" });
+    mockKill.mockRejectedValueOnce(new Error("Runtime plugin timeout"));
+
+    const res = await restartHandler(makeRequest() as never, makeParams("agent-1"));
+    const data = await res.json();
+
+    expect(res.status).toBe(500);
+    expect(data.success).toBe(false);
+    expect(data.error).toContain("Failed to terminate agent");
+    expect(data.error).toContain("Runtime plugin timeout");
   });
 
   it("returns 404 for unknown agent", async () => {

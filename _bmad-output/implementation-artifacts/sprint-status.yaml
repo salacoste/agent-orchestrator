@@ -524,7 +524,7 @@ previous_cycle:
   epic-43: in-progress
   43-3-wip-limits-spawn-queue: done
   43-1-autopilot-mode: done
-  43-2-sprint-forecaster: backlog
+  43-2-sprint-forecaster: done
   43-5-infinite-loop-detector: backlog
   43-6-scope-creep-detector: backlog
   43-4-priority-queue-upgrade: backlog

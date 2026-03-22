@@ -283,6 +283,10 @@ export {
 export { createSpawnQueue } from "./spawn-queue.js";
 export type { SpawnQueue, SpawnQueueState, SpawnQueueConfig } from "./spawn-queue.js";
 
+// Sprint Forecaster — predictive completion (Story 43.2)
+export { computeForecast } from "./sprint-forecaster.js";
+export type { SprintForecast, BacklogStory, ConfidenceLevel } from "./sprint-forecaster.js";
+
 // Autopilot — supervised workflow advancement (Story 43.1)
 export { createAutopilot } from "./autopilot.js";
 export type {

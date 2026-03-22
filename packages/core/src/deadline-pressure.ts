@@ -59,8 +59,14 @@ export function detectDeadlinePressure(
 ): DeadlinePressure {
   const cfg = { ...DEFAULT_THRESHOLDS, ...thresholds };
 
-  const timePercent = totalTimeMs > 0 ? Math.round((timeRemainingMs / totalTimeMs) * 100) : 0;
-  const completionPercent = storiesTotal > 0 ? Math.round((storiesDone / storiesTotal) * 100) : 100;
+  const timePercent =
+    totalTimeMs > 0
+      ? Math.max(0, Math.min(100, Math.round((timeRemainingMs / totalTimeMs) * 100)))
+      : 0;
+  const completionPercent =
+    storiesTotal > 0
+      ? Math.max(0, Math.min(100, Math.round((storiesDone / storiesTotal) * 100)))
+      : 100;
   const undonePercent = 100 - completionPercent;
 
   // Determine pressure level
@@ -81,25 +87,32 @@ export function detectDeadlinePressure(
   };
 }
 
+// Pre-allocated recommendation arrays (avoids allocation on every poll)
+const CRITICAL_RECOMMENDATIONS: readonly string[] = [
+  "Cut scope: identify and defer non-essential stories immediately",
+  "Skip optional code reviews — ship with post-merge review",
+  "Maximize parallelism: raise WIP limit to available agent count",
+  "Cancel investigation spikes and stretch stories",
+  "Focus all agents on critical-path stories only",
+];
+
+const MODERATE_RECOMMENDATIONS: readonly string[] = [
+  "Consider deferring stretch stories to next sprint",
+  "Parallelize more aggressively where safe",
+  "Streamline reviews: focus on critical paths only",
+  "Assess scope: are all remaining stories essential?",
+];
+
+const NO_RECOMMENDATIONS: readonly string[] = [];
+
 /** Get adapted recommendations for each pressure level. */
 function getRecommendations(level: PressureLevel): string[] {
   switch (level) {
     case "critical":
-      return [
-        "Cut scope: identify and defer non-essential stories immediately",
-        "Skip optional code reviews — ship with post-merge review",
-        "Maximize parallelism: raise WIP limit to available agent count",
-        "Cancel investigation spikes and stretch stories",
-        "Focus all agents on critical-path stories only",
-      ];
+      return [...CRITICAL_RECOMMENDATIONS];
     case "moderate":
-      return [
-        "Consider deferring stretch stories to next sprint",
-        "Parallelize more aggressively where safe",
-        "Streamline reviews: focus on critical paths only",
-        "Assess scope: are all remaining stories essential?",
-      ];
+      return [...MODERATE_RECOMMENDATIONS];
     case "none":
-      return [];
+      return [...NO_RECOMMENDATIONS];
   }
 }

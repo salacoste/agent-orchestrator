@@ -283,6 +283,16 @@ export {
 export { createSpawnQueue } from "./spawn-queue.js";
 export type { SpawnQueue, SpawnQueueState, SpawnQueueConfig } from "./spawn-queue.js";
 
+// Autopilot — supervised workflow advancement (Story 43.1)
+export { createAutopilot } from "./autopilot.js";
+export type {
+  Autopilot,
+  AutopilotConfig,
+  AutopilotState,
+  AutopilotAction,
+  AutopilotMode,
+} from "./autopilot.js";
+
 // Dead Letter Queue — persistent storage for failed operations
 export { createDeadLetterQueue } from "./dead-letter-queue.js";
 export type {

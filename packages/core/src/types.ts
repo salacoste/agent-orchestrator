@@ -908,6 +908,9 @@ export interface OrchestratorConfig {
 
   /** Maximum concurrent running agents. Omit for unlimited. (Story 43.3) */
   maxConcurrentAgents?: number;
+
+  /** Autopilot mode: off (default), supervised, or autonomous. (Story 43.1) */
+  autopilot?: "off" | "supervised" | "autonomous";
 }
 
 /**

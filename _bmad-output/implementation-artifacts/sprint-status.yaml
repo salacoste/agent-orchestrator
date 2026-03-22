@@ -523,7 +523,7 @@ previous_cycle:
   # Build order: 43.3 → 43.1 → [43.2, 43.5, 43.6] → 43.4 → [43.7, 43.8]
   epic-43: in-progress
   43-3-wip-limits-spawn-queue: done
-  43-1-autopilot-mode: backlog
+  43-1-autopilot-mode: done
   43-2-sprint-forecaster: backlog
   43-5-infinite-loop-detector: backlog
   43-6-scope-creep-detector: backlog

@@ -134,6 +134,7 @@ const OrchestratorConfigSchema = z.object({
   health: HealthConfigSchema.optional(),
   workflow: WorkflowConfigSchema.optional(),
   maxConcurrentAgents: z.number().int().positive().optional(),
+  autopilot: z.enum(["off", "supervised", "autonomous"]).default("off"),
   projects: z.record(ProjectConfigSchema),
   notifiers: z.record(NotifierConfigSchema).default({}),
   notificationRouting: z.record(z.array(z.string())).default({

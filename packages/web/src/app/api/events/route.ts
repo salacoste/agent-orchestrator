@@ -3,6 +3,7 @@ import { sessionToDashboard } from "@/lib/serialize";
 import { getAttentionLevel } from "@/lib/types";
 import { subscribeWorkflowChanges } from "@/lib/workflow-watcher";
 import { subscribeCollaborationChanges } from "@/lib/workflow/collaboration";
+import { createWiredCascadeDetector } from "@/lib/workflow/cascade-detector-wired";
 import { buildPhasePresence, scanAllArtifacts } from "@/lib/workflow/scan-artifacts";
 import { computePhaseStates } from "@/lib/workflow/compute-state";
 import type { PhaseEntry } from "@/lib/workflow/types";
@@ -26,6 +27,9 @@ export async function GET(): Promise<Response> {
 
   // Track previous phase states for transition detection (Story 16.5)
   let prevPhases: PhaseEntry[] | null = null;
+
+  // Cascade failure detector — auto-records from session snapshots (Story 39.3)
+  const cascadeDetector = createWiredCascadeDetector();
 
   const stream = new ReadableStream({
     start(controller) {
@@ -166,6 +170,24 @@ export async function GET(): Promise<Response> {
             // enqueue failure means the stream is closed — clean up both intervals
             clearInterval(updates);
             clearInterval(heartbeat);
+          }
+
+          // Feed session snapshot to cascade detector (Story 39.3).
+          // Separate try/catch — cascade errors must not kill the SSE stream.
+          try {
+            const cascadeTriggered = cascadeDetector.processSnapshot(
+              dashboardSessions.map((s) => ({ id: s.id, status: s.status })),
+            );
+            if (cascadeTriggered) {
+              const cascadeStatus = cascadeDetector.getStatus();
+              controller.enqueue(
+                encoder.encode(
+                  `data: ${JSON.stringify({ type: "cascade.triggered", failureCount: cascadeStatus.failureCount, timestamp: new Date().toISOString() })}\n\n`,
+                ),
+              );
+            }
+          } catch {
+            // Cascade detection error is non-fatal — session polling continues
           }
         })();
       }, 5000);

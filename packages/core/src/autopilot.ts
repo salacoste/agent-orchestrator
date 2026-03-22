@@ -9,7 +9,7 @@
  * - supervised: notify + wait for approval (5-min timeout → queue, NOT auto-approve)
  * - autonomous: auto-spawn, notify after the fact
  */
-import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { parse as yamlParse } from "yaml";
 import type { SpawnQueue } from "./spawn-queue.js";
 import type { SessionSpawnConfig } from "./types.js";
@@ -21,6 +21,7 @@ export interface AutopilotAction {
   timestamp: string;
   action:
     | "spawn-enqueued"
+    | "spawn-failed"
     | "notification-sent"
     | "no-next-story"
     | "mode-changed"
@@ -80,15 +81,22 @@ export function createAutopilot(config: AutopilotConfig): Autopilot {
     if (actions.length > MAX_ACTIONS) actions.pop();
   }
 
-  function findNextBacklogStory(): string | null {
+  async function findNextBacklogStory(): Promise<string | null> {
     try {
-      const content = readFileSync(config.sprintStatusPath, "utf-8");
+      const content = await readFile(config.sprintStatusPath, "utf-8");
       const parsed = yamlParse(content) as Record<string, unknown>;
       const devStatus = parsed.development_status as Record<string, string> | undefined;
       if (!devStatus) return null;
 
       for (const [key, status] of Object.entries(devStatus)) {
-        if (status === "backlog" && /^\d+[-a]?-\d*-/.test(key) && !key.startsWith("epic-")) {
+        // Match story keys: digits + optional letter suffix + dash + digits + dash + name
+        // Excludes epic-* and *-retrospective entries
+        if (
+          status === "backlog" &&
+          !key.startsWith("epic-") &&
+          !key.endsWith("-retrospective") &&
+          /^\d+[a-z]?-\d+-/.test(key)
+        ) {
           return key;
         }
       }
@@ -102,7 +110,7 @@ export function createAutopilot(config: AutopilotConfig): Autopilot {
     return {
       projectId: config.projectId,
       issueId: storyId,
-    } as SessionSpawnConfig;
+    };
   }
 
   async function enqueueSpawn(storyId: string): Promise<void> {
@@ -117,7 +125,7 @@ export function createAutopilot(config: AutopilotConfig): Autopilot {
     } catch (err) {
       log({
         timestamp: new Date().toISOString(),
-        action: "spawn-enqueued",
+        action: "spawn-failed",
         storyId,
         detail: `Spawn failed: ${err instanceof Error ? err.message : String(err)}`,
       });
@@ -129,7 +137,7 @@ export function createAutopilot(config: AutopilotConfig): Autopilot {
       if (mode === "off") return;
       if (paused) return;
 
-      const nextStory = findNextBacklogStory();
+      const nextStory = await findNextBacklogStory();
       if (!nextStory) {
         paused = true;
         log({

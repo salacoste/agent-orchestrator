@@ -7,10 +7,10 @@ import type { SpawnQueue } from "../spawn-queue.js";
 import type { Session } from "../types.js";
 
 // Mock fs for sprint-status.yaml reading
-const mockReadFileSync = vi.fn();
-vi.mock("node:fs", async (importOriginal) => {
+const mockReadFile = vi.fn();
+vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal();
-  return { ...(actual as object), readFileSync: (...args: unknown[]) => mockReadFileSync(...args) };
+  return { ...(actual as object), readFile: (...args: unknown[]) => mockReadFile(...args) };
 });
 
 function makeSession(): Session {
@@ -35,7 +35,7 @@ function makeSprintStatus(stories: Record<string, string>): string {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  mockReadFileSync.mockReset();
+  mockReadFile.mockReset();
 });
 
 afterEach(() => {
@@ -60,7 +60,7 @@ describe("createAutopilot", () => {
   it("autonomous mode: story done → next story found → spawn enqueued", async () => {
     const queue = createMockQueue();
     const notify = vi.fn();
-    mockReadFileSync.mockReturnValue(
+    mockReadFile.mockResolvedValue(
       makeSprintStatus({
         "epic-1": "in-progress",
         "1-1-first": "done",
@@ -86,7 +86,7 @@ describe("createAutopilot", () => {
   it("supervised mode: story done → notification sent → timeout → queued", async () => {
     const queue = createMockQueue();
     const notify = vi.fn();
-    mockReadFileSync.mockReturnValue(makeSprintStatus({ "2-1-story": "backlog" }));
+    mockReadFile.mockResolvedValue(makeSprintStatus({ "2-1-story": "backlog" }));
 
     const autopilot = createAutopilot({
       mode: "supervised",
@@ -117,7 +117,7 @@ describe("createAutopilot", () => {
 
   it("supervised mode: approve before timeout → spawns immediately", async () => {
     const queue = createMockQueue();
-    mockReadFileSync.mockReturnValue(makeSprintStatus({ "3-1-story": "backlog" }));
+    mockReadFile.mockResolvedValue(makeSprintStatus({ "3-1-story": "backlog" }));
 
     const autopilot = createAutopilot({
       mode: "supervised",
@@ -144,7 +144,7 @@ describe("createAutopilot", () => {
   it("no next story → pauses and notifies", async () => {
     const queue = createMockQueue();
     const notify = vi.fn();
-    mockReadFileSync.mockReturnValue(
+    mockReadFile.mockResolvedValue(
       makeSprintStatus({ "epic-1": "done" }), // No backlog stories
     );
 
@@ -165,7 +165,7 @@ describe("createAutopilot", () => {
 
   it("setMode changes mode and clears paused state", () => {
     const queue = createMockQueue();
-    mockReadFileSync.mockReturnValue(makeSprintStatus({}));
+    mockReadFile.mockResolvedValue(makeSprintStatus({}));
 
     const autopilot = createAutopilot({
       mode: "off",
@@ -183,7 +183,7 @@ describe("createAutopilot", () => {
 
   it("getState returns mode, paused, and recent actions", async () => {
     const queue = createMockQueue();
-    mockReadFileSync.mockReturnValue(makeSprintStatus({ "1-1-story": "backlog" }));
+    mockReadFile.mockResolvedValue(makeSprintStatus({ "1-1-story": "backlog" }));
 
     const autopilot = createAutopilot({
       mode: "autonomous",
@@ -202,7 +202,7 @@ describe("createAutopilot", () => {
 
   it("does not act when paused", async () => {
     const queue = createMockQueue();
-    mockReadFileSync.mockReturnValue(makeSprintStatus({})); // No stories → will pause
+    mockReadFile.mockResolvedValue(makeSprintStatus({})); // No stories → will pause
 
     const autopilot = createAutopilot({
       mode: "autonomous",
@@ -212,7 +212,7 @@ describe("createAutopilot", () => {
     });
 
     await autopilot.onStoryCompleted("1-1-done"); // Pauses (no next story)
-    mockReadFileSync.mockReturnValue(makeSprintStatus({ "2-1-new": "backlog" }));
+    mockReadFile.mockResolvedValue(makeSprintStatus({ "2-1-new": "backlog" }));
 
     await autopilot.onStoryCompleted("1-2-done"); // Should NOT act — still paused
 

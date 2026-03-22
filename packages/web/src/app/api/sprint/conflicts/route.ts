@@ -26,17 +26,17 @@ export async function GET(): Promise<NextResponse> {
     const changes: AgentFileChange[] = [];
     const store = getLearningStore();
 
-    if (store) {
-      // Get recent learnings for active session agents
-      const activeAgentIds = new Set(sessions.map((s) => s.id));
-      const learnings = store.list();
+    // Merge all learnings per agent into a single AgentFileChange with deduplicated files
+    const agentFiles = new Map<string, Set<string>>();
+    const activeAgentIds = new Set(sessions.map((s) => s.id));
 
+    if (store) {
+      const learnings = store.list();
       for (const learning of learnings) {
         if (activeAgentIds.has(learning.agentId) && learning.filesModified.length > 0) {
-          changes.push({
-            agentId: learning.agentId,
-            modifiedFiles: learning.filesModified,
-          });
+          const existing = agentFiles.get(learning.agentId) ?? new Set<string>();
+          for (const f of learning.filesModified) existing.add(f);
+          agentFiles.set(learning.agentId, existing);
         }
       }
     }
@@ -44,7 +44,7 @@ export async function GET(): Promise<NextResponse> {
     // Also include files from session metadata if available
     for (const session of sessions) {
       // Skip if already have learning data for this agent
-      if (changes.some((c) => c.agentId === session.id)) continue;
+      if (agentFiles.has(session.id)) continue;
 
       // Check session metadata for files (some agents track this)
       const filesRaw = session.metadata["filesModified"];
@@ -52,7 +52,7 @@ export async function GET(): Promise<NextResponse> {
         try {
           const files = JSON.parse(filesRaw) as string[];
           if (Array.isArray(files) && files.length > 0) {
-            changes.push({ agentId: session.id, modifiedFiles: files });
+            agentFiles.set(session.id, new Set(files));
           }
         } catch {
           // Malformed JSON in metadata — skip
@@ -60,19 +60,16 @@ export async function GET(): Promise<NextResponse> {
       }
     }
 
+    // Build changes array from merged per-agent file sets
+    for (const [agentId, files] of agentFiles) {
+      changes.push({ agentId, modifiedFiles: [...files] });
+    }
+
     const conflicts: FileConflict[] = detectFileConflicts(changes);
 
-    // Build checkpoint timeline from first active working session
-    let timeline: CheckpointTimeline | null = null;
-    const workingSession = sessions.find((s) => s.status === "working" && s.workspacePath);
-    if (workingSession) {
-      timeline = {
-        agentId: workingSession.id,
-        checkpoints: [], // Real git log would require execFile — deferred to avoid blocking
-        enabled: true,
-        intervalMinutes: 10,
-      };
-    }
+    // Checkpoint timeline deferred — requires execFile("git", ["log"]) on worktrees.
+    // Return null until implemented to avoid misleading "0 checkpoints" UI.
+    const timeline: CheckpointTimeline | null = null;
 
     return NextResponse.json(
       { conflicts, timeline, timestamp: new Date().toISOString() },

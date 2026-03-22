@@ -98,7 +98,7 @@ describe("GET /api/sprint/conflicts", () => {
     expect(data.conflicts[0].filePath).toBe("src/shared.ts");
   });
 
-  it("returns timeline for first working session", async () => {
+  it("returns null timeline (checkpoint git log deferred)", async () => {
     mockList.mockResolvedValueOnce([
       { id: "agent-1", status: "working", metadata: {}, workspacePath: "/tmp/worktree-1" },
     ]);
@@ -106,18 +106,7 @@ describe("GET /api/sprint/conflicts", () => {
 
     const res = await GET();
     const data = await res.json();
-    expect(data.timeline).not.toBeNull();
-    expect(data.timeline.agentId).toBe("agent-1");
-  });
-
-  it("returns null timeline when no working sessions", async () => {
-    mockList.mockResolvedValueOnce([
-      { id: "agent-1", status: "merged", metadata: {}, workspacePath: null },
-    ]);
-    mockGetLearningStore.mockReturnValue({ list: () => [] });
-
-    const res = await GET();
-    const data = await res.json();
+    // Timeline is null until git log checkpoint implementation
     expect(data.timeline).toBeNull();
   });
 

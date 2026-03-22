@@ -521,7 +521,7 @@ previous_cycle:
   # Epic 43: Autonomous Pipeline
   # Autopilot, forecasting, WIP limits, queue, loop detection, scope creep
   # Build order: 43.3 → 43.1 → [43.2, 43.5, 43.6] → 43.4 → [43.7, 43.8]
-  epic-43: in-progress
+  epic-43: done
   43-3-wip-limits-spawn-queue: done
   43-1-autopilot-mode: done
   43-2-sprint-forecaster: done
@@ -529,7 +529,7 @@ previous_cycle:
   43-6-scope-creep-detector: done
   43-4-priority-queue-upgrade: done
   43-7-business-hours-awareness: done
-  43-8-deadline-pressure-adaptation: backlog
+  43-8-deadline-pressure-adaptation: done
   epic-43-retrospective: optional
 
   # Epic 44: Power User Dashboard

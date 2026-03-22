@@ -287,6 +287,10 @@ export type { SpawnQueue, SpawnQueueState, SpawnQueueConfig } from "./spawn-queu
 export { computeForecast } from "./sprint-forecaster.js";
 export type { SprintForecast, BacklogStory, ConfidenceLevel } from "./sprint-forecaster.js";
 
+// Deadline Pressure — pragmatic trade-offs (Story 43.8)
+export { detectDeadlinePressure } from "./deadline-pressure.js";
+export type { DeadlinePressure, PressureLevel, PressureThresholds } from "./deadline-pressure.js";
+
 // Business Hours — time-sensitive spawning gate (Story 43.7)
 export { isWithinBusinessHours } from "./business-hours.js";
 export type { BusinessHoursConfig } from "./business-hours.js";

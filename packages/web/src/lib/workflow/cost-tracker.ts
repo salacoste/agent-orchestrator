@@ -151,3 +151,63 @@ export function computeSprintClock(
 
   return { timeRemainingMs, workRemainingMs, gapMs, status, description };
 }
+
+// ---------------------------------------------------------------------------
+// Sprint Health Score (Story 44.4)
+// ---------------------------------------------------------------------------
+
+/** Health score color. */
+export type HealthColor = "green" | "amber" | "red";
+
+/** Sprint health score with component breakdown. */
+export interface SprintHealth {
+  /** Overall score 0-100. */
+  score: number;
+  /** Color indicator. */
+  color: HealthColor;
+  /** Component scores (0-1 normalized). */
+  components: {
+    completion: number;
+    blockers: number;
+    failures: number;
+    cost: number;
+  };
+}
+
+/**
+ * Compute sprint health score — weighted normalized composite (Story 44.4).
+ *
+ * Weights (party mode decision): completion 0.4, blockers 0.2, failures 0.2, cost 0.2.
+ */
+export function computeSprintHealth(
+  storiesDone: number,
+  storiesTotal: number,
+  blockerCount: number,
+  failureRate: number,
+  costBurnRate: number,
+  expectedBurnRate: number,
+): SprintHealth {
+  const total = Math.max(storiesTotal, 1);
+
+  // Normalize each component to 0-1 (higher = healthier)
+  const completion = storiesDone / total;
+  const blockers = 1 - Math.min(1, blockerCount / total);
+  const failures = 1 - Math.min(1, failureRate);
+  const cost = expectedBurnRate > 0 ? 1 - Math.min(1, costBurnRate / expectedBurnRate) : 1;
+
+  // Weighted sum
+  const score = Math.round((completion * 0.4 + blockers * 0.2 + failures * 0.2 + cost * 0.2) * 100);
+
+  return {
+    score: Math.max(0, Math.min(100, score)),
+    color: getHealthColor(score),
+    components: { completion, blockers, failures, cost },
+  };
+}
+
+/** Map score to color: green >70, amber 40-70, red <40. */
+export function getHealthColor(score: number): HealthColor {
+  if (score > 70) return "green";
+  if (score >= 40) return "amber";
+  return "red";
+}

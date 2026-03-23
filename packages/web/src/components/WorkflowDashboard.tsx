@@ -62,7 +62,9 @@ export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
 
   const layout = useMemo(() => getWidgetLayout(role), [role]);
 
-  /** Render a single widget by ID. */
+  /** Render a single widget by ID.
+   * Intentionally recreated per render to capture fresh data via closures.
+   * Extract to stable ref if widget count grows past ~20. */
   function renderWidget(widgetId: WidgetId): React.ReactNode {
     switch (widgetId) {
       case "phaseBar":

@@ -58,7 +58,9 @@ export const WIDGET_META: Record<WidgetId, WidgetMeta> = {
   chatPanel: { id: "chatPanel", label: "Project Chat", colSpan: 3, minLevel: "advanced" },
 };
 
-/** Default widget layouts per role. */
+/** Default widget layouts per role.
+ * Type-safe: WidgetId union prevents invalid entries at compile time.
+ * Runtime-validated by widget-registry.test.ts "all widgets in layouts have metadata". */
 export const ROLE_LAYOUTS: Record<UserRole, WidgetId[]> = {
   dev: [
     "phaseBar",

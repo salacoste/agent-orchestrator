@@ -534,7 +534,7 @@ previous_cycle:
 
   # Epic 44: Power User Dashboard
   # Executive view, split screen, log streaming, health score, progressive UI
-  epic-44: in-progress
+  epic-44: done
   44-1-executive-view-widget-grid: done
   44-2-split-screen-artifact-agent: done
   44-3-agent-log-streaming: done
@@ -542,7 +542,7 @@ previous_cycle:
   44-5-progressive-ui-complexity: done
   44-6-focus-mode-single-story: done
   44-7-notification-digest: done
-  44-8-mobile-companion-pwa: backlog
+  44-8-mobile-companion-pwa: done
   epic-44-retrospective: optional
 
   # Epic 45: Intelligence & Replay

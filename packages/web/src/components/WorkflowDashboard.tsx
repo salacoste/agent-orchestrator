@@ -4,9 +4,11 @@ import { useCascadeStatus } from "@/hooks/useCascadeStatus";
 import { useSprintCost } from "@/hooks/useSprintCost";
 import { useConflictCheckpoint } from "@/hooks/useConflictCheckpoint";
 import { useProjectChat } from "@/hooks/useProjectChat";
+import { useUserRole } from "@/hooks/useUserRole";
 import { CascadeAlert } from "@/components/CascadeAlert";
 import { ConflictCheckpointPanel } from "@/components/ConflictCheckpointPanel";
 import { ProjectChatPanel } from "@/components/ProjectChatPanel";
+import { RoleSelector } from "@/components/RoleSelector";
 import { SprintCostPanel } from "@/components/SprintCostPanel";
 import { WorkflowAIGuide } from "@/components/WorkflowAIGuide";
 import { WorkflowAgentsPanel } from "@/components/WorkflowAgentsPanel";
@@ -15,6 +17,7 @@ import { WorkflowLastActivity } from "@/components/WorkflowLastActivity";
 import { WorkflowPhaseBar } from "@/components/WorkflowPhaseBar";
 import { detectAntiPatterns } from "@/lib/workflow/anti-patterns";
 import { generateInsights } from "@/lib/workflow/project-context-aggregator";
+import { getWidgetLayout, WIDGET_META, type WidgetId } from "@/lib/workflow/widget-registry";
 import type { Phase, WorkflowResponse } from "@/lib/workflow/types";
 
 interface WorkflowDashboardProps {
@@ -37,7 +40,14 @@ function buildPresenceFromPhases(phases: WorkflowResponse["phases"]): Record<Pha
   return presence;
 }
 
+/**
+ * WorkflowDashboard — Role-based widget grid (Story 44.1).
+ *
+ * Renders dashboard widgets in role-specific order using the widget registry.
+ * Role is stored in localStorage with a dropdown selector in the header.
+ */
 export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
+  const { role, setRole } = useUserRole();
   const { status: cascadeStatus, resume: cascadeResume } = useCascadeStatus();
   const { cost: sprintCost, clock: sprintClock } = useSprintCost();
   const { conflicts, timeline } = useConflictCheckpoint();
@@ -48,78 +58,93 @@ export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
     [data.artifacts, data.phases],
   );
 
-  const insights = useMemo(
-    () => generateInsights(0, 0, 0, 0), // Placeholder — wire to real sprint data
-    [],
-  );
+  const insights = useMemo(() => generateInsights(0, 0, 0, 0), []);
+
+  const layout = useMemo(() => getWidgetLayout(role), [role]);
+
+  /** Render a single widget by ID. */
+  function renderWidget(widgetId: WidgetId): React.ReactNode {
+    switch (widgetId) {
+      case "phaseBar":
+        return <WorkflowPhaseBar phases={data.phases} />;
+      case "cascadeAlert":
+        return <CascadeAlert status={cascadeStatus} onResume={cascadeResume} />;
+      case "antiPatterns":
+        return nudges.length > 0 ? (
+          <div className="space-y-2" data-testid="anti-pattern-nudges">
+            {nudges.map((nudge) => (
+              <div
+                key={nudge.id}
+                className={`rounded-[6px] border px-4 py-3 text-[12px] ${
+                  nudge.severity === "warning"
+                    ? "border-[var(--color-status-attention)] bg-[var(--color-status-attention)]/5"
+                    : "border-[var(--color-border-default)] bg-[var(--color-bg-surface)]"
+                }`}
+                data-testid={`nudge-${nudge.id}`}
+              >
+                <span className="font-semibold">{nudge.title}:</span>{" "}
+                <span className="text-[var(--color-text-secondary)]">{nudge.message}</span>
+              </div>
+            ))}
+          </div>
+        ) : null;
+      case "recommendation":
+        return <WorkflowAIGuide recommendation={data.recommendation} />;
+      case "agents":
+        return <WorkflowAgentsPanel agents={data.agents} />;
+      case "artifacts":
+        return <WorkflowArtifactInventory artifacts={data.artifacts} />;
+      case "lastActivity":
+        return <WorkflowLastActivity lastActivity={data.lastActivity} />;
+      case "costPanel":
+        return <SprintCostPanel cost={sprintCost} clock={sprintClock} />;
+      case "conflictPanel":
+        return <ConflictCheckpointPanel conflicts={conflicts} timeline={timeline} />;
+      case "chatPanel":
+        return (
+          <ProjectChatPanel
+            insights={[
+              ...insights,
+              ...chatMessages.map((m, i) => ({
+                id: `chat-${i}`,
+                text: `${m.role === "user" ? "You" : "Assistant"}: ${m.content}`,
+                severity: "info" as const,
+              })),
+            ]}
+            onAskQuestion={chatSend}
+          />
+        );
+      default:
+        return null;
+    }
+  }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      {/* Row 1: Phase pipeline (full width) */}
-      <div className="md:col-span-3">
-        <WorkflowPhaseBar phases={data.phases} />
+    <div>
+      {/* Header with role selector */}
+      <div className="flex items-center justify-between mb-4" data-testid="dashboard-header">
+        <h1 className="text-[13px] font-semibold text-[var(--color-text-primary)]">
+          Workflow Dashboard
+        </h1>
+        <RoleSelector role={role} onChange={setRole} />
       </div>
 
-      {/* Row 2: Alerts (full width, conditional) */}
-      <div className="md:col-span-3">
-        <CascadeAlert status={cascadeStatus} onResume={cascadeResume} />
-      </div>
-      {nudges.length > 0 && (
-        <div className="md:col-span-3 space-y-2" data-testid="anti-pattern-nudges">
-          {nudges.map((nudge) => (
+      {/* Dynamic widget grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-testid="widget-grid">
+        {layout.map((widgetId) => {
+          const meta = WIDGET_META[widgetId];
+          const content = renderWidget(widgetId);
+          if (!content) return null;
+          return (
             <div
-              key={nudge.id}
-              className={`rounded-[6px] border px-4 py-3 text-[12px] ${
-                nudge.severity === "warning"
-                  ? "border-[var(--color-status-attention)] bg-[var(--color-status-attention)]/5"
-                  : "border-[var(--color-border-default)] bg-[var(--color-bg-surface)]"
-              }`}
-              data-testid={`nudge-${nudge.id}`}
+              key={widgetId}
+              className={meta.colSpan === 3 ? "md:col-span-3" : ""}
+              data-testid={`widget-${widgetId}`}
             >
-              <span className="font-semibold">{nudge.title}:</span>{" "}
-              <span className="text-[var(--color-text-secondary)]">{nudge.message}</span>
+              {content}
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Row 3: AI Guide + Cost & Schedule */}
-      <div className="md:col-span-2">
-        <WorkflowAIGuide recommendation={data.recommendation} />
-      </div>
-      <div>
-        <SprintCostPanel cost={sprintCost} clock={sprintClock} />
-      </div>
-
-      {/* Row 4: Artifacts + Last Activity */}
-      <div className="md:col-span-2">
-        <WorkflowArtifactInventory artifacts={data.artifacts} />
-      </div>
-      <div>
-        <WorkflowLastActivity lastActivity={data.lastActivity} />
-      </div>
-
-      {/* Row 5: Conflicts + Agents */}
-      <div className="md:col-span-2">
-        <ConflictCheckpointPanel conflicts={conflicts} timeline={timeline} />
-      </div>
-      <div>
-        <WorkflowAgentsPanel agents={data.agents} />
-      </div>
-
-      {/* Row 6: Chat panel (full width) */}
-      <div className="md:col-span-3">
-        <ProjectChatPanel
-          insights={[
-            ...insights,
-            ...chatMessages.map((m, i) => ({
-              id: `chat-${i}`,
-              text: `${m.role === "user" ? "You" : "Assistant"}: ${m.content}`,
-              severity: "info" as const,
-            })),
-          ]}
-          onAskQuestion={chatSend}
-        />
+          );
+        })}
       </div>
     </div>
   );

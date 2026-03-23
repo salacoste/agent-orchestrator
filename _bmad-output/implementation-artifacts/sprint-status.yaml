@@ -534,8 +534,8 @@ previous_cycle:
 
   # Epic 44: Power User Dashboard
   # Executive view, split screen, log streaming, health score, progressive UI
-  epic-44: backlog
-  44-1-executive-view-widget-grid: backlog
+  epic-44: in-progress
+  44-1-executive-view-widget-grid: done
   44-2-split-screen-artifact-agent: backlog
   44-3-agent-log-streaming: backlog
   44-4-sprint-health-score: backlog

@@ -550,7 +550,7 @@ previous_cycle:
   epic-45: in-progress
   45-1-story-replay-time-lapse: done
   45-2-time-travel-historical-state: done
-  45-3-post-mortem-auto-generator: backlog
+  45-3-post-mortem-auto-generator: done
   45-4-roi-calculator: backlog
   45-5-meeting-summary-generator: backlog
   45-6-confidence-indicators: backlog

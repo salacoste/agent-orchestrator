@@ -156,6 +156,10 @@ export type { NotificationServiceConfig } from "./notification-service.js";
 // Digest Generator — pure function for sprint digest content (Story 44.7)
 export { generateDigest } from "./digest-generator.js";
 export type { DigestInput, DigestContent, DigestSection } from "./digest-generator.js";
+
+// Post-Mortem Generator — pure function for failure analysis (Story 45.3)
+export { generatePostMortem } from "./postmortem-generator.js";
+export type { PostMortemReport } from "./postmortem-generator.js";
 export type {
   NotificationService,
   Notification,

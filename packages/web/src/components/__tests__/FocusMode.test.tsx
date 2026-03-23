@@ -242,3 +242,24 @@ describe("FocusMode Escape key integration", () => {
     expect(screen.queryByTestId("harness-grid")).not.toBeInTheDocument();
   });
 });
+
+describe("FocusMode replay toggle", () => {
+  it("toggles between Live Logs and Session Replay", async () => {
+    render(<FocusMode agentId="agent-1" agentDisplayName="Agent Alpha" onClose={vi.fn()} />);
+
+    // Initially shows Live Logs
+    expect(screen.getByText("Live Logs")).toBeInTheDocument();
+    expect(screen.getByTestId("replay-toggle")).toHaveTextContent("Replay");
+
+    // Click toggle → switches to replay
+    fireEvent.click(screen.getByTestId("replay-toggle"));
+
+    expect(screen.getByText("Session Replay")).toBeInTheDocument();
+    expect(screen.getByTestId("replay-toggle")).toHaveTextContent("Live Logs");
+
+    // Click again → back to live logs
+    fireEvent.click(screen.getByTestId("replay-toggle"));
+
+    expect(screen.getByText("Live Logs")).toBeInTheDocument();
+  });
+});

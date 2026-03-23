@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { FocusBreadcrumb } from "@/components/FocusBreadcrumb";
 import { LogStream } from "@/components/LogStream";
+import { ReplayTimeline } from "@/components/ReplayTimeline";
 
 interface AgentData {
   id: string;
@@ -42,6 +43,7 @@ export function FocusMode({ agentId, agentDisplayName, onClose }: FocusModeProps
   const [activity, setActivity] = useState<ActivityEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showReplay, setShowReplay] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   // Fetch agent data + activity
@@ -95,6 +97,17 @@ export function FocusMode({ agentId, agentDisplayName, onClose }: FocusModeProps
   );
   const testEvents = useMemo(() => activity.filter((e) => e.type === "test"), [activity]);
 
+  // Memoize replay events: reverse to chronological order (activity API returns newest-first)
+  // and stabilize the array reference to prevent useReplay timer resets on poll re-renders.
+  const replayEvents = useMemo(
+    () =>
+      [...activity]
+        .filter((e): e is ActivityEvent & { description: string } => !!e.description)
+        .reverse()
+        .map((e) => ({ timestamp: e.timestamp, type: e.type, description: e.description })),
+    [activity],
+  );
+
   return (
     <div data-testid="focus-mode">
       {/* Breadcrumb */}
@@ -140,12 +153,22 @@ export function FocusMode({ agentId, agentDisplayName, onClose }: FocusModeProps
         </p>
       )}
 
-      {/* Log stream */}
+      {/* Log stream / Replay toggle (Story 45.1) */}
       <div className="mt-4" data-testid="focus-log-stream">
-        <h3 className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider mb-2">
-          Live Logs
-        </h3>
-        <LogStream agentId={agentId} />
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+            {showReplay ? "Session Replay" : "Live Logs"}
+          </h3>
+          <button
+            type="button"
+            onClick={() => setShowReplay((v) => !v)}
+            className="text-[10px] text-[var(--color-accent)] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-accent)] rounded-sm"
+            data-testid="replay-toggle"
+          >
+            {showReplay ? "Live Logs" : "Replay"}
+          </button>
+        </div>
+        {showReplay ? <ReplayTimeline events={replayEvents} /> : <LogStream agentId={agentId} />}
       </div>
 
       {/* Modified files */}

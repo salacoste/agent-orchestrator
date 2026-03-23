@@ -547,8 +547,8 @@ previous_cycle:
 
   # Epic 45: Intelligence & Replay
   # Story replay, time travel, post-mortem, ROI, standup, confidence, reasoning, sprint diff
-  epic-45: backlog
-  45-1-story-replay-time-lapse: backlog
+  epic-45: in-progress
+  45-1-story-replay-time-lapse: done
   45-2-time-travel-historical-state: backlog
   45-3-post-mortem-auto-generator: backlog
   45-4-roi-calculator: backlog

@@ -152,6 +152,10 @@ export type { SyncBridge, SyncBridgeConfig, SyncBridgeStatus } from "./sync-brid
 // Notification Service — queue, deduplicate, and route notifications
 export { createNotificationService } from "./notification-service.js";
 export type { NotificationServiceConfig } from "./notification-service.js";
+
+// Digest Generator — pure function for sprint digest content (Story 44.7)
+export { generateDigest } from "./digest-generator.js";
+export type { DigestInput, DigestContent, DigestSection } from "./digest-generator.js";
 export type {
   NotificationService,
   Notification,

@@ -1790,6 +1790,9 @@ export interface NotificationService {
   /** Get notification history */
   getHistory(filter?: NotificationHistoryFilter): NotificationHistoryEntry[];
 
+  /** Send a scheduled digest notification (Story 44.7). */
+  sendDigest(title: string, markdown: string): Promise<void>;
+
   /** Close service */
   close(): Promise<void>;
 }

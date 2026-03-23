@@ -144,6 +144,16 @@ const OrchestratorConfigSchema = z.object({
     info: ["composio"],
   }),
   reactions: z.record(ReactionConfigSchema).default({}),
+  notificationDigest: z
+    .object({
+      enabled: z.boolean().default(false),
+      schedule: z
+        .string()
+        .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Schedule must be HH:MM format (00:00–23:59)")
+        .default("09:00"),
+      timezone: z.string().default("UTC"),
+    })
+    .default({ enabled: false, schedule: "09:00", timezone: "UTC" }),
 });
 
 // =============================================================================

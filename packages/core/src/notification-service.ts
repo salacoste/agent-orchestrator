@@ -474,6 +474,27 @@ export class NotificationServiceImpl implements NotificationService {
   }
 
   /**
+   * Send a scheduled digest notification (Story 44.7).
+   *
+   * Accepts pre-generated digest content and delivers it through
+   * configured notification plugins. Distinct from the event-based
+   * flushDigest() which handles medium-priority buffered events.
+   */
+  async sendDigest(title: string, markdown: string): Promise<void> {
+    const notification: Notification = {
+      eventId: `digest-scheduled-${Date.now()}`,
+      eventType: "notification.digest.scheduled",
+      priority: "warning",
+      title,
+      message: markdown,
+      metadata: { scheduled: true },
+      timestamp: new Date().toISOString(),
+    };
+
+    await this.send(notification);
+  }
+
+  /**
    * Add notification to history ring buffer
    */
   private addToHistory(notification: Notification, deliveredPlugins: string[]): void {

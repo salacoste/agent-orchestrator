@@ -536,7 +536,7 @@ previous_cycle:
   # Executive view, split screen, log streaming, health score, progressive UI
   epic-44: in-progress
   44-1-executive-view-widget-grid: done
-  44-2-split-screen-artifact-agent: backlog
+  44-2-split-screen-artifact-agent: done
   44-3-agent-log-streaming: backlog
   44-4-sprint-health-score: backlog
   44-5-progressive-ui-complexity: backlog

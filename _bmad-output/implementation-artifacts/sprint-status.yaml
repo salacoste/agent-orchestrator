@@ -551,7 +551,7 @@ previous_cycle:
   45-1-story-replay-time-lapse: done
   45-2-time-travel-historical-state: done
   45-3-post-mortem-auto-generator: done
-  45-4-roi-calculator: backlog
+  45-4-roi-calculator: done
   45-5-meeting-summary-generator: backlog
   45-6-confidence-indicators: backlog
   45-7-reasoning-trail: backlog

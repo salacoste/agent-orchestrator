@@ -160,6 +160,10 @@ export type { DigestInput, DigestContent, DigestSection } from "./digest-generat
 // Post-Mortem Generator — pure function for failure analysis (Story 45.3)
 export { generatePostMortem } from "./postmortem-generator.js";
 export type { PostMortemReport } from "./postmortem-generator.js";
+
+// ROI Calculator — agent value proof (Story 45.4)
+export { calculateROI, DEFAULT_ROI_CONFIG } from "./roi-calculator.js";
+export type { ROIReport, ROIConfig } from "./roi-calculator.js";
 export type {
   NotificationService,
   Notification,

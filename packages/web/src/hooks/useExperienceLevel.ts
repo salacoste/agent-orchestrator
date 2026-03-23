@@ -4,6 +4,24 @@ import { useState, useEffect } from "react";
 import type { ExperienceLevel } from "@/lib/workflow/widget-registry";
 
 const STORAGE_KEY = "ao-active-days";
+const EXPERT_KEY = "ao-expert-mode";
+/** Maximum tracked days — prevents unbounded localStorage growth. */
+const MAX_TRACKED_DAYS = 365;
+
+/** Get today's date as YYYY-MM-DD in user's local timezone. */
+function localToday(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+/** Validate stored days: must be string[] with YYYY-MM-DD entries. */
+function parseDays(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((v): v is string => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v));
+}
 
 /**
  * Hook for tracking user experience level (Story 44.5).
@@ -20,7 +38,7 @@ export function useExperienceLevel(): {
 } {
   const [expertMode, setExpertMode] = useState(() => {
     try {
-      return globalThis.localStorage?.getItem("ao-expert-mode") === "true";
+      return globalThis.localStorage?.getItem(EXPERT_KEY) === "true";
     } catch {
       return false;
     }
@@ -28,8 +46,8 @@ export function useExperienceLevel(): {
 
   const [dayCount, setDayCount] = useState(() => {
     try {
-      const days = JSON.parse(globalThis.localStorage?.getItem(STORAGE_KEY) ?? "[]") as string[];
-      return Array.isArray(days) ? days.length : 0;
+      const days = parseDays(JSON.parse(globalThis.localStorage?.getItem(STORAGE_KEY) ?? "[]"));
+      return days.length;
     } catch {
       return 0;
     }
@@ -39,12 +57,15 @@ export function useExperienceLevel(): {
   useEffect(() => {
     try {
       const stored = globalThis.localStorage?.getItem(STORAGE_KEY);
-      const days: string[] = stored ? (JSON.parse(stored) as string[]) : [];
-      if (!Array.isArray(days)) return;
+      let days = parseDays(stored ? JSON.parse(stored) : []);
 
-      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+      const today = localToday();
       if (!days.includes(today)) {
         days.push(today);
+        // Trim oldest entries if over cap
+        if (days.length > MAX_TRACKED_DAYS) {
+          days = days.slice(-MAX_TRACKED_DAYS);
+        }
         globalThis.localStorage?.setItem(STORAGE_KEY, JSON.stringify(days));
         setDayCount(days.length);
       }
@@ -57,7 +78,7 @@ export function useExperienceLevel(): {
     const next = !expertMode;
     setExpertMode(next);
     try {
-      globalThis.localStorage?.setItem("ao-expert-mode", String(next));
+      globalThis.localStorage?.setItem(EXPERT_KEY, String(next));
     } catch {
       // localStorage unavailable
     }

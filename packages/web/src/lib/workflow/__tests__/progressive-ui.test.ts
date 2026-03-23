@@ -2,20 +2,10 @@
  * Progressive UI tests (Story 44.5).
  */
 import { describe, expect, it } from "vitest";
-import { filterWidgetsByLevel, type WidgetId } from "../widget-registry";
+import { filterWidgetsByLevel, WIDGET_META, type WidgetId } from "../widget-registry";
 
-const ALL_WIDGETS: WidgetId[] = [
-  "phaseBar",
-  "cascadeAlert",
-  "antiPatterns",
-  "recommendation",
-  "agents",
-  "artifacts",
-  "lastActivity",
-  "costPanel",
-  "conflictPanel",
-  "chatPanel",
-];
+/** Derived from registry so test stays in sync when widgets are added. */
+const ALL_WIDGETS = Object.keys(WIDGET_META) as WidgetId[];
 
 describe("filterWidgetsByLevel", () => {
   it("beginner sees only beginner widgets", () => {
@@ -71,5 +61,11 @@ describe("filterWidgetsByLevel", () => {
 
   it("returns empty for empty layout", () => {
     expect(filterWidgetsByLevel([], "expert")).toEqual([]);
+  });
+
+  it("returns empty for unrecognized experience level (runtime safety)", () => {
+    // At runtime, corrupted localStorage could pass an invalid level string
+    const filtered = filterWidgetsByLevel(ALL_WIDGETS, "invalid" as never);
+    expect(filtered).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useCascadeStatus } from "@/hooks/useCascadeStatus";
 import { useSprintCost } from "@/hooks/useSprintCost";
@@ -8,6 +8,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { useExperienceLevel } from "@/hooks/useExperienceLevel";
 import { CascadeAlert } from "@/components/CascadeAlert";
 import { ConflictCheckpointPanel } from "@/components/ConflictCheckpointPanel";
+import { FocusMode } from "@/components/FocusMode";
 import { ProjectChatPanel } from "@/components/ProjectChatPanel";
 import { RoleSelector } from "@/components/RoleSelector";
 import { SprintCostPanel } from "@/components/SprintCostPanel";
@@ -60,6 +61,29 @@ export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
   const { conflicts, timeline } = useConflictCheckpoint();
   const { messages: chatMessages, sendMessage: chatSend } = useProjectChat();
 
+  // Focus mode state (Story 44.6)
+  const [focusAgent, setFocusAgent] = useState<{ id: string; displayName: string } | null>(null);
+
+  const handleAgentClick = useCallback((agentId: string, displayName: string) => {
+    setFocusAgent({ id: agentId, displayName });
+  }, []);
+
+  const handleFocusClose = useCallback(() => {
+    setFocusAgent(null);
+  }, []);
+
+  // Escape key exits focus mode (Story 44.6)
+  useEffect(() => {
+    if (!focusAgent) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        setFocusAgent(null);
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [focusAgent]);
+
   const nudges = useMemo(
     () => detectAntiPatterns(data.artifacts, data.phases, buildPresenceFromPhases(data.phases)),
     [data.artifacts, data.phases],
@@ -101,7 +125,7 @@ export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
       case "recommendation":
         return <WorkflowAIGuide recommendation={data.recommendation} />;
       case "agents":
-        return <WorkflowAgentsPanel agents={data.agents} />;
+        return <WorkflowAgentsPanel agents={data.agents} onAgentClick={handleAgentClick} />;
       case "artifacts":
         return <WorkflowArtifactInventory artifacts={data.artifacts} />;
       case "lastActivity":
@@ -127,6 +151,19 @@ export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
       default:
         return null;
     }
+  }
+
+  // Focus mode replaces the entire widget grid (Story 44.6)
+  if (focusAgent) {
+    return (
+      <div data-testid="dashboard-focus">
+        <FocusMode
+          agentId={focusAgent.id}
+          agentDisplayName={focusAgent.displayName}
+          onClose={handleFocusClose}
+        />
+      </div>
+    );
   }
 
   return (

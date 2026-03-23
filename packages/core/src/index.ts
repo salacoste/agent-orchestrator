@@ -164,6 +164,10 @@ export type { PostMortemReport } from "./postmortem-generator.js";
 // ROI Calculator — agent value proof (Story 45.4)
 export { calculateROI, DEFAULT_ROI_CONFIG } from "./roi-calculator.js";
 export type { ROIReport, ROIConfig } from "./roi-calculator.js";
+
+// Standup Generator — meeting summary (Story 45.5)
+export { generateStandup } from "./standup-generator.js";
+export type { StandupInput, StandupSummary } from "./standup-generator.js";
 export type {
   NotificationService,
   Notification,

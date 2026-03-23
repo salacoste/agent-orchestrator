@@ -5,8 +5,14 @@ import { useSearchParams, useRouter } from "next/navigation";
 
 import { CommandPalette, type PaletteAction } from "@/components/CommandPalette";
 import { EmptyWorkflowState } from "@/components/EmptyWorkflowState";
+import { TimeTravelBar } from "@/components/TimeTravelBar";
 import { WorkflowDashboard } from "@/components/WorkflowDashboard";
 import { useWorkflowSSE } from "@/hooks/useWorkflowSSE";
+import {
+  reconstructState,
+  type AuditEvent,
+  type HistoricalState,
+} from "@/lib/workflow/time-travel";
 import type { WorkflowResponse } from "@/lib/workflow/types";
 
 interface WorkflowPageProps {
@@ -25,6 +31,11 @@ export function WorkflowPage({ projects }: WorkflowPageProps) {
   const [data, setData] = useState<WorkflowResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Time travel state (Story 45.2)
+  const [timeTravelAt, setTimeTravelAt] = useState<string | null>(null);
+  const [ttState, setTtState] = useState<HistoricalState | null>(null);
+  const [ttNoData, setTtNoData] = useState(false);
 
   const updateUrl = useCallback(
     (projectId: string) => {
@@ -90,15 +101,65 @@ export function WorkflowPage({ projects }: WorkflowPageProps) {
     };
   }, [selectedProject, fetchData]);
 
-  // SSE subscription — re-fetch on workflow-change event
+  // SSE subscription — re-fetch on workflow-change event (skip during time travel)
   useWorkflowSSE(
     useCallback(() => {
+      if (timeTravelAt) return; // Ignore SSE updates during time travel
       const project = selectedProjectRef.current;
       if (project) {
         fetchData(project, true); // silent: true → no loading skeleton (AC3)
       }
-    }, [fetchData]),
+    }, [fetchData, timeTravelAt]),
   );
+
+  // Time travel: fetch audit events and reconstruct state when timestamp changes
+  useEffect(() => {
+    if (!timeTravelAt) {
+      setTtState(null);
+      setTtNoData(false);
+      return;
+    }
+
+    const controller = new AbortController();
+
+    async function loadHistory() {
+      try {
+        // Fetch up to 1000 most recent events (API max per page).
+        // For projects with >1000 events, older history may be incomplete.
+        const res = await fetch(`/api/audit/events?limit=1000`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          setTtNoData(true);
+          return;
+        }
+        const json = (await res.json()) as { events?: AuditEvent[] };
+        const events = Array.isArray(json.events) ? json.events : [];
+
+        if (events.length === 0) {
+          setTtNoData(true);
+          setTtState(null);
+          return;
+        }
+
+        // Sort chronologically (audit API may return any order)
+        const sorted = [...events].sort(
+          (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+        );
+
+        const state = reconstructState(sorted, timeTravelAt);
+        setTtState(state);
+        setTtNoData(state.eventsProcessed === 0);
+      } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setTtNoData(true);
+      }
+    }
+
+    void loadHistory();
+
+    return () => controller.abort();
+  }, [timeTravelAt]);
 
   if (projects.length === 0) {
     return (
@@ -196,6 +257,14 @@ export function WorkflowPage({ projects }: WorkflowPageProps) {
           </p>
         </div>
       )}
+
+      {/* Time Travel bar (Story 45.2) */}
+      <TimeTravelBar
+        timestamp={timeTravelAt}
+        onTimestampChange={setTimeTravelAt}
+        state={ttState}
+        noData={ttNoData}
+      />
 
       {!loading && !error && data && !data.hasBmad && <EmptyWorkflowState />}
 

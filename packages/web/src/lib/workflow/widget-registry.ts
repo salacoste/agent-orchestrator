@@ -117,3 +117,20 @@ export function getWidgetLayout(role: UserRole): WidgetId[] {
 
 /** All valid user roles. */
 export const USER_ROLES: readonly UserRole[] = ["dev", "pm", "lead", "admin"];
+
+/** Experience level ordering for comparison. */
+const LEVEL_ORDER: Record<ExperienceLevel, number> = {
+  beginner: 0,
+  intermediate: 1,
+  advanced: 2,
+  expert: 3,
+};
+
+/**
+ * Filter widget layout by experience level (Story 44.5).
+ * Only includes widgets whose minLevel <= user's level.
+ */
+export function filterWidgetsByLevel(layout: WidgetId[], level: ExperienceLevel): WidgetId[] {
+  const userLevel = LEVEL_ORDER[level];
+  return layout.filter((id) => LEVEL_ORDER[WIDGET_META[id].minLevel] <= userLevel);
+}

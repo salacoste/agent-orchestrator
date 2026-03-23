@@ -539,7 +539,7 @@ previous_cycle:
   44-2-split-screen-artifact-agent: done
   44-3-agent-log-streaming: done
   44-4-sprint-health-score: done
-  44-5-progressive-ui-complexity: backlog
+  44-5-progressive-ui-complexity: done
   44-6-focus-mode-single-story: backlog
   44-7-notification-digest: backlog
   44-8-mobile-companion-pwa: backlog

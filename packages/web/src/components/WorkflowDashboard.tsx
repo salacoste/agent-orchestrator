@@ -5,6 +5,7 @@ import { useSprintCost } from "@/hooks/useSprintCost";
 import { useConflictCheckpoint } from "@/hooks/useConflictCheckpoint";
 import { useProjectChat } from "@/hooks/useProjectChat";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useExperienceLevel } from "@/hooks/useExperienceLevel";
 import { CascadeAlert } from "@/components/CascadeAlert";
 import { ConflictCheckpointPanel } from "@/components/ConflictCheckpointPanel";
 import { ProjectChatPanel } from "@/components/ProjectChatPanel";
@@ -17,7 +18,12 @@ import { WorkflowLastActivity } from "@/components/WorkflowLastActivity";
 import { WorkflowPhaseBar } from "@/components/WorkflowPhaseBar";
 import { detectAntiPatterns } from "@/lib/workflow/anti-patterns";
 import { generateInsights } from "@/lib/workflow/project-context-aggregator";
-import { getWidgetLayout, WIDGET_META, type WidgetId } from "@/lib/workflow/widget-registry";
+import {
+  getWidgetLayout,
+  filterWidgetsByLevel,
+  WIDGET_META,
+  type WidgetId,
+} from "@/lib/workflow/widget-registry";
 import type { Phase, WorkflowResponse } from "@/lib/workflow/types";
 
 interface WorkflowDashboardProps {
@@ -48,6 +54,7 @@ function buildPresenceFromPhases(phases: WorkflowResponse["phases"]): Record<Pha
  */
 export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
   const { role, setRole } = useUserRole();
+  const { level, expertMode, toggleExpertMode } = useExperienceLevel();
   const { status: cascadeStatus, resume: cascadeResume } = useCascadeStatus();
   const { cost: sprintCost, clock: sprintClock } = useSprintCost();
   const { conflicts, timeline } = useConflictCheckpoint();
@@ -60,7 +67,8 @@ export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
 
   const insights = useMemo(() => generateInsights(0, 0, 0, 0), []);
 
-  const layout = useMemo(() => getWidgetLayout(role), [role]);
+  // Role layout filtered by experience level (Story 44.5)
+  const layout = useMemo(() => filterWidgetsByLevel(getWidgetLayout(role), level), [role, level]);
 
   /** Render a single widget by ID.
    * Intentionally recreated per render to capture fresh data via closures.
@@ -123,12 +131,23 @@ export function WorkflowDashboard({ data }: WorkflowDashboardProps) {
 
   return (
     <div>
-      {/* Header with role selector */}
+      {/* Header with role selector + expert toggle */}
       <div className="flex items-center justify-between mb-4" data-testid="dashboard-header">
         <h1 className="text-[13px] font-semibold text-[var(--color-text-primary)]">
           Workflow Dashboard
         </h1>
-        <RoleSelector role={role} onChange={setRole} />
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
+            <input
+              type="checkbox"
+              checked={expertMode}
+              onChange={toggleExpertMode}
+              data-testid="expert-mode-toggle"
+            />
+            Expert
+          </label>
+          <RoleSelector role={role} onChange={setRole} />
+        </div>
       </div>
 
       {/* Dynamic widget grid */}

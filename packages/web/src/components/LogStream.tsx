@@ -31,13 +31,23 @@ export function LogStream({ agentId, pollIntervalMs = 2000, baseUrl = "" }: LogS
       abortRef.current = controller;
 
       try {
+        // agentId is safe for URL — validated by VALID_SESSION_ID regex (/^[a-zA-Z0-9_-]+$/)
         const res = await fetch(`${baseUrl}/api/agent/${agentId}/logs?lines=${lineCount}`, {
           signal: controller.signal,
         });
         if (!res.ok) return;
         const data = (await res.json()) as { logs?: string[] };
         if (Array.isArray(data.logs)) {
-          setLines(data.logs);
+          // Only update state if content changed (avoid unnecessary re-renders on poll)
+          setLines((prev) => {
+            if (
+              prev.length === data.logs!.length &&
+              prev[prev.length - 1] === data.logs![data.logs!.length - 1]
+            ) {
+              return prev; // Same content — skip re-render
+            }
+            return data.logs!;
+          });
         }
       } catch {
         // Abort or fetch error — retain previous data

@@ -195,11 +195,12 @@ export function computeSprintHealth(
   const failures = 1 - Math.min(1, failureRate);
   const cost = expectedBurnRate > 0 ? 1 - Math.min(1, costBurnRate / expectedBurnRate) : 1;
 
-  // Weighted sum
-  const score = Math.round((completion * 0.4 + blockers * 0.2 + failures * 0.2 + cost * 0.2) * 100);
+  // Weighted sum, clamped to 0-100
+  const raw = Math.round((completion * 0.4 + blockers * 0.2 + failures * 0.2 + cost * 0.2) * 100);
+  const score = Math.max(0, Math.min(100, raw));
 
   return {
-    score: Math.max(0, Math.min(100, score)),
+    score,
     color: getHealthColor(score),
     components: { completion, blockers, failures, cost },
   };

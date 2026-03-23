@@ -21,6 +21,8 @@ export async function GET(): Promise<NextResponse> {
     ).length;
     const failureRate = total > 0 ? failed / total : 0;
 
+    // Cost burn rate not yet wired — passes 0/0 so cost component scores 1.0 (neutral).
+    // Wire to sprint-cost API (40.2) for real cost tracking.
     const health = computeSprintHealth(done, total, blocked, failureRate, 0, 0);
 
     return NextResponse.json(

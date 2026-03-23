@@ -553,7 +553,7 @@ previous_cycle:
   45-3-post-mortem-auto-generator: done
   45-4-roi-calculator: done
   45-5-meeting-summary-generator: done
-  45-6-confidence-indicators: backlog
+  45-6-confidence-indicators: done
   45-7-reasoning-trail: backlog
   45-8-sprint-diff-comparison: backlog
   epic-45-retrospective: optional

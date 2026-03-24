@@ -214,6 +214,10 @@ export type { ResourcePool, ResourcePoolConfig, PoolState } from "./resource-poo
 export { resolveIsolation } from "./isolation-levels.js";
 export type { IsolationLevel, IsolationPolicy } from "./isolation-levels.js";
 
+// Agent Sandbox — permission boundaries (Story 47.2)
+export { checkAccess, globToRegex } from "./agent-sandbox.js";
+export type { SandboxConfig, AccessResult } from "./agent-sandbox.js";
+
 // Agent Negotiation — conflict resolution protocol (Story 47.1)
 export {
   createNegotiationRequest,

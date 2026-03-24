@@ -579,7 +579,7 @@ previous_cycle:
   # Agent negotiation, sandbox, NLU, conflict wizard, hot-swap, pre-flight
   epic-47: in-progress
   47-1-agent-collaboration-negotiation: done
-  47-2-agent-sandbox-permissions: backlog
+  47-2-agent-sandbox-permissions: done
   47-3-nlu-orchestration: backlog
   47-4-conflict-resolution-wizard: backlog
   47-5-agent-hot-swap: backlog

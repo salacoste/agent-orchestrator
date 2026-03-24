@@ -320,7 +320,8 @@ describe("HealthCheckService", () => {
       const slowTracker = {
         name: "bmad",
         isAvailable: async () => {
-          await new Promise((resolve) => setTimeout(resolve, 200));
+          // Use 500ms sleep with 50ms threshold — clearly exceeds even on slow CI
+          await new Promise((resolve) => setTimeout(resolve, 500));
           return true;
         },
       } as unknown as BMADTracker;
@@ -328,7 +329,7 @@ describe("HealthCheckService", () => {
       const config: HealthCheckConfig = {
         bmadTracker: slowTracker,
         thresholds: {
-          maxLatencyMs: 100,
+          maxLatencyMs: 50,
         },
       };
 

@@ -48,6 +48,9 @@ export interface ApprovalService {
 /**
  * Create an in-memory approval service.
  */
+/** Max resolved approvals to keep (prune oldest beyond this). */
+const MAX_RESOLVED = 500;
+
 export function createApprovalService(): ApprovalService {
   const approvals = new Map<string, ApprovalRequest>();
 
@@ -63,6 +66,26 @@ export function createApprovalService(): ApprovalService {
         approval.status = "expired";
       }
     }
+  }
+
+  /** Prune resolved entries beyond MAX_RESOLVED. */
+  function pruneResolved(): void {
+    const resolved = [...approvals.entries()].filter(([, a]) => a.status !== "pending");
+    if (resolved.length > MAX_RESOLVED) {
+      const toRemove = resolved
+        .sort((a, b) => a[1].requestedAt.localeCompare(b[1].requestedAt))
+        .slice(0, resolved.length - MAX_RESOLVED);
+      for (const [key] of toRemove) approvals.delete(key);
+    }
+  }
+
+  /** Build error result for not-found approval. */
+  function notFoundResult(id: string): ApprovalResult {
+    return {
+      success: false,
+      approval: { id, action: "", target: "", requestedBy: "", requestedAt: "", status: "pending" },
+      error: "Approval not found",
+    };
   }
 
   return {
@@ -81,52 +104,30 @@ export function createApprovalService(): ApprovalService {
     },
 
     approve(id, approvedBy) {
+      expireTimedOut(); // Expire before checking status
       const approval = approvals.get(id);
-      if (!approval) {
-        return {
-          success: false,
-          approval: {
-            id,
-            action: "",
-            target: "",
-            requestedBy: "",
-            requestedAt: "",
-            status: "pending" as const,
-          },
-          error: "Approval not found",
-        };
-      }
+      if (!approval) return notFoundResult(id);
       if (approval.status !== "pending") {
         return { success: false, approval, error: `Cannot approve: status is ${approval.status}` };
       }
       approval.status = "approved";
       approval.resolvedBy = approvedBy;
       approval.resolvedAt = new Date().toISOString();
+      pruneResolved();
       return { success: true, approval };
     },
 
     reject(id, rejectedBy) {
+      expireTimedOut(); // Expire before checking status
       const approval = approvals.get(id);
-      if (!approval) {
-        return {
-          success: false,
-          approval: {
-            id,
-            action: "",
-            target: "",
-            requestedBy: "",
-            requestedAt: "",
-            status: "pending" as const,
-          },
-          error: "Approval not found",
-        };
-      }
+      if (!approval) return notFoundResult(id);
       if (approval.status !== "pending") {
         return { success: false, approval, error: `Cannot reject: status is ${approval.status}` };
       }
       approval.status = "rejected";
       approval.resolvedBy = rejectedBy;
       approval.resolvedAt = new Date().toISOString();
+      pruneResolved();
       return { success: true, approval };
     },
 

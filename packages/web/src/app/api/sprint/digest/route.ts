@@ -49,10 +49,10 @@ export async function GET(request: Request) {
     // Gather active agents from session manager
     const activeAgents: string[] = [];
     try {
-      const sessions = sessionManager.list();
+      const sessions = await sessionManager.list();
       for (const s of sessions) {
-        if (s.status === "running") {
-          activeAgents.push(s.sessionId);
+        if (s.status === "working") {
+          activeAgents.push(s.id);
         }
       }
     } catch {

@@ -913,6 +913,30 @@ export interface OrchestratorConfig {
 
   /** Autopilot mode: off (default), supervised, or autonomous. (Story 43.1) */
   autopilot?: "off" | "supervised" | "autonomous";
+
+  /** Notification digest config (Story 44.7) */
+  notificationDigest?: {
+    enabled: boolean;
+    schedule: string;
+    timezone: string;
+  };
+
+  /** Configured users for identity (Story 46b.1) */
+  users?: Array<{
+    id: string;
+    name: string;
+    role: "admin" | "lead" | "dev" | "viewer";
+    email?: string;
+  }>;
+
+  /** Actions requiring approval before execution (Story 46b.2) */
+  approvalRequired?: Array<"spawn" | "kill" | "autopilot-advance">;
+
+  /** Resource pool for shared agent capacity (Story 46b.3) */
+  resourcePool?: {
+    total: number;
+    projects: Record<string, number>;
+  };
 }
 
 /**

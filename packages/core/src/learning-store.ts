@@ -116,7 +116,8 @@ class LearningStoreImpl implements LearningStore {
       results = results.filter((r) => r.agentId === params.agentId);
     }
     if (params.domain) {
-      results = results.filter((r) => r.domainTags.includes(params.domain!));
+      const domain = params.domain;
+      results = results.filter((r) => r.domainTags.includes(domain));
     }
     if (params.outcome) {
       results = results.filter((r) => r.outcome === params.outcome);

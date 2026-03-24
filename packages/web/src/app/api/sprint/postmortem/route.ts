@@ -14,9 +14,9 @@ export async function GET() {
     // Query all non-successful sessions
     const failures: SessionLearning[] = [];
     try {
-      const failed = learningStore?.query({ outcome: "failed" }) ?? [];
-      const blocked = learningStore?.query({ outcome: "blocked" }) ?? [];
-      const abandoned = learningStore?.query({ outcome: "abandoned" }) ?? [];
+      const failed = (learningStore?.query({ outcome: "failed" }) ?? []) as SessionLearning[];
+      const blocked = (learningStore?.query({ outcome: "blocked" }) ?? []) as SessionLearning[];
+      const abandoned = (learningStore?.query({ outcome: "abandoned" }) ?? []) as SessionLearning[];
       failures.push(...failed, ...blocked, ...abandoned);
     } catch {
       // Learning store may not be available — non-fatal

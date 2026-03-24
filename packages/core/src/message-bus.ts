@@ -88,7 +88,8 @@ export function createMessageBus(jsonlPath?: string): MessageBus {
       if (!subscribers.has(channel)) {
         subscribers.set(channel, new Set());
       }
-      subscribers.get(channel)!.add(callback);
+      const subs = subscribers.get(channel);
+      if (subs) subs.add(callback);
 
       // Return unsubscribe function
       return () => {

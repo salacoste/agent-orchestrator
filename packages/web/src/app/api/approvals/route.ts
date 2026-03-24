@@ -4,12 +4,7 @@
  * GET /api/approvals — returns pending approval queue.
  */
 import { NextResponse } from "next/server";
-import { createApprovalService } from "@composio/ao-core";
-
-/** Module-level singleton. */
-const approvalService = createApprovalService();
-
-export { approvalService };
+import { approvalService } from "./shared";
 
 export async function GET() {
   try {

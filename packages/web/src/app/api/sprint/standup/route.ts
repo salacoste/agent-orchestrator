@@ -39,7 +39,9 @@ export async function GET(request: Request) {
     // Recently completed stories from learning store (time-filtered)
     const completedStories: string[] = [];
     try {
-      const recent = learningStore?.query({ outcome: "completed", sinceMs }) ?? [];
+      const recent = (learningStore?.query({ outcome: "completed", sinceMs }) ?? []) as Array<{
+        storyId?: string;
+      }>;
       for (const entry of recent) {
         if (entry.storyId && !completedStories.includes(entry.storyId)) {
           completedStories.push(entry.storyId);
@@ -51,9 +53,9 @@ export async function GET(request: Request) {
 
     // Gather active agents from sessions
     try {
-      const sessions = sessionManager.list();
+      const sessions = await sessionManager.list();
       for (const s of sessions) {
-        if (s.status === "running") activeAgents.push(s.sessionId);
+        if (s.status === "working") activeAgents.push(s.id);
       }
     } catch {
       // Non-fatal

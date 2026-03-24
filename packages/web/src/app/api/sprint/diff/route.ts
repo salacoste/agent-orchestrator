@@ -36,7 +36,7 @@ export async function GET(request: Request) {
     // Fetch all learnings and split by period in a single pass
     let allLearnings: SessionLearning[] = [];
     try {
-      allLearnings = learningStore?.query({}) ?? [];
+      allLearnings = (learningStore?.query({}) ?? []) as SessionLearning[];
     } catch {
       // Non-fatal
     }

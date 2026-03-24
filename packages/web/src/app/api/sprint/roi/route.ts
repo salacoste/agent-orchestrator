@@ -31,9 +31,9 @@ export async function GET(request: Request) {
     let storiesCompleted = 0;
 
     try {
-      const sessions = sessionManager.list();
+      const sessions = await sessionManager.list();
       for (const s of sessions) {
-        if (s.status === "completed") {
+        if (s.status === "merged") {
           storiesCompleted++;
           const cost = s.agentInfo?.cost;
           if (cost) {

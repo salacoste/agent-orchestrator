@@ -21,7 +21,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     // Get session summary
     let summary: string | null = null;
     try {
-      const session = sessionManager.get(id);
+      const session = await sessionManager.get(id);
       summary = session?.agentInfo?.summary ?? null;
     } catch {
       // Non-fatal
@@ -34,7 +34,12 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     let retryCount = 0;
 
     try {
-      const learnings = learningStore?.query({ agentId: id }) ?? [];
+      const learnings = (learningStore?.query({ agentId: id }) ?? []) as Array<{
+        domainTags: string[];
+        errorCategories: string[];
+        filesModified: string[];
+        retryCount: number;
+      }>;
       if (learnings.length > 0) {
         const latest = learnings[learnings.length - 1];
         domainTags = latest.domainTags;

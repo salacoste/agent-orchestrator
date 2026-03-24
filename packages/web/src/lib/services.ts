@@ -39,6 +39,11 @@ export interface Services {
   config: OrchestratorConfig;
   registry: PluginRegistry;
   sessionManager: SessionManager;
+  learningStore?: {
+    list(): unknown[];
+    query(params: Record<string, unknown>): unknown[];
+    append?(entry: unknown): void;
+  };
 }
 
 // Cache in globalThis for Next.js HMR stability

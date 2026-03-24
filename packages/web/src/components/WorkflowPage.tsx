@@ -147,7 +147,7 @@ export function WorkflowPage({ projects }: WorkflowPageProps) {
           (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
         );
 
-        const state = reconstructState(sorted, timeTravelAt);
+        const state = reconstructState(sorted, timeTravelAt as string);
         setTtState(state);
         setTtNoData(state.eventsProcessed === 0);
       } catch (err: unknown) {

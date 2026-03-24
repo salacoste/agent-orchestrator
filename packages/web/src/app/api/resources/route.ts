@@ -20,9 +20,6 @@ function getPool(config?: ResourcePoolConfig) {
   return poolSingleton;
 }
 
-/** Exported for other routes that need to acquire/release. */
-export { getPool };
-
 export async function GET() {
   try {
     const { config } = await getServices();

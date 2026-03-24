@@ -4,7 +4,7 @@
  * POST /api/approvals/{id}/approve — approve a pending action.
  */
 import { NextResponse } from "next/server";
-import { approvalService } from "../../route";
+import { approvalService } from "../../shared";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {

@@ -342,7 +342,7 @@ export type { SpawnQueue, SpawnQueueState, SpawnQueueConfig } from "./spawn-queu
 
 // Sprint Forecaster — predictive completion (Story 43.2)
 export { computeForecast } from "./sprint-forecaster.js";
-export type { SprintForecast, BacklogStory, ConfidenceLevel } from "./sprint-forecaster.js";
+export type { SprintForecast, BacklogStory } from "./sprint-forecaster.js";
 
 // Deadline Pressure — pragmatic trade-offs (Story 43.8)
 export { detectDeadlinePressure } from "./deadline-pressure.js";

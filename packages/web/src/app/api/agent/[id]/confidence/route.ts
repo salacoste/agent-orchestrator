@@ -27,7 +27,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     };
 
     try {
-      const learnings = learningStore?.query({ agentId: id }) ?? [];
+      const learnings = (learningStore?.query({ agentId: id }) ?? []) as Array<{
+        retryCount: number;
+        errorCategories: string[];
+        filesModified: string[];
+      }>;
       if (learnings.length > 0) {
         const latest = learnings[learnings.length - 1];
         input = {

@@ -14,12 +14,11 @@ export async function GET() {
     // Gather sessions
     const sessions: SessionExport[] = [];
     try {
-      const allSessions = sessionManager.list();
+      const allSessions = await sessionManager.list();
       for (const s of allSessions) {
         sessions.push({
-          sessionId: s.sessionId,
+          sessionId: s.id,
           status: s.status,
-          storyId: s.storyId,
           projectId: s.projectId,
         });
       }

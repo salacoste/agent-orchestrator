@@ -560,8 +560,8 @@ previous_cycle:
 
   # Epic 46a: Infrastructure Foundation (Phase 1)
   # Audit log, state snapshots, inter-agent messaging
-  epic-46a: backlog
-  46a-1-immutable-audit-log: backlog
+  epic-46a: in-progress
+  46a-1-immutable-audit-log: done
   46a-2-state-snapshots-export-import: backlog
   46a-3-inter-agent-messaging-bus: backlog
   epic-46a-retrospective: optional

@@ -180,6 +180,10 @@ export type { ReasoningTrail, ReasoningDecision, ReasoningInput } from "./reason
 // Sprint Diff — sprint-over-sprint comparison (Story 45.8)
 export { computeSprintDiff } from "./sprint-diff.js";
 export type { SprintDiff, MetricComparison, Direction } from "./sprint-diff.js";
+
+// Immutable Audit Log — tamper-proof trail (Story 46a.1)
+export { createImmutableAuditLog, verifyChain, computeEntryHash } from "./immutable-audit-log.js";
+export type { AuditLogEntry, ChainVerification, ImmutableAuditLog } from "./immutable-audit-log.js";
 export type {
   NotificationService,
   Notification,

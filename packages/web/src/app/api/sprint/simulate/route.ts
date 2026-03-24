@@ -22,7 +22,18 @@ export async function GET(request: Request) {
       Math.max(1, parseInt(url.searchParams.get("iterations") ?? "1000", 10)) || 1000,
     );
 
-    // Gather stories from sprint status
+    // Gather learnings first — used for domain inference
+    const learnings = (learningStore?.list?.() ?? []) as SessionLearning[];
+
+    // Build domain lookup from historical learnings (storyId → domainTags)
+    const domainByStory = new Map<string, string[]>();
+    for (const l of learnings) {
+      if (l.storyId && l.domainTags.length > 0) {
+        domainByStory.set(l.storyId, l.domainTags);
+      }
+    }
+
+    // Gather stories from sprint status with inferred domains
     const stories: SimStory[] = [];
     for (const [, project] of Object.entries(config.projects)) {
       try {
@@ -31,16 +42,13 @@ export async function GET(request: Request) {
           if (id.startsWith("epic-")) continue;
           const status = typeof entry.status === "string" ? entry.status : "backlog";
           if (status === "backlog" || status === "ready-for-dev" || status === "in-progress") {
-            stories.push({ id, domainTags: ["general"] });
+            stories.push({ id, domainTags: domainByStory.get(id) ?? ["general"] });
           }
         }
       } catch {
         // Non-fatal
       }
     }
-
-    // Gather learnings
-    const learnings = (learningStore?.list?.() ?? []) as SessionLearning[];
 
     const result = simulateSprint({ stories, learnings, iterations });
     const color = getSimulationColor(result.onTimeProbability);

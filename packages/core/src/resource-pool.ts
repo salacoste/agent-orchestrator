@@ -67,8 +67,20 @@ export function createResourcePool(config?: ResourcePoolConfig): ResourcePool {
     },
 
     acquire(projectId) {
-      if (!config) return true;
-      if (!this.canSpawn(projectId)) return false;
+      // In unlimited mode, still track usage for accurate getState()
+      if (!config) {
+        usage.set(projectId, getProjectUsage(projectId) + 1);
+        return true;
+      }
+
+      // Check limits via closure (not this — safe for destructuring)
+      const projectLimit = config.projects[projectId];
+      if (projectLimit !== undefined && getProjectUsage(projectId) >= projectLimit) {
+        return false;
+      }
+      if (getTotalUsage() >= config.total) {
+        return false;
+      }
 
       usage.set(projectId, getProjectUsage(projectId) + 1);
       return true;

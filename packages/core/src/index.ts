@@ -230,6 +230,10 @@ export type { SwapPlan, SwapContext } from "./agent-hot-swap.js";
 export { preFlightCheck } from "./pre-flight-check.js";
 export type { PreFlightResult, RiskFactor } from "./pre-flight-check.js";
 
+// Sprint Simulator — Monte Carlo engine (Story 48.1)
+export { simulateSprint } from "./sprint-simulator.js";
+export type { SimulationInput, SimulationResult, SimStory } from "./sprint-simulator.js";
+
 // Conflict Wizard — AI merge suggestion (Story 47.4)
 export { analyzeConflict, suggestMerge, getResolutionOptions } from "./conflict-wizard.js";
 export type { ConflictAnalysis, MergeSuggestion, ResolutionOption } from "./conflict-wizard.js";

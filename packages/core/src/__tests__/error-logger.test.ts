@@ -848,8 +848,8 @@ describe("ErrorLogger", () => {
       const errors = logger.getErrors();
       expect(errors.length).toBeGreaterThan(0);
       const last = errors[errors.length - 1];
-      expect(last.severity).toBe("fatal");
-      expect(last.errorCode).toBe("ERR-CUSTOM-001");
+      expect((last as unknown as Record<string, unknown>).severity).toBe("fatal");
+      expect((last as unknown as Record<string, unknown>).errorCode).toBe("ERR-CUSTOM-001");
     });
 
     it("higher priority rules checked first", async () => {
@@ -874,8 +874,8 @@ describe("ErrorLogger", () => {
 
       const errors = logger.getErrors();
       const last = errors[errors.length - 1];
-      expect(last.severity).toBe("critical");
-      expect(last.errorCode).toBe("ERR-HIGH-001");
+      expect((last as unknown as Record<string, unknown>).severity).toBe("critical");
+      expect((last as unknown as Record<string, unknown>).errorCode).toBe("ERR-HIGH-001");
     });
 
     it("clearClassificationRules resets to default behavior", async () => {
@@ -895,8 +895,8 @@ describe("ErrorLogger", () => {
       const errors = logger.getErrors();
       const last = errors[errors.length - 1];
       // Should use default classification (critical for ECONNREFUSED)
-      expect(last.severity).toBe("critical");
-      expect(last.errorCode).toBe("ERR-EVENTBUS-001");
+      expect((last as unknown as Record<string, unknown>).severity).toBe("critical");
+      expect((last as unknown as Record<string, unknown>).errorCode).toBe("ERR-EVENTBUS-001");
     });
 
     it("falls back to hardcoded when no custom rules match", async () => {
@@ -914,7 +914,7 @@ describe("ErrorLogger", () => {
       const errors = logger.getErrors();
       const last = errors[errors.length - 1];
       // Default classification: ENOSPC = fatal
-      expect(last.severity).toBe("fatal");
+      expect((last as unknown as Record<string, unknown>).severity).toBe("fatal");
     });
   });
 });

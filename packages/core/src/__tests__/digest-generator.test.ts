@@ -124,9 +124,9 @@ describe("generateDigest", () => {
 describe("notificationDigest config schema", () => {
   it("defaults to disabled in getDefaultConfig", () => {
     const config = getDefaultConfig();
-    expect(config.notificationDigest.enabled).toBe(false);
-    expect(config.notificationDigest.schedule).toBe("09:00");
-    expect(config.notificationDigest.timezone).toBe("UTC");
+    expect(config.notificationDigest?.enabled).toBe(false);
+    expect(config.notificationDigest?.schedule).toBe("09:00");
+    expect(config.notificationDigest?.timezone).toBe("UTC");
   });
 
   it("accepts valid digest config via validateConfig", () => {
@@ -134,9 +134,9 @@ describe("notificationDigest config schema", () => {
       projects: {},
       notificationDigest: { enabled: true, schedule: "14:30", timezone: "America/New_York" },
     });
-    expect(config.notificationDigest.enabled).toBe(true);
-    expect(config.notificationDigest.schedule).toBe("14:30");
-    expect(config.notificationDigest.timezone).toBe("America/New_York");
+    expect(config.notificationDigest?.enabled).toBe(true);
+    expect(config.notificationDigest?.schedule).toBe("14:30");
+    expect(config.notificationDigest?.timezone).toBe("America/New_York");
   });
 
   it("rejects invalid schedule format", () => {

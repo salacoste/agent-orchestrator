@@ -8,8 +8,9 @@ const mockApprovalService = {
     { id: "a-1", action: "spawn", target: "agent-1", status: "pending", requestedBy: "alice" },
   ]),
   approve: vi.fn((id: string, by: string) => ({
-    success: true,
+    success: true as boolean,
     approval: { id, action: "spawn", target: "agent-1", status: "approved", resolvedBy: by },
+    error: undefined as string | undefined,
   })),
   reject: vi.fn((id: string, by: string) => ({
     success: true,
@@ -62,7 +63,7 @@ describe("POST /api/approvals/{id}/approve", () => {
   it("returns 400 for failed approval", async () => {
     mockApprovalService.approve.mockReturnValue({
       success: false,
-      approval: {},
+      approval: { id: "bad", action: "", target: "", status: "pending", resolvedBy: "" },
       error: "Not found",
     });
 

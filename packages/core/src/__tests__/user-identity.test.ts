@@ -86,7 +86,7 @@ describe("users config schema", () => {
       ],
     });
     expect(config.users).toHaveLength(2);
-    expect(config.users[0].role).toBe("lead");
+    expect(config.users?.[0].role).toBe("lead");
   });
 
   it("rejects invalid role", () => {

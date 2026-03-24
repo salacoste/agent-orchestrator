@@ -36,14 +36,14 @@ beforeEach(() => {
     sessionManager: {
       list: () => [
         {
-          status: "completed",
+          status: "merged",
           agentInfo: { cost: { inputTokens: 100_000, outputTokens: 50_000 } },
         },
         {
-          status: "completed",
+          status: "merged",
           agentInfo: { cost: { inputTokens: 200_000, outputTokens: 100_000 } },
         },
-        { status: "running", agentInfo: { cost: { inputTokens: 50_000, outputTokens: 25_000 } } },
+        { status: "working", agentInfo: { cost: { inputTokens: 50_000, outputTokens: 25_000 } } },
       ],
     },
   } as never);

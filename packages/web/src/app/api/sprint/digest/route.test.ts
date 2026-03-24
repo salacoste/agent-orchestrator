@@ -64,8 +64,8 @@ beforeEach(() => {
     },
     sessionManager: {
       list: () => [
-        { sessionId: "agent-1", status: "running" },
-        { sessionId: "agent-2", status: "completed" },
+        { id: "agent-1", status: "working" },
+        { id: "agent-2", status: "merged" },
       ],
     },
   } as never);

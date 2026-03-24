@@ -197,6 +197,10 @@ export type { StateSnapshot, SnapshotValidation, SessionExport } from "./state-s
 // Message Bus — inter-agent pub/sub (Story 46a.3)
 export { createMessageBus } from "./message-bus.js";
 export type { MessageBus, BusMessage, MessageSubscriber } from "./message-bus.js";
+
+// User Identity — config-based auth (Story 46b.1)
+export { resolveUser, hasPermission, ANONYMOUS_USER } from "./user-identity.js";
+export type { ConfigUser, UserRole } from "./user-identity.js";
 export type {
   NotificationService,
   Notification,

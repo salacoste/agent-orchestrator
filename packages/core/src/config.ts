@@ -154,6 +154,16 @@ const OrchestratorConfigSchema = z.object({
       timezone: z.string().default("UTC"),
     })
     .default({ enabled: false, schedule: "09:00", timezone: "UTC" }),
+  users: z
+    .array(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        role: z.enum(["admin", "lead", "dev", "viewer"]),
+        email: z.string().email().optional(),
+      }),
+    )
+    .default([]),
 });
 
 // =============================================================================

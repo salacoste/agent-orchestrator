@@ -570,7 +570,7 @@ previous_cycle:
   # Auth, approvals, resource pool, isolation
   epic-46b: in-progress
   46b-1-auth-config-based-user-identity: done
-  46b-2-approval-workflows: backlog
+  46b-2-approval-workflows: done
   46b-3-resource-pool-shared-capacity: backlog
   46b-4-agent-isolation-levels: backlog
   epic-46b-retrospective: optional

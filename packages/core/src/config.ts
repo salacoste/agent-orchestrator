@@ -164,6 +164,7 @@ const OrchestratorConfigSchema = z.object({
       }),
     )
     .default([]),
+  approvalRequired: z.array(z.enum(["spawn", "kill", "autopilot-advance"])).default([]),
 });
 
 // =============================================================================

@@ -49,9 +49,11 @@ export function preFlightCheck(
 ): PreFlightResult {
   const riskFactors: RiskFactor[] = [];
 
-  // Match sessions by overlapping domain tags
+  // Match sessions by overlapping domain tags (guard undefined domainTags)
   const domainSet = new Set(domainTags);
-  const matching = learnings.filter((l) => l.domainTags.some((tag) => domainSet.has(tag)));
+  const matching = learnings.filter(
+    (l) => Array.isArray(l.domainTags) && l.domainTags.some((tag) => domainSet.has(tag)),
+  );
 
   // Compute success rate
   let successRate: number;
@@ -70,7 +72,8 @@ export function preFlightCheck(
     const completed = matching.filter((l) => l.outcome === "completed").length;
     successRate = Math.round((completed / matching.length) * 100) / 100;
 
-    const completedSessions = matching.filter((l) => l.outcome === "completed");
+    // Filter completed sessions with valid (positive) durations
+    const completedSessions = matching.filter((l) => l.outcome === "completed" && l.durationMs > 0);
     estimatedDurationMs =
       completedSessions.length > 0
         ? Math.round(
@@ -79,18 +82,20 @@ export function preFlightCheck(
         : 0;
   }
 
-  // Risk: high complexity
-  if (acCount > HIGH_COMPLEXITY_AC_COUNT) {
+  // Risk: high complexity (guard negative/NaN acCount)
+  const safeAcCount = Number.isFinite(acCount) && acCount > 0 ? acCount : 0;
+  if (safeAcCount > HIGH_COMPLEXITY_AC_COUNT) {
     riskFactors.push({
       name: "High complexity",
       severity: "medium",
-      description: `${acCount} acceptance criteria — above average complexity`,
+      description: `${safeAcCount} acceptance criteria — above average complexity`,
     });
   }
 
-  // Risk: recent failures
+  // Risk: recent failures — sort by capturedAt to get truly recent entries
   if (matching.length > 0) {
-    const recent = matching.slice(-10);
+    const sorted = [...matching].sort((a, b) => a.capturedAt.localeCompare(b.capturedAt));
+    const recent = sorted.slice(-10);
     const recentFailed = recent.filter(
       (l) => l.outcome === "failed" || l.outcome === "blocked",
     ).length;

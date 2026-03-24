@@ -8,7 +8,6 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { appendFile, readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
 
 /** A single immutable audit log entry. */
 export interface AuditLogEntry {
@@ -107,26 +106,36 @@ export function createImmutableAuditLog(filePath: string): ImmutableAuditLog {
   /** Write chain serializes concurrent appends to prevent chain forks. */
   let writeChain = Promise.resolve<AuditLogEntry | null>(null);
 
+  /** Initialization promise — prevents race between concurrent callers. */
+  let initPromise: Promise<void> | null = null;
+
   /** Load last hash from existing file on first use. */
-  async function ensureInitialized(): Promise<void> {
-    if (initialized) return;
-    initialized = true;
+  function ensureInitialized(): Promise<void> {
+    if (initialized) return Promise.resolve();
+    if (initPromise) return initPromise;
 
-    if (!existsSync(filePath)) return;
-
-    try {
-      const content = await readFile(filePath, "utf-8");
-      const lines = content.trim().split("\n").filter(Boolean);
-      if (lines.length > 0) {
-        const lastLine = lines[lines.length - 1];
-        const parsed = JSON.parse(lastLine) as AuditLogEntry;
-        if (parsed.hash) {
-          lastHash = parsed.hash;
+    initPromise = (async () => {
+      try {
+        const content = await readFile(filePath, "utf-8").catch(() => "");
+        const lines = content.trim().split("\n").filter(Boolean);
+        if (lines.length > 0) {
+          const lastLine = lines[lines.length - 1];
+          try {
+            const parsed = JSON.parse(lastLine) as AuditLogEntry;
+            if (typeof parsed.hash === "string" && parsed.hash) {
+              lastHash = parsed.hash;
+            }
+          } catch {
+            // Last line malformed — keep GENESIS hash
+          }
         }
+      } catch {
+        // File read failed — keep GENESIS hash
       }
-    } catch {
-      // Corrupted file — start fresh chain from last known hash
-    }
+      initialized = true;
+    })();
+
+    return initPromise;
   }
 
   /** Internal append — must be called sequentially via writeChain. */
@@ -155,8 +164,9 @@ export function createImmutableAuditLog(filePath: string): ImmutableAuditLog {
     const hash = computeEntryHash(entry);
     const fullEntry: AuditLogEntry = { ...entry, hash };
 
+    // Write first — only update lastHash on success (prevents stale chain on disk failure)
     await appendFile(filePath, JSON.stringify(fullEntry) + "\n", "utf-8");
-    lastHash = hash;
+    lastHash = hash; // Only reached if appendFile succeeded
 
     return fullEntry;
   }
@@ -172,9 +182,14 @@ export function createImmutableAuditLog(filePath: string): ImmutableAuditLog {
     async readEntries(options) {
       await ensureInitialized();
 
-      if (!existsSync(filePath)) return [];
+      // Use try/catch instead of existsSync to avoid TOCTOU race
+      let content: string;
+      try {
+        content = await readFile(filePath, "utf-8");
+      } catch {
+        return []; // File doesn't exist or unreadable
+      }
 
-      const content = await readFile(filePath, "utf-8");
       const lines = content.trim().split("\n").filter(Boolean);
 
       let entries: AuditLogEntry[] = [];
@@ -186,10 +201,12 @@ export function createImmutableAuditLog(filePath: string): ImmutableAuditLog {
         }
       }
 
-      // Filter by since
+      // Filter by since (guard invalid date → return all entries unfiltered)
       if (options?.since) {
         const sinceMs = new Date(options.since).getTime();
-        entries = entries.filter((e) => new Date(e.timestamp).getTime() >= sinceMs);
+        if (!isNaN(sinceMs)) {
+          entries = entries.filter((e) => new Date(e.timestamp).getTime() >= sinceMs);
+        }
       }
 
       // Limit

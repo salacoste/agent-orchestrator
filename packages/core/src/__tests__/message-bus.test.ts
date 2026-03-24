@@ -101,7 +101,9 @@ describe("createMessageBus", () => {
     bus.subscribe("ch", (msg) => received.push(msg));
     await bus.close();
 
-    await bus.publish("ch", { type: "post-close", payload: {}, sender: "s" });
+    await expect(
+      bus.publish("ch", { type: "post-close", payload: {}, sender: "s" }),
+    ).rejects.toThrow("Cannot publish on closed bus");
     expect(received).toHaveLength(0);
   });
 
@@ -120,6 +122,39 @@ describe("createMessageBus", () => {
     expect(received).toHaveLength(1);
 
     await bus.close();
+  });
+
+  it("auto-unsubscribes after repeated subscriber errors", async () => {
+    const bus = createMessageBus();
+    let errorCount = 0;
+    const good: BusMessage[] = [];
+
+    bus.subscribe("ch", () => {
+      errorCount++;
+      throw new Error("always fails");
+    });
+    bus.subscribe("ch", (msg) => good.push(msg));
+
+    // Publish 11 times — bad subscriber should be removed after 10 errors
+    for (let i = 0; i < 11; i++) {
+      await bus.publish("ch", { type: "msg", payload: { i }, sender: "s" });
+    }
+
+    // Bad subscriber threw 10 times then was removed (11th publish doesn't call it)
+    expect(errorCount).toBe(10);
+    // Good subscriber received all 11
+    expect(good).toHaveLength(11);
+
+    await bus.close();
+  });
+
+  it("subscribe returns no-op after close", async () => {
+    const bus = createMessageBus();
+    await bus.close();
+
+    const unsub = bus.subscribe("ch", () => {});
+    // Should not throw, just return no-op
+    unsub();
   });
 
   it("does not deliver to unsubscribed channel", async () => {
@@ -202,6 +237,24 @@ describe("JSONL persistence", () => {
     const count = await bus.replay();
     expect(count).toBe(0);
     await bus.close();
+  });
+
+  it("replay with invalid since date replays all", async () => {
+    const bus1 = createMessageBus(jsonlPath);
+    await bus1.publish("ch", { type: "msg1", payload: {}, sender: "s" });
+    await bus1.publish("ch", { type: "msg2", payload: {}, sender: "s" });
+    await bus1.close();
+
+    const bus2 = createMessageBus(jsonlPath);
+    const replayed: BusMessage[] = [];
+    bus2.subscribe("ch", (msg) => replayed.push(msg));
+
+    const count = await bus2.replay("not-a-date");
+
+    expect(count).toBe(2); // Invalid date → replay all
+    expect(replayed).toHaveLength(2);
+
+    await bus2.close();
   });
 
   it("replay respects channel isolation", async () => {

@@ -92,6 +92,24 @@ describe("createResourcePool", () => {
     expect(pool.acquire("app")).toBe(true);
     expect(pool.acquire("app")).toBe(true);
   });
+
+  it("throws on NaN total", () => {
+    expect(() => createResourcePool({ total: NaN, projects: {} })).toThrow("Invalid");
+  });
+
+  it("throws on Infinity total", () => {
+    expect(() => createResourcePool({ total: Infinity, projects: {} })).toThrow("Invalid");
+  });
+
+  it("cleans up usage map entries on release to zero", () => {
+    const pool = createResourcePool();
+    pool.acquire("temp-project");
+    pool.release("temp-project");
+
+    const state = pool.getState();
+    // Project with 0 usage should be removed from tracking
+    expect(state.projects["temp-project"]).toBeUndefined();
+  });
 });
 
 describe("resourcePool config schema", () => {

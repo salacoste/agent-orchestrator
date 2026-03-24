@@ -108,4 +108,27 @@ describe("parseCommand", () => {
     expect(parseCommand("start agent for story-1")[0].action).toBe("spawn");
     expect(parseCommand("restart agent-3")[0].action).toBe("resume");
   });
+
+  it("returns fallback for 'spawn for ' with trailing space (empty storyId)", () => {
+    const intents = parseCommand("spawn for ");
+    // Should not produce a spawn intent with empty storyId
+    const spawn = intents.find((i) => i.action === "spawn" && i.params.storyId === "");
+    expect(spawn).toBeUndefined();
+  });
+
+  it("returns fallback for 'kill ' with trailing space (empty agentId)", () => {
+    const intents = parseCommand("kill ");
+    // Should not produce a kill intent with empty agentId
+    const kill = intents.find((i) => i.action === "kill" && i.params.agentId === "");
+    expect(kill).toBeUndefined();
+  });
+
+  it("returns fallback for extremely long input", () => {
+    const longInput = "spawn ".padEnd(2000, "a");
+    const intents = parseCommand(longInput);
+
+    expect(intents).toHaveLength(1);
+    expect(intents[0].action).toBe("fallback");
+    expect(intents[0].description).toContain("too long");
+  });
 });

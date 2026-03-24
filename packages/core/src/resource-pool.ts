@@ -36,6 +36,11 @@ export interface ResourcePool {
  * When config is undefined, all operations are unlimited.
  */
 export function createResourcePool(config?: ResourcePoolConfig): ResourcePool {
+  // Validate total is a positive finite number if config provided
+  if (config && (!Number.isFinite(config.total) || config.total < 0)) {
+    throw new Error(`Invalid resource pool total: ${config.total}`);
+  }
+
   const usage = new Map<string, number>();
 
   function getProjectUsage(projectId: string): number {

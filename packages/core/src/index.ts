@@ -216,7 +216,7 @@ export type { IsolationLevel, IsolationPolicy } from "./isolation-levels.js";
 
 // Agent Sandbox — permission boundaries (Story 47.2)
 export { checkAccess, globToRegex } from "./agent-sandbox.js";
-export type { SandboxConfig, AccessResult } from "./agent-sandbox.js";
+export type { AgentSandboxConfig, AccessResult } from "./agent-sandbox.js";
 
 // NLU Parser — natural language commands (Story 47.3)
 export { parseCommand } from "./nlu-parser.js";

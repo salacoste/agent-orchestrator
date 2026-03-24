@@ -69,6 +69,29 @@ describe("analyzeConflict", () => {
     expect(result.linesChangedB).toBe(2);
     expect(result.hasConflict).toBe(false); // No overlap
   });
+
+  it("normalizes CRLF to LF to avoid false conflicts", () => {
+    const base = "line1\nline2";
+    const a = "line1\r\nline2"; // Same content, CRLF
+    const b = "line1\nline2";
+
+    const result = analyzeConflict(base, a, b);
+
+    expect(result.hasConflict).toBe(false);
+    expect(result.linesChangedA).toBe(0);
+    expect(result.linesChangedB).toBe(0);
+  });
+
+  it("handles trailing newline consistently", () => {
+    const base = "line1\nline2\n";
+    const a = "line1\nline2\n";
+    const b = "line1\nline2\n";
+
+    const result = analyzeConflict(base, a, b);
+
+    expect(result.hasConflict).toBe(false);
+    expect(result.linesChangedA).toBe(0);
+  });
 });
 
 describe("suggestMerge", () => {
@@ -85,6 +108,11 @@ describe("suggestMerge", () => {
     expect(suggestMerge(analysis)).toBeNull();
     expect(suggestMerge(analysis, undefined)).toBeNull();
     expect(suggestMerge(analysis, "")).toBeNull();
+  });
+
+  it("returns null for whitespace-only API key", () => {
+    expect(suggestMerge(analysis, "   ")).toBeNull();
+    expect(suggestMerge(analysis, "\t")).toBeNull();
   });
 
   it("returns stub suggestion with API key", () => {

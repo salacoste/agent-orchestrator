@@ -136,4 +136,52 @@ describe("preFlightCheck", () => {
     expect(result.advisory).toBeTruthy();
     expect(result.successRate).toBeGreaterThan(0);
   });
+
+  it("handles negative acCount without false high-complexity risk", () => {
+    const result = preFlightCheck(["backend"], -5, [makeLearning()]);
+
+    expect(result.riskFactors.find((r) => r.name === "High complexity")).toBeUndefined();
+  });
+
+  it("excludes zero/negative durations from estimated duration", () => {
+    const learnings = [
+      makeLearning({ outcome: "completed", durationMs: 60000, domainTags: ["api"] }),
+      makeLearning({ outcome: "completed", durationMs: 0, domainTags: ["api"] }),
+      makeLearning({ outcome: "completed", durationMs: -1000, domainTags: ["api"] }),
+    ];
+
+    const result = preFlightCheck(["api"], 3, learnings);
+
+    // Only the 60000 session should count
+    expect(result.estimatedDurationMs).toBe(60000);
+  });
+
+  it("sorts learnings by time before computing recent failures", () => {
+    // Older failures, recent successes — should not flag recent failures
+    const learnings = [
+      makeLearning({
+        outcome: "completed",
+        domainTags: ["db"],
+        capturedAt: "2026-03-24T12:00:00Z",
+      }),
+      makeLearning({
+        outcome: "completed",
+        domainTags: ["db"],
+        capturedAt: "2026-03-24T13:00:00Z",
+      }),
+      makeLearning({
+        outcome: "completed",
+        domainTags: ["db"],
+        capturedAt: "2026-03-24T14:00:00Z",
+      }),
+      makeLearning({ outcome: "failed", domainTags: ["db"], capturedAt: "2026-03-24T01:00:00Z" }),
+      makeLearning({ outcome: "failed", domainTags: ["db"], capturedAt: "2026-03-24T02:00:00Z" }),
+    ];
+
+    const result = preFlightCheck(["db"], 3, learnings);
+
+    // Recent (last 5 sorted by time) = 2 failures + 3 successes = 40% failure
+    // This is at the threshold, not above it
+    expect(result.riskFactors.find((r) => r.name === "Recent failures")).toBeUndefined();
+  });
 });

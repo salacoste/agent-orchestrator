@@ -51,6 +51,9 @@ export interface ApprovalService {
 /** Max resolved approvals to keep (prune oldest beyond this). */
 const MAX_RESOLVED = 500;
 
+/** Max pending approvals to prevent unbounded growth. */
+const MAX_PENDING = 200;
+
 export function createApprovalService(): ApprovalService {
   const approvals = new Map<string, ApprovalRequest>();
 
@@ -58,11 +61,10 @@ export function createApprovalService(): ApprovalService {
   function expireTimedOut(): void {
     const now = Date.now();
     for (const approval of approvals.values()) {
-      if (
-        approval.status === "pending" &&
-        approval.timeoutMs &&
-        now - new Date(approval.requestedAt).getTime() >= approval.timeoutMs
-      ) {
+      if (approval.status !== "pending" || !approval.timeoutMs) continue;
+      const requestedMs = new Date(approval.requestedAt).getTime();
+      // Guard invalid requestedAt — treat as already expired
+      if (isNaN(requestedMs) || now - requestedMs >= approval.timeoutMs) {
         approval.status = "expired";
       }
     }
@@ -90,6 +92,15 @@ export function createApprovalService(): ApprovalService {
 
   return {
     requestApproval(action, target, requestedBy, timeoutMs) {
+      // Expire stale approvals first to free slots
+      expireTimedOut();
+
+      // Enforce pending limit to prevent unbounded growth
+      const pendingCount = [...approvals.values()].filter((a) => a.status === "pending").length;
+      if (pendingCount >= MAX_PENDING) {
+        throw new Error(`Pending approval limit reached (${MAX_PENDING})`);
+      }
+
       const approval: ApprovalRequest = {
         id: randomUUID(),
         action,
@@ -109,6 +120,10 @@ export function createApprovalService(): ApprovalService {
       if (!approval) return notFoundResult(id);
       if (approval.status !== "pending") {
         return { success: false, approval, error: `Cannot approve: status is ${approval.status}` };
+      }
+      // Prevent self-approval
+      if (approval.requestedBy === approvedBy) {
+        return { success: false, approval, error: "Cannot approve own request" };
       }
       approval.status = "approved";
       approval.resolvedBy = approvedBy;

@@ -34,9 +34,14 @@ export function analyzeConflict(
   versionA: string,
   versionB: string,
 ): ConflictAnalysis {
-  const baseLines = base.split("\n");
-  const aLines = versionA.split("\n");
-  const bLines = versionB.split("\n");
+  // Normalize CRLF to LF to prevent false conflicts from line ending differences
+  const normBase = base.replace(/\r\n/g, "\n");
+  const normA = versionA.replace(/\r\n/g, "\n");
+  const normB = versionB.replace(/\r\n/g, "\n");
+
+  const baseLines = normBase.split("\n");
+  const aLines = normA.split("\n");
+  const bLines = normB.split("\n");
 
   let changedA = 0;
   let changedB = 0;
@@ -85,7 +90,7 @@ export function analyzeConflict(
  * AI integration is a stub — real implementation in future story.
  */
 export function suggestMerge(_analysis: ConflictAnalysis, apiKey?: string): MergeSuggestion | null {
-  if (!apiKey) return null;
+  if (!apiKey || !apiKey.trim()) return null;
 
   // Stub: real AI call would go here.
   // For now, return a placeholder indicating AI is available but not implemented.

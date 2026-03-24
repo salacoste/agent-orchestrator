@@ -56,7 +56,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * Returns a function that produces numbers in [0, 1).
  */
 function createRng(seed: number): () => number {
-  let state = seed;
+  let state = seed === 0 ? 1 : seed; // Avoid degenerate seed=0
   return () => {
     state = (state * 1664525 + 1013904223) & 0x7fffffff;
     return state / 0x80000000;
@@ -78,7 +78,10 @@ export function simulateSprint(input: SimulationInput): SimulationResult {
     seed = Date.now(),
   } = input;
 
-  if (stories.length === 0 || iterations <= 0) {
+  // Sanitize iterations: floor fractional, reject NaN/non-finite
+  const safeIterations = Number.isFinite(iterations) ? Math.floor(iterations) : 0;
+
+  if (stories.length === 0 || safeIterations <= 0) {
     return {
       p50Days: 0,
       p80Days: 0,
@@ -93,21 +96,26 @@ export function simulateSprint(input: SimulationInput): SimulationResult {
   const totals: number[] = [];
 
   // Pre-compute matching completed learnings per story (avoids re-filtering in hot loop)
-  const completedLearnings = learnings.filter((l) => l.outcome === "completed");
+  // Guard against undefined domainTags in learnings
+  const completedLearnings = learnings.filter(
+    (l) => l.outcome === "completed" && Array.isArray(l.domainTags),
+  );
   const storyMatches: SessionLearning[][] = stories.map((story) => {
+    if (!Array.isArray(story.domainTags) || story.domainTags.length === 0) return [];
     const domainSet = new Set(story.domainTags);
     return completedLearnings.filter((l) => l.domainTags.some((tag) => domainSet.has(tag)));
   });
   const storiesWithMatch = storyMatches.filter((m) => m.length > 0).length;
 
   // Run iterations — sample from pre-computed matches
-  for (let i = 0; i < iterations; i++) {
+  for (let i = 0; i < safeIterations; i++) {
     let totalMs = 0;
     for (const matches of storyMatches) {
       if (matches.length === 0) {
         totalMs += defaultDurationMs;
       } else {
-        totalMs += matches[Math.floor(rng() * matches.length)].durationMs;
+        const dur = matches[Math.floor(rng() * matches.length)].durationMs;
+        totalMs += dur > 0 ? dur : defaultDurationMs; // Guard zero/negative durations
       }
     }
     totals.push(totalMs);
@@ -115,15 +123,16 @@ export function simulateSprint(input: SimulationInput): SimulationResult {
 
   totals.sort((a, b) => a - b);
 
-  const p50Days = Math.round((totals[Math.floor(iterations * 0.5)] / MS_PER_DAY) * 10) / 10;
-  const p80Days = Math.round((totals[Math.floor(iterations * 0.8)] / MS_PER_DAY) * 10) / 10;
-  const p95Days = Math.round((totals[Math.floor(iterations * 0.95)] / MS_PER_DAY) * 10) / 10;
+  const pIdx = (pct: number) => Math.min(Math.floor(safeIterations * pct), safeIterations - 1);
+  const p50Days = Math.round((totals[pIdx(0.5)] / MS_PER_DAY) * 10) / 10;
+  const p80Days = Math.round((totals[pIdx(0.8)] / MS_PER_DAY) * 10) / 10;
+  const p95Days = Math.round((totals[pIdx(0.95)] / MS_PER_DAY) * 10) / 10;
 
-  // On-time probability
+  // On-time probability (use !== undefined, not falsy — sprintEndMs=0 is a valid deadline)
   let onTimeProbability = 1;
-  if (sprintEndMs) {
+  if (sprintEndMs !== undefined) {
     const onTimeCount = totals.filter((t) => t <= sprintEndMs).length;
-    onTimeProbability = Math.round((onTimeCount / iterations) * 100) / 100;
+    onTimeProbability = Math.round((onTimeCount / safeIterations) * 100) / 100;
   }
 
   // Confidence: ratio of stories with matching data
@@ -135,6 +144,6 @@ export function simulateSprint(input: SimulationInput): SimulationResult {
     p95Days,
     onTimeProbability,
     confidence,
-    iterationsRun: iterations,
+    iterationsRun: safeIterations,
   };
 }

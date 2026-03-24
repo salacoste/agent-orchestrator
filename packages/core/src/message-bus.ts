@@ -7,7 +7,6 @@
 
 import { randomUUID } from "node:crypto";
 import { appendFile, readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
 
 /** A message on the bus. */
 export interface BusMessage {
@@ -46,6 +45,10 @@ export function createMessageBus(jsonlPath?: string): MessageBus {
   const subscribers = new Map<string, Set<MessageSubscriber>>();
   let closed = false;
 
+  /** Max consecutive errors before auto-unsubscribing a callback. */
+  const MAX_ERRORS = 10;
+  const errorCounts = new WeakMap<MessageSubscriber, number>();
+
   /** Deliver a message to all subscribers of its channel. Returns true if any received. */
   function deliver(message: BusMessage): boolean {
     const channelSubs = subscribers.get(message.channel);
@@ -53,8 +56,15 @@ export function createMessageBus(jsonlPath?: string): MessageBus {
     for (const cb of [...channelSubs]) {
       try {
         cb(message);
+        errorCounts.delete(cb); // Reset on success
       } catch {
-        // Subscriber error — don't break other deliveries
+        const count = (errorCounts.get(cb) ?? 0) + 1;
+        if (count >= MAX_ERRORS) {
+          channelSubs.delete(cb); // Auto-unsubscribe after too many errors
+          errorCounts.delete(cb);
+        } else {
+          errorCounts.set(cb, count);
+        }
       }
     }
     return true;
@@ -62,7 +72,7 @@ export function createMessageBus(jsonlPath?: string): MessageBus {
 
   return {
     async publish(channel, input) {
-      if (closed) return;
+      if (closed) throw new Error("Cannot publish on closed bus");
 
       const message: BusMessage = {
         id: randomUUID(),
@@ -74,12 +84,21 @@ export function createMessageBus(jsonlPath?: string): MessageBus {
       };
 
       // Persist to JSONL before delivery (at-least-once guarantee)
+      // If persistence fails, deliver to subscribers anyway but re-throw
+      let persistError: Error | null = null;
       if (jsonlPath) {
-        await appendFile(jsonlPath, JSON.stringify(message) + "\n", "utf-8");
+        try {
+          await appendFile(jsonlPath, JSON.stringify(message) + "\n", "utf-8");
+        } catch (err) {
+          persistError = err instanceof Error ? err : new Error("Persistence failed");
+        }
       }
 
-      // Deliver to subscribers
+      // Always deliver to subscribers
       deliver(message);
+
+      // Re-throw persistence error so caller knows it wasn't persisted
+      if (persistError) throw persistError;
     },
 
     subscribe(channel, callback) {
@@ -103,18 +122,27 @@ export function createMessageBus(jsonlPath?: string): MessageBus {
 
     async replay(since) {
       if (closed) return 0;
-      if (!jsonlPath || !existsSync(jsonlPath)) return 0;
+      if (!jsonlPath) return 0;
 
-      const content = await readFile(jsonlPath, "utf-8");
+      // Use try/catch instead of existsSync to avoid TOCTOU race
+      let content: string;
+      try {
+        content = await readFile(jsonlPath, "utf-8");
+      } catch {
+        return 0; // File doesn't exist or unreadable
+      }
+
       const lines = content.trim().split("\n").filter(Boolean);
 
+      // Guard invalid since date — treat as replay-all
       const sinceMs = since ? new Date(since).getTime() : 0;
+      const safeSinceMs = isNaN(sinceMs) ? 0 : sinceMs;
       let count = 0;
 
       for (const line of lines) {
         try {
           const message = JSON.parse(line) as BusMessage;
-          if (new Date(message.timestamp).getTime() >= sinceMs) {
+          if (new Date(message.timestamp).getTime() >= safeSinceMs) {
             if (deliver(message)) count++;
           }
         } catch {

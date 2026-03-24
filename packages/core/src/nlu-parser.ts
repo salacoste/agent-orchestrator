@@ -85,6 +85,9 @@ const RULES: PatternRule[] = [
   },
 ];
 
+/** Max input length to prevent catastrophic regex backtracking. */
+const MAX_INPUT_LENGTH = 1000;
+
 /**
  * Parse a natural language command into ranked intents.
  *
@@ -99,12 +102,27 @@ export function parseCommand(input: string): NLUIntent[] {
     return [{ action: "fallback", params: {}, confidence: 0, description: "Empty command" }];
   }
 
+  // Guard against extremely long input (regex DoS)
+  if (trimmed.length > MAX_INPUT_LENGTH) {
+    return [
+      {
+        action: "fallback",
+        params: { input: trimmed.slice(0, 100) + "..." },
+        confidence: 0,
+        description: "Input too long",
+      },
+    ];
+  }
+
   const matches: NLUIntent[] = [];
 
   for (const rule of RULES) {
     const match = trimmed.match(rule.pattern);
     if (match) {
       const params = rule.extractParams(match);
+      // Skip intents with empty required params (e.g., "spawn for " → empty storyId)
+      const hasEmptyParam = Object.values(params).some((v) => v === "");
+      if (hasEmptyParam) continue;
       matches.push({
         action: rule.action,
         params,

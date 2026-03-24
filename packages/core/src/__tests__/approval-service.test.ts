@@ -104,6 +104,25 @@ describe("createApprovalService", () => {
 
     expect(req.timeoutMs).toBe(5000);
   });
+
+  it("prevents self-approval", () => {
+    const svc = createApprovalService();
+    const req = svc.requestApproval("spawn", "agent-1", "alice");
+
+    const result = svc.approve(req.id, "alice"); // same person
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain("own request");
+  });
+
+  it("allows different user to approve", () => {
+    const svc = createApprovalService();
+    const req = svc.requestApproval("spawn", "agent-1", "alice");
+
+    const result = svc.approve(req.id, "bob");
+
+    expect(result.success).toBe(true);
+  });
 });
 
 describe("approvalRequired config schema", () => {

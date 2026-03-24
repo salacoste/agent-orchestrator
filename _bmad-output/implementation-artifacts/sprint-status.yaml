@@ -568,11 +568,11 @@ previous_cycle:
 
   # Epic 46b: Team Features (Phase 2 — after 46a)
   # Auth, approvals, resource pool, isolation
-  epic-46b: in-progress
+  epic-46b: done
   46b-1-auth-config-based-user-identity: done
   46b-2-approval-workflows: done
   46b-3-resource-pool-shared-capacity: done
-  46b-4-agent-isolation-levels: backlog
+  46b-4-agent-isolation-levels: done
   epic-46b-retrospective: optional
 
   # Epic 47: Agent Autonomy v2 (Phase 2 — after 46a)

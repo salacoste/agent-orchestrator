@@ -1017,6 +1017,9 @@ export interface ProjectConfig {
   /** Rules for the orchestrator agent (stored, reserved for future use) */
   orchestratorRules?: string;
 
+  /** Agent isolation level (Story 46b.4). Default: "shared". */
+  isolation?: "shared" | "isolated" | "quarantined";
+
   /** BMAD directory paths (defaults: _bmad/ and _bmad-output/) */
   bmad?: {
     /** Path to _bmad/ config directory (relative to project path, default: "_bmad") */

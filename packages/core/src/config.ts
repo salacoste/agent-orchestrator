@@ -79,6 +79,7 @@ const ProjectConfigSchema = z.object({
   agentRules: z.string().optional(),
   agentRulesFile: z.string().optional(),
   orchestratorRules: z.string().optional(),
+  isolation: z.enum(["shared", "isolated", "quarantined"]).default("shared"),
 });
 
 const DefaultPluginsSchema = z.object({

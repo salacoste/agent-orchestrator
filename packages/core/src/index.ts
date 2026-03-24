@@ -209,6 +209,10 @@ export type { ApprovalService, ApprovalRequest, ApprovalResult } from "./approva
 // Resource Pool — shared capacity (Story 46b.3)
 export { createResourcePool } from "./resource-pool.js";
 export type { ResourcePool, ResourcePoolConfig, PoolState } from "./resource-pool.js";
+
+// Isolation Levels — agent sandboxing (Story 46b.4)
+export { resolveIsolation } from "./isolation-levels.js";
+export type { IsolationLevel, IsolationPolicy } from "./isolation-levels.js";
 export type {
   NotificationService,
   Notification,

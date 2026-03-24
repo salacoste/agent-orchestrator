@@ -580,7 +580,7 @@ previous_cycle:
   epic-47: in-progress
   47-1-agent-collaboration-negotiation: done
   47-2-agent-sandbox-permissions: done
-  47-3-nlu-orchestration: backlog
+  47-3-nlu-orchestration: done
   47-4-conflict-resolution-wizard: backlog
   47-5-agent-hot-swap: backlog
   47-6-pre-flight-check: backlog

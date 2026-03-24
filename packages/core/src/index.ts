@@ -218,6 +218,10 @@ export type { IsolationLevel, IsolationPolicy } from "./isolation-levels.js";
 export { checkAccess, globToRegex } from "./agent-sandbox.js";
 export type { SandboxConfig, AccessResult } from "./agent-sandbox.js";
 
+// NLU Parser — natural language commands (Story 47.3)
+export { parseCommand } from "./nlu-parser.js";
+export type { NLUIntent, NLUAction } from "./nlu-parser.js";
+
 // Agent Negotiation — conflict resolution protocol (Story 47.1)
 export {
   createNegotiationRequest,

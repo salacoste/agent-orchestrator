@@ -165,6 +165,12 @@ const OrchestratorConfigSchema = z.object({
     )
     .default([]),
   approvalRequired: z.array(z.enum(["spawn", "kill", "autopilot-advance"])).default([]),
+  resourcePool: z
+    .object({
+      total: z.number().int().positive(),
+      projects: z.record(z.number().int().positive()),
+    })
+    .optional(),
 });
 
 // =============================================================================

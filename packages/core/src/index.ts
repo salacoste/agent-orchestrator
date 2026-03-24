@@ -205,6 +205,10 @@ export type { ConfigUser, AuthRole } from "./user-identity.js";
 // Approval Service — human gates (Story 46b.2)
 export { createApprovalService } from "./approval-service.js";
 export type { ApprovalService, ApprovalRequest, ApprovalResult } from "./approval-service.js";
+
+// Resource Pool — shared capacity (Story 46b.3)
+export { createResourcePool } from "./resource-pool.js";
+export type { ResourcePool, ResourcePoolConfig, PoolState } from "./resource-pool.js";
 export type {
   NotificationService,
   Notification,

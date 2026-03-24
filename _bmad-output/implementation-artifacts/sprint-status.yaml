@@ -547,7 +547,7 @@ previous_cycle:
 
   # Epic 45: Intelligence & Replay
   # Story replay, time travel, post-mortem, ROI, standup, confidence, reasoning, sprint diff
-  epic-45: in-progress
+  epic-45: done
   45-1-story-replay-time-lapse: done
   45-2-time-travel-historical-state: done
   45-3-post-mortem-auto-generator: done
@@ -555,7 +555,7 @@ previous_cycle:
   45-5-meeting-summary-generator: done
   45-6-confidence-indicators: done
   45-7-reasoning-trail: done
-  45-8-sprint-diff-comparison: backlog
+  45-8-sprint-diff-comparison: done
   epic-45-retrospective: optional
 
   # Epic 46a: Infrastructure Foundation (Phase 1)

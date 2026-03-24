@@ -176,6 +176,10 @@ export type { FileConfidence, ConfidenceInput, ConfidenceLevel } from "./confide
 // Reasoning Extractor — agent decision logic trail (Story 45.7)
 export { extractReasoning } from "./reasoning-extractor.js";
 export type { ReasoningTrail, ReasoningDecision, ReasoningInput } from "./reasoning-extractor.js";
+
+// Sprint Diff — sprint-over-sprint comparison (Story 45.8)
+export { computeSprintDiff } from "./sprint-diff.js";
+export type { SprintDiff, MetricComparison, Direction } from "./sprint-diff.js";
 export type {
   NotificationService,
   Notification,

@@ -142,7 +142,8 @@ export function createMessageBus(jsonlPath?: string): MessageBus {
       for (const line of lines) {
         try {
           const message = JSON.parse(line) as BusMessage;
-          if (new Date(message.timestamp).getTime() >= safeSinceMs) {
+          const messageMs = new Date(message.timestamp).getTime();
+          if (!isNaN(messageMs) && messageMs >= safeSinceMs) {
             if (deliver(message)) count++;
           }
         } catch {

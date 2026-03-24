@@ -77,6 +77,11 @@ export function checkAccess(filePath: string, config?: AgentSandboxConfig): Acce
     return { allowed: true, reason: "No sandbox configured" };
   }
 
+  // Empty path = deny
+  if (!filePath) {
+    return { allowed: false, reason: "Empty file path" };
+  }
+
   // Normalize path to prevent traversal attacks
   const normalized = normalizePath(filePath);
 

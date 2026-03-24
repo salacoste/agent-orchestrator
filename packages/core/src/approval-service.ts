@@ -75,7 +75,7 @@ export function createApprovalService(): ApprovalService {
     const resolved = [...approvals.entries()].filter(([, a]) => a.status !== "pending");
     if (resolved.length > MAX_RESOLVED) {
       const toRemove = resolved
-        .sort((a, b) => a[1].requestedAt.localeCompare(b[1].requestedAt))
+        .sort((a, b) => (a[1].requestedAt ?? "").localeCompare(b[1].requestedAt ?? ""))
         .slice(0, resolved.length - MAX_RESOLVED);
       for (const [key] of toRemove) approvals.delete(key);
     }

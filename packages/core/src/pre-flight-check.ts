@@ -94,7 +94,9 @@ export function preFlightCheck(
 
   // Risk: recent failures — sort by capturedAt to get truly recent entries
   if (matching.length > 0) {
-    const sorted = [...matching].sort((a, b) => a.capturedAt.localeCompare(b.capturedAt));
+    const sorted = [...matching].sort((a, b) =>
+      (a.capturedAt ?? "").localeCompare(b.capturedAt ?? ""),
+    );
     const recent = sorted.slice(-10);
     const recentFailed = recent.filter(
       (l) => l.outcome === "failed" || l.outcome === "blocked",

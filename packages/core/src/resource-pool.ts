@@ -40,6 +40,13 @@ export function createResourcePool(config?: ResourcePoolConfig): ResourcePool {
   if (config && (!Number.isFinite(config.total) || config.total < 0)) {
     throw new Error(`Invalid resource pool total: ${config.total}`);
   }
+  if (config) {
+    for (const [pid, limit] of Object.entries(config.projects)) {
+      if (!Number.isFinite(limit) || limit < 0) {
+        throw new Error(`Invalid resource pool limit for project "${pid}": ${limit}`);
+      }
+    }
+  }
 
   const usage = new Map<string, number>();
 

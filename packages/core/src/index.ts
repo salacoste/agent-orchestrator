@@ -172,6 +172,10 @@ export type { StandupInput, StandupSummary } from "./standup-generator.js";
 // Confidence Calculator — per-file agent certainty (Story 45.6)
 export { calculateConfidence } from "./confidence-calculator.js";
 export type { FileConfidence, ConfidenceInput, ConfidenceLevel } from "./confidence-calculator.js";
+
+// Reasoning Extractor — agent decision logic trail (Story 45.7)
+export { extractReasoning } from "./reasoning-extractor.js";
+export type { ReasoningTrail, ReasoningDecision, ReasoningInput } from "./reasoning-extractor.js";
 export type {
   NotificationService,
   Notification,

@@ -135,7 +135,15 @@ export function parseCommand(input: string): NLUIntent[] {
   // Deduplicate by action (keep highest confidence)
   const byAction = new Map<string, NLUIntent>();
   for (const intent of matches) {
-    const key = `${intent.action}:${JSON.stringify(intent.params)}`;
+    const sortedParams = JSON.stringify(
+      Object.keys(intent.params)
+        .sort()
+        .reduce<Record<string, string>>((acc, k) => {
+          acc[k] = intent.params[k];
+          return acc;
+        }, {}),
+    );
+    const key = `${intent.action}:${sortedParams}`;
     const existing = byAction.get(key);
     if (!existing || intent.confidence > existing.confidence) {
       byAction.set(key, intent);

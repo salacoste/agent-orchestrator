@@ -157,6 +157,7 @@ export function createApprovalService(): ApprovalService {
     },
 
     isApprovalRequired(action, requiredActions) {
+      if (!Array.isArray(requiredActions)) return false;
       return requiredActions.includes(action);
     },
   };

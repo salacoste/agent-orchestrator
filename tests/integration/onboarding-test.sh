@@ -69,6 +69,8 @@ cat > agent-orchestrator.yaml << 'EOF'
 dataDir: /tmp/ao-test-data
 worktreeDir: /tmp/ao-test-worktrees
 port: 9000
+terminalPort: 14800
+directTerminalPort: 14801
 
 projects:
   test-project:

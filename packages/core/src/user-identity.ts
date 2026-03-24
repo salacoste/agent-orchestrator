@@ -6,13 +6,13 @@
  */
 
 /** User role enum. */
-export type UserRole = "admin" | "lead" | "dev" | "viewer";
+export type AuthRole = "admin" | "lead" | "dev" | "viewer";
 
 /** Configured user. */
 export interface ConfigUser {
   id: string;
   name: string;
-  role: UserRole;
+  role: AuthRole;
   email?: string;
 }
 
@@ -36,8 +36,8 @@ export function resolveUser(userId: string | null, users: ConfigUser[]): ConfigU
  * Validate a user role has sufficient permissions.
  * Role hierarchy: admin > lead > dev > viewer.
  */
-export function hasPermission(userRole: UserRole, requiredRole: UserRole): boolean {
-  const hierarchy: Record<UserRole, number> = {
+export function hasPermission(userRole: AuthRole, requiredRole: AuthRole): boolean {
+  const hierarchy: Record<AuthRole, number> = {
     viewer: 0,
     dev: 1,
     lead: 2,

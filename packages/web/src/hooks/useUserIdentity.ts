@@ -1,16 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import type { ConfigUser } from "@composio/ao-core";
 
 const STORAGE_KEY = "ao-user-id";
-
-/** Configured user from API. */
-interface ConfigUser {
-  id: string;
-  name: string;
-  role: string;
-  email?: string;
-}
 
 /** Anonymous default. */
 const ANONYMOUS: ConfigUser = { id: "anonymous", name: "Anonymous", role: "admin" };

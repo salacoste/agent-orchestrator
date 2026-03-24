@@ -42,14 +42,14 @@ const RULES: PatternRule[] = [
     confidence: 0.7,
   },
   {
-    pattern: /\b(?:kill|stop|terminate)\s+(.+)/i,
+    pattern: /\b(?:kill|stop|terminate)\s+(\S+)/i,
     action: "kill",
     extractParams: (m) => ({ agentId: m[1].trim() }),
     describe: (p) => `Kill agent ${p.agentId}`,
     confidence: 0.9,
   },
   {
-    pattern: /\b(?:resume|restart|continue)\s+(.+)/i,
+    pattern: /\b(?:resume|restart|continue)\s+(\S+)/i,
     action: "resume",
     extractParams: (m) => ({ agentId: m[1].trim() }),
     describe: (p) => `Resume agent ${p.agentId}`,

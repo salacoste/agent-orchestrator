@@ -46,10 +46,10 @@ export function createMessageBus(jsonlPath?: string): MessageBus {
   const subscribers = new Map<string, Set<MessageSubscriber>>();
   let closed = false;
 
-  /** Deliver a message to all subscribers of its channel. */
-  function deliver(message: BusMessage): void {
+  /** Deliver a message to all subscribers of its channel. Returns true if any received. */
+  function deliver(message: BusMessage): boolean {
     const channelSubs = subscribers.get(message.channel);
-    if (!channelSubs) return;
+    if (!channelSubs || channelSubs.size === 0) return false;
     for (const cb of [...channelSubs]) {
       try {
         cb(message);
@@ -57,6 +57,7 @@ export function createMessageBus(jsonlPath?: string): MessageBus {
         // Subscriber error — don't break other deliveries
       }
     }
+    return true;
   }
 
   return {
@@ -82,6 +83,8 @@ export function createMessageBus(jsonlPath?: string): MessageBus {
     },
 
     subscribe(channel, callback) {
+      if (closed) return () => {}; // No-op after close
+
       if (!subscribers.has(channel)) {
         subscribers.set(channel, new Set());
       }
@@ -98,6 +101,7 @@ export function createMessageBus(jsonlPath?: string): MessageBus {
     },
 
     async replay(since) {
+      if (closed) return 0;
       if (!jsonlPath || !existsSync(jsonlPath)) return 0;
 
       const content = await readFile(jsonlPath, "utf-8");
@@ -110,8 +114,7 @@ export function createMessageBus(jsonlPath?: string): MessageBus {
         try {
           const message = JSON.parse(line) as BusMessage;
           if (new Date(message.timestamp).getTime() >= sinceMs) {
-            deliver(message);
-            count++;
+            if (deliver(message)) count++;
           }
         } catch {
           // Skip malformed lines

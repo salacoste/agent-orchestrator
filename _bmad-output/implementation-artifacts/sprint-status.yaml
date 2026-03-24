@@ -577,8 +577,8 @@ previous_cycle:
 
   # Epic 47: Agent Autonomy v2 (Phase 2 — after 46a)
   # Agent negotiation, sandbox, NLU, conflict wizard, hot-swap, pre-flight
-  epic-47: backlog
-  47-1-agent-collaboration-negotiation: backlog
+  epic-47: in-progress
+  47-1-agent-collaboration-negotiation: done
   47-2-agent-sandbox-permissions: backlog
   47-3-nlu-orchestration: backlog
   47-4-conflict-resolution-wizard: backlog

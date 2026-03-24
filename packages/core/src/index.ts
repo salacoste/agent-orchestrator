@@ -213,6 +213,21 @@ export type { ResourcePool, ResourcePoolConfig, PoolState } from "./resource-poo
 // Isolation Levels — agent sandboxing (Story 46b.4)
 export { resolveIsolation } from "./isolation-levels.js";
 export type { IsolationLevel, IsolationPolicy } from "./isolation-levels.js";
+
+// Agent Negotiation — conflict resolution protocol (Story 47.1)
+export {
+  createNegotiationRequest,
+  evaluateNegotiation,
+  resolveOutcome,
+  DEFAULT_TIMEOUT_MS,
+  NEGOTIATION_CHANNEL,
+} from "./agent-negotiation.js";
+export type {
+  NegotiationRequest,
+  NegotiationResponse,
+  NegotiationRecord,
+  NegotiationOutcome,
+} from "./agent-negotiation.js";
 export type {
   NotificationService,
   Notification,

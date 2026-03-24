@@ -52,29 +52,6 @@ function createRng(seed: number): () => number {
 }
 
 /**
- * Sample a duration for a story from matching historical sessions.
- * Falls back to defaultDurationMs when no matches found.
- */
-function sampleDuration(
-  domainTags: string[],
-  learnings: SessionLearning[],
-  defaultMs: number,
-  rng: () => number,
-): { durationMs: number; hasMatch: boolean } {
-  const domainSet = new Set(domainTags);
-  const matching = learnings.filter(
-    (l) => l.outcome === "completed" && l.domainTags.some((tag) => domainSet.has(tag)),
-  );
-
-  if (matching.length === 0) {
-    return { durationMs: defaultMs, hasMatch: false };
-  }
-
-  const idx = Math.floor(rng() * matching.length);
-  return { durationMs: matching[idx].durationMs, hasMatch: true };
-}
-
-/**
  * Run a Monte Carlo sprint simulation.
  *
  * Pure function — no I/O, deterministic with seed.
@@ -102,23 +79,24 @@ export function simulateSprint(input: SimulationInput): SimulationResult {
 
   const rng = createRng(seed);
   const totals: number[] = [];
-  let storiesWithMatch = 0;
 
-  // Count stories with historical matches (for confidence)
-  for (const story of stories) {
+  // Pre-compute matching completed learnings per story (avoids re-filtering in hot loop)
+  const completedLearnings = learnings.filter((l) => l.outcome === "completed");
+  const storyMatches: SessionLearning[][] = stories.map((story) => {
     const domainSet = new Set(story.domainTags);
-    const hasMatch = learnings.some(
-      (l) => l.outcome === "completed" && l.domainTags.some((tag) => domainSet.has(tag)),
-    );
-    if (hasMatch) storiesWithMatch++;
-  }
+    return completedLearnings.filter((l) => l.domainTags.some((tag) => domainSet.has(tag)));
+  });
+  const storiesWithMatch = storyMatches.filter((m) => m.length > 0).length;
 
-  // Run iterations
+  // Run iterations — sample from pre-computed matches
   for (let i = 0; i < iterations; i++) {
     let totalMs = 0;
-    for (const story of stories) {
-      const { durationMs } = sampleDuration(story.domainTags, learnings, defaultDurationMs, rng);
-      totalMs += durationMs;
+    for (const matches of storyMatches) {
+      if (matches.length === 0) {
+        totalMs += defaultDurationMs;
+      } else {
+        totalMs += matches[Math.floor(rng() * matches.length)].durationMs;
+      }
     }
     totals.push(totalMs);
   }

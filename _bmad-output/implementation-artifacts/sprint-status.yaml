@@ -589,13 +589,13 @@ previous_cycle:
   # Epic 48: Frontier & Simulation
   # Monte Carlo simulator (impl) + 3 investigation spikes
   # Build order: 48.1 → 48.2 → 48.3, spikes independent
-  epic-48: in-progress
+  epic-48: done
   48-1-sprint-simulator-engine: done
   48-2-sprint-simulator-dashboard: done
   48-3-sprint-simulator-scenario-comparison: done
-  48-4-spike-3d-dependency-visualization: backlog
-  48-5-spike-voice-navigation: backlog
-  48-6-spike-swarm-intelligence: backlog
+  48-4-spike-3d-dependency-visualization: done
+  48-5-spike-voice-navigation: done
+  48-6-spike-swarm-intelligence: done
   epic-48-retrospective: optional
 
 # Known Limitations & Feature Flags

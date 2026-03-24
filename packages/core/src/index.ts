@@ -193,6 +193,10 @@ export {
   SNAPSHOT_VERSION,
 } from "./state-snapshot.js";
 export type { StateSnapshot, SnapshotValidation, SessionExport } from "./state-snapshot.js";
+
+// Message Bus — inter-agent pub/sub (Story 46a.3)
+export { createMessageBus } from "./message-bus.js";
+export type { MessageBus, BusMessage, MessageSubscriber } from "./message-bus.js";
 export type {
   NotificationService,
   Notification,

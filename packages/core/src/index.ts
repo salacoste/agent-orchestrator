@@ -222,6 +222,10 @@ export type { SandboxConfig, AccessResult } from "./agent-sandbox.js";
 export { parseCommand } from "./nlu-parser.js";
 export type { NLUIntent, NLUAction } from "./nlu-parser.js";
 
+// Agent Hot-Swap — replace running agent (Story 47.5)
+export { buildSwapPlan, buildHandoffPrompt } from "./agent-hot-swap.js";
+export type { SwapPlan, SwapContext } from "./agent-hot-swap.js";
+
 // Conflict Wizard — AI merge suggestion (Story 47.4)
 export { analyzeConflict, suggestMerge, getResolutionOptions } from "./conflict-wizard.js";
 export type { ConflictAnalysis, MergeSuggestion, ResolutionOption } from "./conflict-wizard.js";

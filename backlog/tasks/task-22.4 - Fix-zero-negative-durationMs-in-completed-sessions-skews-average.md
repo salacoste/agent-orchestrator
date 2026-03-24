@@ -1,9 +1,10 @@
 ---
 id: task-22.4
 title: 'Fix: zero/negative durationMs in completed sessions skews average'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:40'
+updated_date: '2026-03-24 12:02'
 labels:
   - edge-case
   - pre-flight

@@ -1,9 +1,10 @@
 ---
 id: task-19
 title: 'Edge Cases: conflict-wizard.ts (3 issues)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:39'
+updated_date: '2026-03-24 12:02'
 labels:
   - edge-case
   - core

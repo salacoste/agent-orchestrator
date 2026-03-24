@@ -1,9 +1,10 @@
 ---
 id: task-15
 title: 'Edge Cases: immutable-audit-log.ts (7 issues)'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:37'
+updated_date: '2026-03-24 11:50'
 labels:
   - edge-case
   - core

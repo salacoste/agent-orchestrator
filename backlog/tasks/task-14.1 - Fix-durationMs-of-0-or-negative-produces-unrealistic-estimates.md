@@ -1,9 +1,10 @@
 ---
 id: task-14.1
 title: 'Fix: durationMs of 0 or negative produces unrealistic estimates'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:36'
+updated_date: '2026-03-24 11:48'
 labels:
   - edge-case
   - sprint-simulator

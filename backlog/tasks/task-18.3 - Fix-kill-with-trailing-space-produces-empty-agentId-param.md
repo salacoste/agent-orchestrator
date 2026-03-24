@@ -1,9 +1,10 @@
 ---
 id: task-18.3
 title: 'Fix: "kill " with trailing space produces empty agentId param'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:39'
+updated_date: '2026-03-24 12:01'
 labels:
   - edge-case
   - nlu-parser

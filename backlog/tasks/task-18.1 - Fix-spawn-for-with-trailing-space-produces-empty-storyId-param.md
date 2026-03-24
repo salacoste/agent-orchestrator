@@ -1,9 +1,10 @@
 ---
 id: task-18.1
 title: 'Fix: "spawn for " with trailing space produces empty storyId param'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:38'
+updated_date: '2026-03-24 12:01'
 labels:
   - edge-case
   - nlu-parser

@@ -1,9 +1,10 @@
 ---
 id: task-17.1
 title: 'Fix: malformed glob produces invalid regex — new RegExp throws'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:38'
+updated_date: '2026-03-24 12:01'
 labels:
   - edge-case
   - sandbox

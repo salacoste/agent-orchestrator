@@ -1,9 +1,10 @@
 ---
 id: task-21.2
 title: 'Fix: config.total=0 silently blocks all spawns with no diagnostic'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:40'
+updated_date: '2026-03-24 12:02'
 labels:
   - edge-case
   - resource-pool

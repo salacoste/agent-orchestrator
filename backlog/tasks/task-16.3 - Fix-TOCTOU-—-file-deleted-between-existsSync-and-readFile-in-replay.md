@@ -1,9 +1,10 @@
 ---
 id: task-16.3
 title: 'Fix: TOCTOU — file deleted between existsSync and readFile in replay'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:37'
+updated_date: '2026-03-24 12:01'
 labels:
   - edge-case
   - message-bus

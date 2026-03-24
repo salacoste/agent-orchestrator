@@ -1,9 +1,10 @@
 ---
 id: task-16.2
 title: 'Fix: invalid since date in replay makes NaN filter return 0'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:37'
+updated_date: '2026-03-24 12:01'
 labels:
   - edge-case
   - message-bus

@@ -1,9 +1,10 @@
 ---
 id: task-15.6
 title: 'Fix: verify() skips malformed lines, reports broken chain at wrong index'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:37'
+updated_date: '2026-03-24 11:50'
 labels:
   - edge-case
   - audit-log

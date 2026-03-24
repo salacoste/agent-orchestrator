@@ -1,9 +1,10 @@
 ---
 id: task-19.3
 title: 'Fix: whitespace-only API key passes truthy check, returns stub'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:39'
+updated_date: '2026-03-24 12:02'
 labels:
   - edge-case
   - conflict-wizard

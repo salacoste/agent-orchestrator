@@ -1,9 +1,10 @@
 ---
 id: task-14.7
 title: 'Fix: empty domainTags on story always falls back to default duration silently'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:36'
+updated_date: '2026-03-24 11:49'
 labels:
   - edge-case
   - sprint-simulator

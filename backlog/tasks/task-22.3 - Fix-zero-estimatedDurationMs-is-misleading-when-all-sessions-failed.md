@@ -1,9 +1,10 @@
 ---
 id: task-22.3
 title: 'Fix: zero estimatedDurationMs is misleading when all sessions failed'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:40'
+updated_date: '2026-03-24 12:02'
 labels:
   - edge-case
   - pre-flight

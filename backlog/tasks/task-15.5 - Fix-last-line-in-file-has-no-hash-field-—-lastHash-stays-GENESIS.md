@@ -1,9 +1,10 @@
 ---
 id: task-15.5
 title: 'Fix: last line in file has no hash field — lastHash stays GENESIS'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:37'
+updated_date: '2026-03-24 11:50'
 labels:
   - edge-case
   - audit-log

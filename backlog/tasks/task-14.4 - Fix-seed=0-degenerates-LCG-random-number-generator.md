@@ -1,9 +1,10 @@
 ---
 id: task-14.4
 title: 'Fix: seed=0 degenerates LCG random number generator'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:36'
+updated_date: '2026-03-24 11:48'
 labels:
   - edge-case
   - sprint-simulator

@@ -1,9 +1,10 @@
 ---
 id: task-22.1
 title: 'Fix: unsorted learnings — slice(-10) gets arbitrary entries, not recent'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:40'
+updated_date: '2026-03-24 12:02'
 labels:
   - edge-case
   - pre-flight

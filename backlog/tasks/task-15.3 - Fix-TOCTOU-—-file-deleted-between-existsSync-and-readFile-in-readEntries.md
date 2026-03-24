@@ -1,9 +1,10 @@
 ---
 id: task-15.3
 title: 'Fix: TOCTOU — file deleted between existsSync and readFile in readEntries'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:37'
+updated_date: '2026-03-24 11:50'
 labels:
   - edge-case
   - audit-log

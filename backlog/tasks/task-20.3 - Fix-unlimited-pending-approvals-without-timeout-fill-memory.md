@@ -1,9 +1,10 @@
 ---
 id: task-20.3
 title: 'Fix: unlimited pending approvals without timeout fill memory'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:39'
+updated_date: '2026-03-24 12:02'
 labels:
   - edge-case
   - approval-service

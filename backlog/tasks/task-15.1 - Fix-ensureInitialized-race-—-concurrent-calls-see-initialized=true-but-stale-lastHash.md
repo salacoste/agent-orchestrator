@@ -3,9 +3,10 @@ id: task-15.1
 title: >-
   Fix: ensureInitialized race — concurrent calls see initialized=true but stale
   lastHash
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-03-24 11:37'
+updated_date: '2026-03-24 11:50'
 labels:
   - edge-case
   - audit-log

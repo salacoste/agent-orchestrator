@@ -2,7 +2,7 @@
  * Sprint simulator tests (Story 48.1).
  */
 import { describe, expect, it } from "vitest";
-import { simulateSprint, type SimulationInput } from "../sprint-simulator.js";
+import { simulateSprint, getSimulationColor, type SimulationInput } from "../sprint-simulator.js";
 import type { SessionLearning } from "../types.js";
 
 const HOUR = 60 * 60 * 1000;
@@ -160,5 +160,22 @@ describe("simulateSprint", () => {
     });
 
     expect(result.iterationsRun).toBe(0);
+  });
+});
+
+describe("getSimulationColor", () => {
+  it("returns green for >80%", () => {
+    expect(getSimulationColor(0.85)).toBe("green");
+    expect(getSimulationColor(1)).toBe("green");
+  });
+
+  it("returns amber for 50-80%", () => {
+    expect(getSimulationColor(0.5)).toBe("amber");
+    expect(getSimulationColor(0.8)).toBe("amber");
+  });
+
+  it("returns red for <50%", () => {
+    expect(getSimulationColor(0.49)).toBe("red");
+    expect(getSimulationColor(0)).toBe("red");
   });
 });

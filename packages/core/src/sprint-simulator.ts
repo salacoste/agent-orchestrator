@@ -33,6 +33,18 @@ export interface SimulationResult {
   iterationsRun: number;
 }
 
+/** Simulation color indicator. */
+export type SimulationColor = "green" | "amber" | "red";
+
+/**
+ * Map on-time probability to color: green >80%, amber 50-80%, red <50%.
+ */
+export function getSimulationColor(onTimeProbability: number): SimulationColor {
+  if (onTimeProbability > 0.8) return "green";
+  if (onTimeProbability >= 0.5) return "amber";
+  return "red";
+}
+
 /** Default story duration when no historical data (4 hours). */
 const DEFAULT_DURATION_MS = 4 * 60 * 60 * 1000;
 

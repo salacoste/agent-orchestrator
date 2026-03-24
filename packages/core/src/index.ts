@@ -222,6 +222,10 @@ export type { SandboxConfig, AccessResult } from "./agent-sandbox.js";
 export { parseCommand } from "./nlu-parser.js";
 export type { NLUIntent, NLUAction } from "./nlu-parser.js";
 
+// Conflict Wizard — AI merge suggestion (Story 47.4)
+export { analyzeConflict, suggestMerge, getResolutionOptions } from "./conflict-wizard.js";
+export type { ConflictAnalysis, MergeSuggestion, ResolutionOption } from "./conflict-wizard.js";
+
 // Agent Negotiation — conflict resolution protocol (Story 47.1)
 export {
   createNegotiationRequest,

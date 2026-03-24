@@ -562,7 +562,7 @@ previous_cycle:
   # Audit log, state snapshots, inter-agent messaging
   epic-46a: in-progress
   46a-1-immutable-audit-log: done
-  46a-2-state-snapshots-export-import: backlog
+  46a-2-state-snapshots-export-import: done
   46a-3-inter-agent-messaging-bus: backlog
   epic-46a-retrospective: optional
 

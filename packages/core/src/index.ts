@@ -184,6 +184,15 @@ export type { SprintDiff, MetricComparison, Direction } from "./sprint-diff.js";
 // Immutable Audit Log — tamper-proof trail (Story 46a.1)
 export { createImmutableAuditLog, verifyChain, computeEntryHash } from "./immutable-audit-log.js";
 export type { AuditLogEntry, ChainVerification, ImmutableAuditLog } from "./immutable-audit-log.js";
+
+// State Snapshot — export/import system state (Story 46a.2)
+export {
+  assembleSnapshot,
+  validateSnapshot,
+  mergeLearnings,
+  SNAPSHOT_VERSION,
+} from "./state-snapshot.js";
+export type { StateSnapshot, SnapshotValidation, SessionExport } from "./state-snapshot.js";
 export type {
   NotificationService,
   Notification,

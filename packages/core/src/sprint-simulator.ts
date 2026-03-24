@@ -123,7 +123,8 @@ export function simulateSprint(input: SimulationInput): SimulationResult {
 
   totals.sort((a, b) => a - b);
 
-  const pIdx = (pct: number) => Math.min(Math.floor(safeIterations * pct), safeIterations - 1);
+  const pIdx = (pct: number) =>
+    Math.max(0, Math.min(Math.floor(safeIterations * pct), safeIterations - 1));
   const p50Days = Math.round((totals[pIdx(0.5)] / MS_PER_DAY) * 10) / 10;
   const p80Days = Math.round((totals[pIdx(0.8)] / MS_PER_DAY) * 10) / 10;
   const p95Days = Math.round((totals[pIdx(0.95)] / MS_PER_DAY) * 10) / 10;

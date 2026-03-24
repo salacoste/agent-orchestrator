@@ -596,7 +596,7 @@ previous_cycle:
   48-4-spike-3d-dependency-visualization: done
   48-5-spike-voice-navigation: done
   48-6-spike-swarm-intelligence: done
-  epic-48-retrospective: optional
+  epic-48-retrospective: done
 
 # Known Limitations & Feature Flags
 limitations:

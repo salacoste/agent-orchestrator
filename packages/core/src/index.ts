@@ -230,6 +230,10 @@ export type { SwapPlan, SwapContext } from "./agent-hot-swap.js";
 export { preFlightCheck } from "./pre-flight-check.js";
 export type { PreFlightResult, RiskFactor } from "./pre-flight-check.js";
 
+// Scenario Comparator — simulation comparison (Story 48.3)
+export { compareScenarios } from "./scenario-comparator.js";
+export type { Scenario, RankedScenario, ScenarioComparison } from "./scenario-comparator.js";
+
 // Sprint Simulator — Monte Carlo engine (Stories 48.1, 48.2)
 export { simulateSprint, getSimulationColor } from "./sprint-simulator.js";
 export type {

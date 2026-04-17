@@ -27,11 +27,19 @@ export interface TieredNotification {
 /** Tier classification rules. */
 const TIER_RULES: Array<{ pattern: RegExp; tier: NotificationTier }> = [
   // Tier 1 (Red): Critical — needs immediate attention
-  { pattern: /agent\.blocked|conflict\.detected|decision\.required/, tier: 1 },
+  {
+    pattern:
+      /agent\.blocked|conflict\.detected|decision\.required|risk\.score\.critical|utilization\.over|optimization\.critical/,
+    tier: 1,
+  },
   // Tier 2 (Amber): Action needed — but not urgent
-  { pattern: /pr\.ready|scope\.creep|review\.needed/, tier: 2 },
+  {
+    pattern:
+      /pr\.ready|scope\.creep|review\.needed|risk\.emerging-detected|risk\.score\.warning|utilization\.under|utilization\.trend\.declining|utilization\.declining-trend|optimization\.available|optimization\.scenario|optimization\.underutilized/,
+    tier: 2,
+  },
   // Tier 3 (Green): Informational — milestone updates
-  { pattern: /story\.completed|sprint\.milestone|agent\.completed/, tier: 3 },
+  { pattern: /story\.completed|sprint\.milestone|agent\.completed|utilization\.snapshot/, tier: 3 },
 ];
 
 /**

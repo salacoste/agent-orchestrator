@@ -142,6 +142,12 @@ export type {
   HistogramBucket,
   MonteCarloResult,
 } from "./monte-carlo.js";
+export { appendForecastLog, readForecastLog, markForecastActual } from "./forecast-log.js";
+export type { ForecastSnapshot } from "./forecast-log.js";
+export { computeCalibration } from "./forecast-calibration.js";
+export type { CalibrationResult } from "./forecast-calibration.js";
+export { computeForecastDiff } from "./forecast-diff.js";
+export type { ForecastDiff } from "./forecast-diff.js";
 export { generateStandup } from "./standup.js";
 export type { StandupReport } from "./standup.js";
 export { computeSprintGoals } from "./sprint-goals.js";

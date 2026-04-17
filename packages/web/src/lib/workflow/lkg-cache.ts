@@ -21,10 +21,12 @@ class WorkflowLkgCache {
 
   /** Set cached value for a specific field. */
   set(projectId: string, field: CacheField, value: unknown): void {
-    if (!this.cache.has(projectId)) {
-      this.cache.set(projectId, new Map());
+    let fields = this.cache.get(projectId);
+    if (!fields) {
+      fields = new Map();
+      this.cache.set(projectId, fields);
     }
-    this.cache.get(projectId)!.set(field, value);
+    fields.set(field, value);
   }
 
   /** Update all fields from a successful WorkflowResponse. */

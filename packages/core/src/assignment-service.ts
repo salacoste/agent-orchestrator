@@ -16,7 +16,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "yaml";
-import type { AgentRegistry } from "./types.js";
+import type { AgentRegistry, UrgencyLevel, ModelTier } from "./types.js";
+import { classifyStoryComplexity } from "./model-routing.js";
 
 /**
  * A story candidate eligible for assignment.
@@ -30,6 +31,10 @@ export interface StoryCandidate {
   epicId: string;
   /** Ordinal position in development_status for FIFO tiebreaking (0-based) */
   position: number;
+  /** Story urgency for allocation prioritization. Default: "normal". */
+  urgency?: UrgencyLevel;
+  /** Suggested model tier based on story complexity heuristics (Story 58.4) */
+  suggestedTier?: ModelTier;
 }
 
 /**
@@ -178,12 +183,14 @@ export function getAssignableStories(
     }
 
     const priority = sprintData.priorities?.[key] ?? 0;
+    const suggestedTier: ModelTier | undefined = classifyStoryComplexity(key) ?? undefined;
 
     candidates.push({
       storyId: key,
       priority,
       epicId: extractEpicId(key),
       position: currentPosition,
+      suggestedTier,
     });
   }
 

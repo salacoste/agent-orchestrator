@@ -22,6 +22,58 @@ describe("classifyNotificationTier", () => {
   it("defaults unknown events to tier 3", () => {
     expect(classifyNotificationTier("unknown.event")).toBe(3);
   });
+
+  it("classifies risk.score.critical as tier 1", () => {
+    expect(classifyNotificationTier("risk.score.critical")).toBe(1);
+  });
+
+  it("classifies risk.emerging-detected as tier 2", () => {
+    expect(classifyNotificationTier("risk.emerging-detected")).toBe(2);
+  });
+
+  it("classifies risk.score.warning as tier 2", () => {
+    expect(classifyNotificationTier("risk.score.warning")).toBe(2);
+  });
+
+  // Utilization event tier tests (Story 56.6 Task 9)
+  it("classifies utilization.over as tier 1", () => {
+    expect(classifyNotificationTier("utilization.over")).toBe(1);
+  });
+
+  it("classifies utilization.over-capacity as tier 1 (matches utilization.over pattern)", () => {
+    expect(classifyNotificationTier("utilization.over-capacity")).toBe(1);
+  });
+
+  it("classifies utilization.under as tier 2", () => {
+    expect(classifyNotificationTier("utilization.under")).toBe(2);
+  });
+
+  it("classifies utilization.trend.declining as tier 2", () => {
+    expect(classifyNotificationTier("utilization.trend.declining")).toBe(2);
+  });
+
+  it("classifies utilization.snapshot as tier 3", () => {
+    expect(classifyNotificationTier("utilization.snapshot")).toBe(3);
+  });
+
+  // Optimization event tier tests (Story 56.7)
+  it("classifies optimization.critical as tier 1", () => {
+    expect(classifyNotificationTier("optimization.critical")).toBe(1);
+  });
+
+  it("classifies optimization.available as tier 2", () => {
+    expect(classifyNotificationTier("optimization.available")).toBe(2);
+  });
+
+  // Optimization scenario event tier test (Story 56.8)
+  it("classifies optimization.scenario as tier 2", () => {
+    expect(classifyNotificationTier("optimization.scenario")).toBe(2);
+  });
+
+  // Optimization underutilized event tier test (Story 56.9)
+  it("classifies optimization.underutilized as tier 2", () => {
+    expect(classifyNotificationTier("optimization.underutilized")).toBe(2);
+  });
 });
 
 describe("getTierStyle", () => {

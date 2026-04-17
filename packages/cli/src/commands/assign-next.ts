@@ -10,6 +10,7 @@ import {
   getAssignableStories,
   computeStoryContextHash,
   getEventPublisher,
+  getAssignableAgents as getPoolAssignableAgents,
   type AgentStatus,
   type StoryCandidate,
 } from "@composio/ao-core";
@@ -143,6 +144,25 @@ export function registerAssignNext(program: Command): void {
 
       agentSpinner.succeed(`Agent ${chalk.green(agentId)} found`);
 
+      // Pool eligibility check: if agent is from another project, verify it can work here
+      const agentProjectId = session.projectId;
+      const isPoolAgent = agentProjectId !== projectId;
+      if (isPoolAgent) {
+        const poolSpinner = ora("Checking pool eligibility").start();
+        const assignable = await getPoolAssignableAgents(projectId, config, sm, registry);
+        const poolEntry = assignable.find((a) => a.agentId === agentId);
+        if (!poolEntry) {
+          poolSpinner.fail(
+            `Agent '${agentId}' (from project '${agentProjectId}') is not eligible for project '${projectId}'`,
+          );
+          console.log(chalk.dim("Check sharedPool config or agent reservation status."));
+          process.exit(1);
+        }
+        poolSpinner.succeed(
+          `Pool agent from ${chalk.cyan(agentProjectId)} eligible for project ${chalk.green(projectId)}`,
+        );
+      }
+
       // Check for existing assignment on this agent
       const existingAssignment = registry.getByAgent(agentId);
       if (existingAssignment) {
@@ -188,6 +208,11 @@ export function registerAssignNext(program: Command): void {
       console.log(`  ${chalk.dim("Epic:")}     ${candidate.epicId}`);
       console.log(`  ${chalk.dim("Priority:")} ${candidate.priority}`);
       console.log(`  ${chalk.dim("Agent:")}    ${chalk.green(agentId)}`);
+      if (isPoolAgent) {
+        console.log(
+          `  ${chalk.dim("Origin:")}   ${chalk.cyan(`Pool agent from ${agentProjectId}`)}`,
+        );
+      }
       console.log();
 
       if (!opts.force) {

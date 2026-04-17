@@ -38,15 +38,13 @@ export function LogStream({ agentId, pollIntervalMs = 2000, baseUrl = "" }: LogS
         if (!res.ok) return;
         const data = (await res.json()) as { logs?: string[] };
         if (Array.isArray(data.logs)) {
+          const logs = data.logs;
           // Only update state if content changed (avoid unnecessary re-renders on poll)
           setLines((prev) => {
-            if (
-              prev.length === data.logs!.length &&
-              prev[prev.length - 1] === data.logs![data.logs!.length - 1]
-            ) {
+            if (prev.length === logs.length && prev[prev.length - 1] === logs[logs.length - 1]) {
               return prev; // Same content — skip re-render
             }
-            return data.logs!;
+            return logs;
           });
         }
       } catch {

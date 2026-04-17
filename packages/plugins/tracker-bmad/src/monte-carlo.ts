@@ -1,6 +1,6 @@
 /**
  * Monte Carlo forecast — simulates completion dates using historical
- * throughput distribution, providing probabilistic P50/P85/P95 estimates.
+ * throughput distribution, providing probabilistic P50/P80/P95 estimates.
  */
 
 import type { ProjectConfig } from "@composio/ao-core";
@@ -17,11 +17,13 @@ export interface MonteCarloConfig {
   simulations?: number; // default 10000
   excludeWeekends?: boolean; // default true
   randomFn?: () => number; // for deterministic testing
+  /** Only sample from the last N days of throughput data. Default: all available. */
+  throughputWindowDays?: number;
 }
 
 export interface PercentileResult {
   p50: string;
-  p85: string;
+  p80: string;
   p95: string;
 }
 
@@ -40,6 +42,7 @@ export interface MonteCarloResult {
   averageDailyRate: number;
   linearCompletionDate: string | null;
   linearConfidence: number; // % simulations within linear date
+  insufficientData: boolean; // true when no throughput data available
 }
 
 // ---------------------------------------------------------------------------
@@ -47,7 +50,7 @@ export interface MonteCarloResult {
 // ---------------------------------------------------------------------------
 
 const EMPTY_RESULT: MonteCarloResult = {
-  percentiles: { p50: "", p85: "", p95: "" },
+  percentiles: { p50: "", p80: "", p95: "" },
   histogram: [],
   remainingStories: 0,
   simulationCount: 0,
@@ -55,6 +58,7 @@ const EMPTY_RESULT: MonteCarloResult = {
   averageDailyRate: 0,
   linearCompletionDate: null,
   linearConfidence: 0,
+  insufficientData: true,
 };
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -89,6 +93,7 @@ export function computeMonteCarloForecast(
   const simulations = config?.simulations ?? 10000;
   const excludeWeekends = config?.excludeWeekends ?? true;
   const randomFn = config?.randomFn ?? Math.random;
+  const throughputWindowDays = config?.throughputWindowDays;
 
   // Read sprint status to count remaining stories
   let sprint;
@@ -120,7 +125,7 @@ export function computeMonteCarloForecast(
   if (remainingStories === 0 && totalStories > 0) {
     const today = toDateStr(new Date());
     return {
-      percentiles: { p50: today, p85: today, p95: today },
+      percentiles: { p50: today, p80: today, p95: today },
       histogram: [{ date: today, probability: 1.0, cumulative: 1.0 }],
       remainingStories: 0,
       simulationCount: simulations,
@@ -128,6 +133,7 @@ export function computeMonteCarloForecast(
       averageDailyRate: 0,
       linearCompletionDate: today,
       linearConfidence: 1,
+      insufficientData: false,
     };
   }
 
@@ -177,6 +183,15 @@ export function computeMonteCarloForecast(
     return { ...EMPTY_RESULT, remainingStories };
   }
 
+  // Apply throughput window: only sample from the last N days of data
+  if (
+    throughputWindowDays &&
+    throughputWindowDays > 0 &&
+    throughput.length > throughputWindowDays
+  ) {
+    throughput.splice(0, throughput.length - throughputWindowDays);
+  }
+
   // Compute average daily rate
   const totalThroughput = throughput.reduce((sum, v) => sum + v, 0);
   const averageDailyRate = totalThroughput / throughput.length;
@@ -216,13 +231,13 @@ export function computeMonteCarloForecast(
 
   // Extract percentiles
   const p50Idx = Math.floor(simulations * 0.5);
-  const p85Idx = Math.floor(simulations * 0.85);
+  const p80Idx = Math.floor(simulations * 0.8);
   const p95Idx = Math.floor(simulations * 0.95);
 
   const fallbackDate = new Date();
   const percentiles: PercentileResult = {
     p50: toDateStr(completionDates[p50Idx] ?? fallbackDate),
-    p85: toDateStr(completionDates[p85Idx] ?? fallbackDate),
+    p80: toDateStr(completionDates[p80Idx] ?? fallbackDate),
     p95: toDateStr(completionDates[p95Idx] ?? fallbackDate),
   };
 
@@ -271,5 +286,6 @@ export function computeMonteCarloForecast(
     averageDailyRate,
     linearCompletionDate,
     linearConfidence,
+    insufficientData: false,
   };
 }

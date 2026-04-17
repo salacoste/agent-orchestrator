@@ -31,9 +31,10 @@ interface ForecastData {
 }
 
 interface MonteCarloData {
-  percentiles: { p50: string; p85: string; p95: string };
+  percentiles: { p50: string; p80: string; p95: string };
   remainingStories: number;
   linearCompletionDate: string | null;
+  insufficientData: boolean;
 }
 
 interface BurndownPoint {
@@ -391,7 +392,7 @@ export function BurndownChart({
     }
   }
 
-  // Monte Carlo P50/P85/P95 vertical marker lines
+  // Monte Carlo P50/P80/P95 vertical marker lines
   const mcMarkers: Array<{ x: number; label: string; color: string; opacity: number }> = [];
   if (showOverlays && mcData && chartPoints.length > 0 && days > 1) {
     const firstDate = new Date(dailyCompletions[0].date);
@@ -412,7 +413,7 @@ export function BurndownChart({
     };
 
     addMarker(mcData.percentiles.p50, "P50", "#f97316", 0.8);
-    addMarker(mcData.percentiles.p85, "P85", "#f97316", 0.5);
+    addMarker(mcData.percentiles.p80, "P80", "#f97316", 0.5);
     addMarker(mcData.percentiles.p95, "P95", "#f97316", 0.3);
   }
 

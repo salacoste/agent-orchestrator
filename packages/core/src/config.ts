@@ -58,6 +58,74 @@ const AgentSpecificConfigSchema = z
   })
   .passthrough();
 
+const SharedPoolConfigSchema = z.object({
+  enabled: z.boolean(),
+  eligibleProjects: z.array(z.string()),
+  maxConcurrent: z.number().int().positive().optional(),
+  reservedAgents: z.array(z.string()).optional(),
+  priority: z.number().int().min(0).optional(),
+  allocationWeights: z
+    .object({
+      urgency: z.number().min(0).max(1).optional(),
+      priority: z.number().min(0).max(1).optional(),
+      affinity: z.number().min(0).max(1).optional(),
+      workload: z.number().min(0).max(1).optional(),
+    })
+    .optional(),
+});
+
+const ConflictResolutionPolicySchema = z.object({
+  resolutionMode: z.enum(["priority-based", "manual", "isolation"]),
+  priorityOrder: z.array(z.string()).optional(),
+  isolationConfig: z
+    .object({
+      strategy: z.string(),
+    })
+    .optional(),
+});
+
+const ProviderHealthConfigSchema = z.object({
+  healthCheckIntervalMs: z.number().int().positive().default(30000),
+  failureThreshold: z.number().int().positive().default(3),
+  openDurationMs: z.number().int().positive().default(60000),
+});
+
+const HookProfileSchema = z.object({
+  phases: z.array(z.enum(["preCompact", "postCompact"])).optional(),
+  enabledHooks: z.array(z.string()).optional(),
+  metadata: z.record(z.string()).optional(),
+});
+
+export const AgentMappingSchema = z.object({
+  agents: z.array(z.string()).min(1),
+  executionMode: z.enum(["standard", "persistent", "lightweight"]).optional(),
+});
+
+const SessionEnhancementConfigSchema = z.object({
+  provider: z.string().default("raw"),
+  config: z.record(z.unknown()).optional(),
+  modelTiers: z
+    .object({
+      low: z.string().min(1),
+      medium: z.string().min(1),
+      high: z.string().min(1),
+    })
+    .optional(),
+  health: ProviderHealthConfigSchema.optional(),
+  hookProfile: HookProfileSchema.optional(),
+  agentMappings: z.record(AgentMappingSchema).optional(),
+});
+
+const ConflictResolutionConfigSchema = z.object({
+  default: z.enum(["priority-based", "manual", "isolation"]).optional(),
+  policies: z
+    .record(
+      z.enum(["repository", "file-path", "agent", "external-service"]),
+      ConflictResolutionPolicySchema,
+    )
+    .optional(),
+});
+
 const ProjectConfigSchema = z.object({
   name: z.string().optional(),
   repo: z.string(),
@@ -80,6 +148,9 @@ const ProjectConfigSchema = z.object({
   agentRulesFile: z.string().optional(),
   orchestratorRules: z.string().optional(),
   isolation: z.enum(["shared", "isolated", "quarantined"]).default("shared"),
+  sharedPool: SharedPoolConfigSchema.optional(),
+  conflictResolution: ConflictResolutionConfigSchema.optional(),
+  sessionEnhancement: SessionEnhancementConfigSchema.optional(),
 });
 
 const DefaultPluginsSchema = z.object({
@@ -172,6 +243,12 @@ const OrchestratorConfigSchema = z.object({
       projects: z.record(z.number().int().positive()),
     })
     .optional(),
+  conflictResolution: z
+    .object({
+      default: z.enum(["priority-based", "manual", "isolation"]).optional(),
+    })
+    .optional(),
+  sessionEnhancement: SessionEnhancementConfigSchema.optional(),
 });
 
 // =============================================================================

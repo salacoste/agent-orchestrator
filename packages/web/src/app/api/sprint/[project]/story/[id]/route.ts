@@ -10,6 +10,13 @@ import {
   validateDependencies,
   type StoryDetail,
 } from "@composio/ao-plugin-tracker-bmad";
+import {
+  createCrossProjectDepStore,
+  resolveAllDependencyStatuses,
+  autoUnblockCrossProjectDeps,
+  type DependencyWithStatus,
+} from "@composio/ao-core";
+import { buildSprintDataMap, flattenEntry } from "@/lib/sprint-data-map";
 
 const EMPTY_DETAIL: StoryDetail = {
   storyId: "",
@@ -41,7 +48,21 @@ export async function GET(
     }
 
     const detail = getStoryDetail(id, project);
-    return NextResponse.json(detail);
+
+    // Include cross-project dependencies with live status enrichment (non-fatal)
+    let crossProjectDeps: DependencyWithStatus[] = [];
+    try {
+      const store = createCrossProjectDepStore(config.configPath);
+      const rawDeps = store.getForStory(projectId, id);
+      if (rawDeps.length > 0) {
+        const sprintDataMap = await buildSprintDataMap(config);
+        crossProjectDeps = resolveAllDependencyStatuses(rawDeps, sprintDataMap);
+      }
+    } catch {
+      // Non-fatal — cross-project deps file may not exist
+    }
+
+    return NextResponse.json({ ...detail, crossProjectDeps });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unknown error" },
@@ -115,6 +136,64 @@ export async function PATCH(
     writeStoryStatus(project, storyId, newStatus);
     appendHistory(project, storyId, oldStatus, newStatus);
 
+    // Auto-unblock cross-project dependents when story is marked done (best-effort, non-blocking)
+    const unblockedStories: Array<{
+      projectId: string;
+      storyId: string;
+      previousStatus: string;
+      newStatus: string;
+    }> = [];
+
+    if (newStatus === "done") {
+      try {
+        const store = createCrossProjectDepStore(config.configPath);
+        const allDeps = store.list();
+        if (allDeps.length > 0) {
+          const sprintDataMap = await buildSprintDataMap(config);
+          const candidates = autoUnblockCrossProjectDeps(
+            projectId,
+            storyId,
+            allDeps,
+            sprintDataMap,
+          );
+
+          for (const candidate of candidates) {
+            try {
+              const sourceProject = config.projects[candidate.projectId];
+              if (!sourceProject?.tracker || sourceProject.tracker.plugin !== "bmad") continue;
+
+              // Check the source story's current status before unblocking
+              const sourceSprint = readSprintStatus(sourceProject);
+              const sourceEntry = sourceSprint.development_status[candidate.storyId];
+              const sourceStatus = flattenEntry(sourceEntry);
+
+              // Only unblock if currently "blocked" — skip stories in other states
+              if (sourceStatus !== "blocked") continue;
+
+              writeStoryStatus(sourceProject, candidate.storyId, "ready-for-dev");
+              appendHistory(sourceProject, candidate.storyId, "blocked", "ready-for-dev");
+              unblockedStories.push({
+                projectId: candidate.projectId,
+                storyId: candidate.storyId,
+                previousStatus: "blocked",
+                newStatus: "ready-for-dev",
+              });
+            } catch (unblockErr) {
+              console.warn(
+                `[auto-unblock] Failed to unblock ${candidate.projectId}/${candidate.storyId}:`,
+                unblockErr instanceof Error ? unblockErr.message : unblockErr,
+              );
+            }
+          }
+        }
+      } catch (crossDepErr) {
+        console.warn(
+          "[auto-unblock] Cross-project dep check failed (non-fatal):",
+          crossDepErr instanceof Error ? crossDepErr.message : crossDepErr,
+        );
+      }
+    }
+
     // Dependency warnings (informational, non-blocking)
     const warnings: string[] = [];
     try {
@@ -128,7 +207,13 @@ export async function PATCH(
       // Non-fatal
     }
 
-    return NextResponse.json({ storyId, status: newStatus, changed: true, warnings });
+    return NextResponse.json({
+      storyId,
+      status: newStatus,
+      changed: true,
+      warnings,
+      unblockedStories,
+    });
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Unknown error" },

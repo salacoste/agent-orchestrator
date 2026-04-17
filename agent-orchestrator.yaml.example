@@ -145,6 +145,29 @@ projects:
 #     plugin: slack
 #     webhook: ${SLACK_WEBHOOK_URL}
 #     channel: "#agent-updates"
+#   telegram:
+#     plugin: telegram
+#     botToken: ${TELEGRAM_BOT_TOKEN}
+#     defaultChatId: ${TELEGRAM_CHAT_ID}
+#     allowedChatIds: [123456789]       # empty = open mode
+#     mode: polling                     # polling | webhook
+#     webhookUrl: ""                    # required if mode=webhook
+#     webhookSecret: ""                 # recommended for webhook mode
+#     preferences:                      # Telegram-specific notification filtering
+#       severityFilter: critical-and-warning   # critical-only | critical-and-warning | all
+#       quietHours:
+#         enabled: false
+#         start: "22:00"                       # HH:MM in the timezone below
+#         end: "07:00"
+#         timezone: "America/New_York"         # IANA timezone
+#       eventTypes:
+#         agent.blocked: true                   # explicitly enabled
+#         agent.offline: false                  # suppressed
+#         dependency.blocking: false            # suppressed
+#     projectChatMapping:                     # route per-project to different channels
+#       my-app: "-1001234567890"               # my-app team channel
+#       api-service: "-1009876543210"          # api-service team channel
+#       # unmapped projects → defaultChatId
 
 # Notification routing by priority
 # notificationRouting:

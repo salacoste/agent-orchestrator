@@ -71,7 +71,7 @@ describe("computeMonteCarloForecast", () => {
     const result = computeMonteCarloForecast(PROJECT);
     const today = new Date().toISOString().slice(0, 10);
     expect(result.percentiles.p50).toBe(today);
-    expect(result.percentiles.p85).toBe(today);
+    expect(result.percentiles.p80).toBe(today);
     expect(result.percentiles.p95).toBe(today);
     expect(result.remainingStories).toBe(0);
     expect(result.histogram.length).toBe(1);
@@ -143,13 +143,13 @@ describe("computeMonteCarloForecast", () => {
     expect(result.simulationCount).toBe(100);
     expect(result.sampleSize).toBeGreaterThan(0);
     expect(result.percentiles.p50).toBeTruthy();
-    expect(result.percentiles.p85).toBeTruthy();
+    expect(result.percentiles.p80).toBeTruthy();
     expect(result.percentiles.p95).toBeTruthy();
 
     // With randomFn=0.5, all simulations should pick the same throughput
     // so all percentiles should be the same date
-    expect(result.percentiles.p50).toBe(result.percentiles.p85);
-    expect(result.percentiles.p85).toBe(result.percentiles.p95);
+    expect(result.percentiles.p50).toBe(result.percentiles.p80);
+    expect(result.percentiles.p80).toBe(result.percentiles.p95);
   });
 
   it("excludes weekends when configured", () => {
@@ -268,6 +268,14 @@ describe("computeMonteCarloForecast", () => {
     expect(result.simulationCount).toBe(10);
     // All percentiles should be defined
     expect(result.percentiles.p50).toBeTruthy();
+    // Verify the 365-day cap: all percentile dates are within 365 days of today
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const maxDate = new Date(today.getTime() + 365 * 24 * 60 * 60 * 1000);
+    const maxDateStr = maxDate.toISOString().slice(0, 10);
+    expect(result.percentiles.p50 <= maxDateStr).toBe(true);
+    expect(result.percentiles.p80 <= maxDateStr).toBe(true);
+    expect(result.percentiles.p95 <= maxDateStr).toBe(true);
   });
 
   it("histogram probabilities sum approximately to 1.0", () => {
@@ -367,5 +375,292 @@ describe("computeMonteCarloForecast", () => {
 
     // Mon-Wed are weekdays, so sampleSize should still be 3
     expect(resultNoWeekends.sampleSize).toBe(3);
+  });
+
+  it("completes 10,000 iterations within 5 seconds (NFR-E2-1)", () => {
+    // Build realistic throughput: 30 days of history with fixed varying completions
+    const historyLines: string[] = [];
+    const dailyCounts = [
+      2, 1, 3, 1, 2, 0, 1, 3, 2, 1, 1, 2, 3, 0, 1, 2, 1, 3, 2, 1, 0, 2, 1, 3, 2, 1, 1, 2, 3, 1,
+    ];
+    let doneIdx = 0;
+    for (let i = 0; i < dailyCounts.length; i++) {
+      const day = i + 1;
+      for (let j = 0; j < dailyCounts[i]!; j++) {
+        historyLines.push(
+          JSON.stringify({
+            timestamp: `2026-03-${String(day).padStart(2, "0")}T10:00:00.000Z`,
+            storyId: `done-${doneIdx++}`,
+            fromStatus: "in-progress",
+            toStatus: "done",
+          }),
+        );
+      }
+    }
+
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        ...Array.from({ length: 50 }, (_, i) => `  s${i + 1}:\n    status: backlog`),
+        ...Array.from({ length: doneIdx }, (_, i) => `  done-${i}:\n    status: done`),
+      ].join("\n"),
+      historyLines,
+    });
+
+    const start = performance.now();
+    const result = computeMonteCarloForecast(PROJECT, undefined, {
+      simulations: 10_000,
+      excludeWeekends: false,
+    });
+    const elapsed = performance.now() - start;
+
+    expect(result.simulationCount).toBe(10_000);
+    expect(elapsed).toBeLessThan(5000);
+  });
+
+  it("returns insufficientData=true when no throughput data", () => {
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: backlog",
+        "  s2:",
+        "    status: in-progress",
+      ].join("\n"),
+      historyLines: [],
+    });
+
+    const result = computeMonteCarloForecast(PROJECT);
+    expect(result.insufficientData).toBe(true);
+    expect(result.remainingStories).toBe(2);
+  });
+
+  it("returns insufficientData=false when throughput data exists", () => {
+    const historyLines: string[] = [
+      JSON.stringify({
+        timestamp: "2026-03-02T10:00:00.000Z",
+        storyId: "done1",
+        fromStatus: "in-progress",
+        toStatus: "done",
+      }),
+    ];
+
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: backlog",
+        "  done1:",
+        "    status: done",
+      ].join("\n"),
+      historyLines,
+    });
+
+    const result = computeMonteCarloForecast(PROJECT, undefined, {
+      simulations: 10,
+      randomFn: () => 0.5,
+      excludeWeekends: false,
+    });
+    expect(result.insufficientData).toBe(false);
+  });
+
+  it("cumulative probabilities are monotonically increasing", () => {
+    const historyLines: string[] = [];
+    for (let i = 1; i <= 5; i++) {
+      historyLines.push(
+        JSON.stringify({
+          timestamp: `2026-03-0${i}T10:00:00.000Z`,
+          storyId: `done${i}`,
+          fromStatus: "in-progress",
+          toStatus: "done",
+        }),
+      );
+    }
+
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: backlog",
+        "  s2:",
+        "    status: in-progress",
+        "  s3:",
+        "    status: review",
+        ...Array.from({ length: 5 }, (_, i) => `  done${i + 1}:\n    status: done`),
+      ].join("\n"),
+      historyLines,
+    });
+
+    const result = computeMonteCarloForecast(PROJECT, undefined, {
+      simulations: 500,
+      excludeWeekends: false,
+    });
+
+    for (let i = 1; i < result.histogram.length; i++) {
+      expect(result.histogram[i]!.cumulative).toBeGreaterThanOrEqual(
+        result.histogram[i - 1]!.cumulative - 0.001,
+      );
+    }
+  });
+
+  it("excludes weekends correctly starting from different days", () => {
+    // 2026-03-06 is Friday, 2026-03-07 is Saturday, 2026-03-08 is Sunday
+    const historyLines: string[] = [
+      JSON.stringify({
+        timestamp: "2026-03-02T10:00:00.000Z", // Monday
+        storyId: "done1",
+        fromStatus: "in-progress",
+        toStatus: "done",
+      }),
+      JSON.stringify({
+        timestamp: "2026-03-06T10:00:00.000Z", // Friday
+        storyId: "done2",
+        fromStatus: "in-progress",
+        toStatus: "done",
+      }),
+    ];
+
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: backlog",
+        "  done1:",
+        "    status: done",
+        "  done2:",
+        "    status: done",
+      ].join("\n"),
+      historyLines,
+    });
+
+    const resultWithWeekends = computeMonteCarloForecast(PROJECT, undefined, {
+      simulations: 100,
+      randomFn: () => 0.5,
+      excludeWeekends: false,
+    });
+    const resultNoWeekends = computeMonteCarloForecast(PROJECT, undefined, {
+      simulations: 100,
+      randomFn: () => 0.5,
+      excludeWeekends: true,
+    });
+
+    // Both should produce valid results
+    expect(resultWithWeekends.percentiles.p50).toBeTruthy();
+    expect(resultNoWeekends.percentiles.p50).toBeTruthy();
+    // Excluding weekends should push dates later or equal (fewer working days)
+    expect(resultNoWeekends.percentiles.p50 >= resultWithWeekends.percentiles.p50).toBe(true);
+  });
+
+  it("epic filter with non-existent epic returns empty result", () => {
+    const historyLines: string[] = [
+      JSON.stringify({
+        timestamp: "2026-03-02T10:00:00.000Z",
+        storyId: "done1",
+        fromStatus: "in-progress",
+        toStatus: "done",
+      }),
+    ];
+
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: backlog",
+        "  done1:",
+        "    status: done",
+      ].join("\n"),
+      historyLines,
+    });
+
+    const result = computeMonteCarloForecast(PROJECT, "non-existent-epic", {
+      simulations: 10,
+      randomFn: () => 0.5,
+      excludeWeekends: false,
+    });
+
+    expect(result.remainingStories).toBe(0);
+    expect(result.insufficientData).toBe(true);
+  });
+
+  it("filters throughput to window when throughputWindowDays is set", () => {
+    // 30 days of history, each day has 1 completion
+    const historyLines: string[] = [];
+    for (let i = 1; i <= 30; i++) {
+      historyLines.push(
+        JSON.stringify({
+          timestamp: `2026-03-${String(i).padStart(2, "0")}T10:00:00.000Z`,
+          storyId: `done${i}`,
+          fromStatus: "in-progress",
+          toStatus: "done",
+        }),
+      );
+    }
+
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: backlog",
+        ...Array.from({ length: 30 }, (_, i) => `  done${i + 1}:\n    status: done`),
+      ].join("\n"),
+      historyLines,
+    });
+
+    // Without window: all 30 days
+    const fullResult = computeMonteCarloForecast(PROJECT, undefined, {
+      simulations: 50,
+      randomFn: () => 0.5,
+      excludeWeekends: false,
+    });
+    expect(fullResult.sampleSize).toBe(30);
+
+    // With window of 14: only last 14 days
+    const windowedResult = computeMonteCarloForecast(PROJECT, undefined, {
+      simulations: 50,
+      randomFn: () => 0.5,
+      excludeWeekends: false,
+      throughputWindowDays: 14,
+    });
+    expect(windowedResult.sampleSize).toBe(14);
+  });
+
+  it("does not filter throughput when window exceeds available data", () => {
+    const historyLines: string[] = [
+      JSON.stringify({
+        timestamp: "2026-03-02T10:00:00.000Z",
+        storyId: "done1",
+        fromStatus: "in-progress",
+        toStatus: "done",
+      }),
+      JSON.stringify({
+        timestamp: "2026-03-03T10:00:00.000Z",
+        storyId: "done2",
+        fromStatus: "in-progress",
+        toStatus: "done",
+      }),
+    ];
+
+    setFiles({
+      statusYaml: [
+        "development_status:",
+        "  s1:",
+        "    status: backlog",
+        "  done1:",
+        "    status: done",
+        "  done2:",
+        "    status: done",
+      ].join("\n"),
+      historyLines,
+    });
+
+    const result = computeMonteCarloForecast(PROJECT, undefined, {
+      simulations: 50,
+      randomFn: () => 0.5,
+      excludeWeekends: false,
+      throughputWindowDays: 14, // window > 2 days available
+    });
+
+    // Should use all available data (2 days), not truncate
+    expect(result.sampleSize).toBe(2);
   });
 });

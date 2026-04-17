@@ -8,6 +8,11 @@ import { cn } from "@/lib/cn";
 import { CICheckList } from "./CIBadge";
 import { DirectTerminal } from "./DirectTerminal";
 import { ActivityDot } from "./ActivityDot";
+import { NotepadViewer } from "./NotepadViewer";
+import { TimelineViewer } from "./TimelineViewer";
+import { CostBreakdownPanel } from "./CostBreakdownPanel";
+import { SessionStatePanel } from "./SessionStatePanel";
+import { ProjectMemoryViewer } from "./ProjectMemoryViewer";
 
 interface OrchestratorZones {
   merge: number;
@@ -451,6 +456,13 @@ export function SessionDetail({
 
         {/* ── PR Card ─────────────────────────────────────────────── */}
         {pr && <PRCard pr={pr} sessionId={session.id} />}
+
+        {/* ── Notepad Panel ───────────────────────────────────────── */}
+        {session.workspacePath && <NotepadViewer sessionId={session.id} />}
+        {session.workspacePath && <TimelineViewer sessionId={session.id} />}
+        {session.workspacePath && <CostBreakdownPanel />}
+        {session.workspacePath && <SessionStatePanel sessionId={session.id} />}
+        {session.workspacePath && <ProjectMemoryViewer sessionId={session.id} />}
 
         {/* ── Terminal ─────────────────────────────────────────────── */}
         <div className={pr ? "mt-6" : ""}>

@@ -10,9 +10,14 @@ interface NavigationProps {
 
 const navItems = [
   { href: "/", label: "Dashboard" },
+  { href: "/portfolio", label: "Portfolio" },
+  { href: "/sprints", label: "Sprints" },
+  { href: "/scenarios", label: "Scenarios" },
+  { href: "/conflicts", label: "Conflicts" },
   { href: "/fleet", label: "Fleet" },
   { href: "/workflow", label: "Workflow" },
   { href: "/events", label: "Events" },
+  { href: "/risk", label: "Risk" },
   { href: "/settings", label: "Settings" },
 ] as const;
 

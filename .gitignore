@@ -61,3 +61,6 @@ agent-orchestrator.yaml
 # Backup files (runtime artifacts, not version control)
 .backups/
 *.backup
+
+# Scenario persistence data (test/development artifacts)
+.ao-scenarios/

@@ -116,6 +116,12 @@ a:hover {
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes highlight-pulse {
+  0%   { background-color: var(--color-bg-surface); }
+  50%  { background-color: var(--color-accent-subtle); }
+  100% { background-color: var(--color-bg-surface); }
+}
+
 /* ── Orchestrator button ──────────────────────────────────────────────── */
 
 .orchestrator-btn {

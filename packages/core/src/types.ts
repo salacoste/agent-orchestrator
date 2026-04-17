@@ -12,7 +12,8 @@
  *   5. SCM        — source platform + PR/CI/reviews (github, gitlab)
  *   6. Notifier   — push notifications (desktop, slack, webhook)
  *   7. Terminal   — human interaction UI (iterm2, web, none)
- *   8. Lifecycle Manager (core, not pluggable)
+ *   8. Provider   — session enhancement (raw, omc, custom)
+ *   9. Lifecycle Manager (core, not pluggable)
  */
 
 // =============================================================================
@@ -186,6 +187,9 @@ export interface Session {
 
   /** Metadata key-value pairs */
   metadata: Record<string, string>;
+
+  /** Hook registry for compaction survival (set during spawn if provider != raw). */
+  hookRegistry?: HookRegistry;
 }
 
 /** Config for creating a new session */
@@ -200,6 +204,8 @@ export interface SessionSpawnConfig {
   storyContext?: string;
   /** Spawn priority for queue ordering. Higher = spawn first. (Story 43.4) */
   priority?: number;
+  /** Explicit model tier override for model routing (Story 58.4) */
+  modelTier?: ModelTier;
 }
 
 /** Config for creating an orchestrator session */
@@ -806,7 +812,10 @@ export type EventType =
   | "tracker.sprint_complete"
   // Agent blocked/resumed
   | "agent.blocked"
-  | "agent.resumed";
+  | "agent.resumed"
+  // Agent capacity (Epic 50, Story 50.6)
+  | "agent.capacity_reached"
+  | "agent.capacity_warning";
 
 /** An event emitted by the orchestrator */
 export interface OrchestratorEvent {
@@ -937,6 +946,15 @@ export interface OrchestratorConfig {
     total: number;
     projects: Record<string, number>;
   };
+
+  /** Conflict resolution policy configuration (Epic 52, Story 52.4) */
+  conflictResolution?: {
+    /** Default resolution mode for all resource types when no project override exists. */
+    default?: "priority-based" | "manual" | "isolation";
+  };
+
+  /** Session enhancement provider configuration (Epic 58, Story 58.1). */
+  sessionEnhancement?: SessionEnhancementConfig;
 }
 
 /**
@@ -963,6 +981,97 @@ export interface DefaultPlugins {
   agent: string;
   workspace: string;
   notifiers: string[];
+}
+
+/** Story urgency level for allocation prioritization (Epic 50, Story 50.3). */
+export type UrgencyLevel = "critical" | "high" | "normal" | "low";
+
+/** Weights for allocation scoring factors (Epic 50, Story 50.3). */
+export interface AllocationWeights {
+  /** Urgency factor weight (default 0.3) */
+  urgency?: number;
+  /** Project priority factor weight (default 0.3) */
+  priority?: number;
+  /** Agent affinity factor weight (default 0.25) */
+  affinity?: number;
+  /** Workload balance factor weight (default 0.15) */
+  workload?: number;
+}
+
+/** Model tier levels for routing decisions (Epic 58, Story 58.2). */
+export type ModelTier = "low" | "medium" | "high";
+
+/** Mapping from tier level to model identifier (Epic 58, Story 58.2). */
+export type ModelTierMapping = Record<ModelTier, string>;
+
+/** Default model tier mapping (Epic 58, Story 58.2). */
+export const DEFAULT_MODEL_TIERS: ModelTierMapping = {
+  low: "haiku",
+  medium: "sonnet",
+  high: "opus",
+};
+
+/** Model usage event for tracking tier and token consumption per session (Epic 58, Story 58.5). */
+export interface ModelUsageEvent {
+  sessionId: string;
+  storyId: string;
+  projectId: string;
+  modelTier: ModelTier;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostUsd: number;
+  timestamp: string;
+}
+
+/** Aggregated usage statistics for a scope (session, story, project, sprint). */
+export interface UsageAggregate {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCostUsd: number;
+  sessionCount: number;
+}
+
+/** Session enhancement provider configuration (Epic 58, Story 58.1). */
+export interface SessionEnhancementConfig {
+  /** Provider plugin name (default: "raw" for no-op). */
+  provider: string;
+  /** Arbitrary config passed to the provider. */
+  config?: Record<string, unknown>;
+  /** Model tier mapping for routing decisions (Story 58.2). */
+  modelTiers?: ModelTierMapping;
+  /** Health check configuration for provider monitoring (Story 58.6). */
+  health?: ProviderHealthConfig;
+  /** Per-project hook profile override, merged on top of detected story-type profile (Story 59-5). */
+  hookProfile?: Partial<HookProfile>;
+  /** Per-project agent mapping overrides, keyed by story type (Story 59-6). */
+  agentMappings?: Record<string, AgentMapping>;
+}
+
+/** Provider health monitoring configuration (Epic 58, Story 58.6). */
+export interface ProviderHealthConfig {
+  /** Interval between health check polls in ms (default: 30000). */
+  healthCheckIntervalMs?: number;
+  /** Consecutive failures before circuit breaker trips (default: 3). */
+  failureThreshold?: number;
+  /** Duration in ms the breaker stays OPEN before probing (default: 60000). */
+  openDurationMs?: number;
+}
+
+/** Shared agent pool configuration for cross-project agent sharing (Epic 50). */
+export interface SharedPoolConfig {
+  /** Enable shared pool mode for this project's agents */
+  enabled: boolean;
+  /** List of project IDs whose stories can be assigned to this project's agents. "*" = all projects. */
+  eligibleProjects: string[];
+  /** Maximum concurrent cross-project assignments (default: unlimited) */
+  maxConcurrent?: number;
+  /** Agent IDs reserved for exclusive use by this project (not shared with other projects). */
+  reservedAgents?: string[];
+  /** Project priority for allocation decisions (higher = prefer this project's stories). Default: 0. */
+  priority?: number;
+  /** Configurable weights for allocation scoring factors. */
+  allocationWeights?: AllocationWeights;
 }
 
 export interface ProjectConfig {
@@ -1020,6 +1129,32 @@ export interface ProjectConfig {
   /** Agent isolation level (Story 46b.4). Default: "shared". */
   isolation?: "shared" | "isolated" | "quarantined";
 
+  /** User-defined tags for portfolio filtering (e.g., ["production", "api"]) */
+  tags?: string[];
+
+  /** Custom metadata key-value pairs for portfolio filtering */
+  metadata?: Record<string, string>;
+
+  /** Shared agent pool configuration for cross-project agent sharing (Epic 50) */
+  sharedPool?: SharedPoolConfig;
+
+  /** Conflict resolution policy configuration (Epic 52, Story 52.4) */
+  conflictResolution?: {
+    /** Default resolution mode for unconfigured resource types. */
+    default?: "priority-based" | "manual" | "isolation";
+    /** Per-resource-type policy overrides. */
+    policies?: Partial<
+      Record<
+        "repository" | "file-path" | "agent" | "external-service",
+        {
+          resolutionMode: "priority-based" | "manual" | "isolation";
+          priorityOrder?: string[];
+          isolationConfig?: { strategy: string };
+        }
+      >
+    >;
+  };
+
   /** BMAD directory paths (defaults: _bmad/ and _bmad-output/) */
   bmad?: {
     /** Path to _bmad/ config directory (relative to project path, default: "_bmad") */
@@ -1037,6 +1172,9 @@ export interface ProjectConfig {
     /** Retention period in days for learning data (default: 90) */
     retentionDays?: number;
   };
+
+  /** Per-project session enhancement provider override (Epic 58, Story 58.1). */
+  sessionEnhancement?: SessionEnhancementConfig;
 }
 
 export interface TrackerConfig {
@@ -1062,6 +1200,262 @@ export interface AgentSpecificConfig {
 }
 
 // =============================================================================
+// SESSION ENHANCEMENT PROVIDER (Epic 58, Story 58.1)
+// =============================================================================
+
+/** Configuration passed to a session enhancement provider. */
+export interface ProviderConfig {
+  /** Arbitrary key-value config consumed by the provider. */
+  [key: string]: unknown;
+}
+
+/** Story context passed to provider.configure() during session spawn. */
+export interface StoryContext {
+  /** Story identifier (e.g., "58-1-session-enhancement-provider-interface"). */
+  storyId: string;
+  /** Story title. */
+  storyTitle?: string;
+  /** Acceptance criteria extracted from the story file. */
+  acceptanceCriteria?: string[];
+  /** Files relevant to this story (hints from story Dev Notes). */
+  relevantFiles?: string[];
+  /** IDs of prerequisite stories. */
+  dependencies?: string[];
+  /** Detected story type for hook profile selection (Epic 59, Story 59-5). */
+  storyType?: StoryType;
+  /** Resolved agent mapping for this story (Epic 59, Story 59-6). */
+  agents?: AgentMapping;
+}
+
+/** Notepad section names — matches the .omc/notepad.md structure. */
+export type NotepadSection = "priority" | "working" | "manual";
+
+/** Structured representation of the three notepad sections. */
+export interface NotepadContent {
+  /** Priority section — permanent story context (ACs, files, deps). */
+  priority: string;
+  /** Working Memory section — transient sprint context (7-day TTL). */
+  working: string;
+  /** Manual section — free-form developer notes. */
+  manual: string;
+}
+
+/** Sprint-level context for populating the notepad Working Memory section. */
+export interface SprintContext {
+  /** Sprint/cycle name (e.g., "Cycle 11"). */
+  sprintName?: string;
+  /** Story IDs of completed stories in the same epic. */
+  relatedCompletedStories?: string[];
+  /** Epic identifier (e.g., "59"). */
+  epicId?: string;
+}
+
+// =============================================================================
+// AGENT TIMELINE (Epic 60, Story 60-3)
+// =============================================================================
+
+/** Event types recorded in the OMC agent replay JSONL. */
+export type ReplayEventType =
+  | "agent_start"
+  | "agent_stop"
+  | "tool_start"
+  | "tool_end"
+  | "file_touch"
+  | "intervention"
+  | "error"
+  | "hook_fire"
+  | "hook_result"
+  | "keyword_detected"
+  | "skill_activated"
+  | "skill_invoked"
+  | "mode_change";
+
+/** Raw replay event from `.omc/state/agent-replay-{sessionId}.jsonl`. */
+export interface ReplayEvent {
+  /** Seconds since session start. */
+  t: number;
+  /** Sub-agent name (e.g., "planner", "executor"). */
+  agent: string;
+  /** Agent category. */
+  agent_type: string;
+  /** Event type. */
+  event: ReplayEventType;
+  /** Tool name (for tool_start, tool_end, hook events). */
+  tool?: string;
+  /** File path (for file_touch events). */
+  file?: string;
+  /** Duration in milliseconds (for tool_end, agent_stop). */
+  duration_ms?: number;
+  /** Outcome (for tool_end). */
+  success?: boolean;
+  /** Model used (for agent_start). */
+  model?: string;
+}
+
+/** Processed timeline entry for the dashboard API. */
+export interface TimelineEntry {
+  /** Sub-agent name. */
+  agent: string;
+  /** Agent category. */
+  agentType: string;
+  /** Human-readable action description. */
+  action: string;
+  /** Original event type. */
+  event: ReplayEventType;
+  /** Seconds since session start. */
+  timestamp: number;
+  /** Duration in milliseconds (if applicable). */
+  duration?: number;
+  /** Tool name (if applicable). */
+  tool?: string;
+  /** File path (if applicable). */
+  file?: string;
+  /** Outcome (if applicable). */
+  success?: boolean;
+  /** Model used (if applicable). */
+  model?: string;
+}
+
+// =============================================================================
+// COMPACTION SURVIVAL HOOKS (Epic 59, Story 59-2)
+// =============================================================================
+
+/** Hook phase names for compaction lifecycle. */
+export type HookPhase = "preCompact" | "postCompact";
+
+// =============================================================================
+// STORY-TYPE HOOK PROFILES (Epic 59, Story 59-5)
+// =============================================================================
+
+/** Story type classifications for hook profile selection. */
+export type StoryType = "exploration" | "implementation" | "bugfix" | "review" | "default";
+
+/** Configuration for which hooks and phases to enable per story type. */
+export interface HookProfile {
+  /** Which phases to enable hooks for. */
+  phases: HookPhase[];
+  /** Names of built-in hooks to register. */
+  enabledHooks: string[];
+  /** Additional metadata passed to hooks via sessionMetadata. */
+  metadata: Record<string, string>;
+}
+
+// =============================================================================
+// STORY-AGENT MAPPING (Epic 59, Story 59-6)
+// =============================================================================
+
+/** Maps a story type to an OMC agent combination and execution mode. */
+export interface AgentMapping {
+  /** OMC agent names to activate for this story type. */
+  agents: string[];
+  /** Execution mode hint for the provider. */
+  executionMode?: "standard" | "persistent" | "lightweight";
+}
+
+/**
+ * Hook executed before context compaction.
+ * Saves working state to persistent storage (notepad, project-memory, etc.).
+ */
+export type PreCompactHook = (
+  worktreePath: string,
+  sessionMetadata: Record<string, string>,
+) => Promise<void>;
+
+/**
+ * Hook executed after context compaction.
+ * Returns context string to inject back into the session.
+ */
+export type PostCompactHook = (worktreePath: string) => Promise<string>;
+
+/**
+ * Registry of named hooks organized by lifecycle phase.
+ * Each session gets its own registry instance.
+ */
+export interface HookRegistry {
+  /** Register a hook for a given phase with a unique name. */
+  register(phase: HookPhase, name: string, hook: PreCompactHook | PostCompactHook): void;
+  /** Run all pre-compact hooks in registration order. Failures are caught and logged. */
+  runPreCompact(worktreePath: string, sessionMetadata: Record<string, string>): Promise<void>;
+  /** Run all post-compact hooks, returning concatenated context strings. */
+  runPostCompact(worktreePath: string): Promise<string>;
+}
+
+/** Health check result from a session enhancement provider. */
+export interface ProviderHealth {
+  /** Whether the provider is ready to use. */
+  healthy: boolean;
+  /** Human-readable status message (set when unhealthy). */
+  message?: string;
+  /** Timestamp of the last health check. */
+  lastCheck: Date;
+}
+
+/** Result of verifying a provider installation in a workspace. */
+export interface InstallationResult {
+  /** Whether all expected artifacts were found. */
+  verified: boolean;
+  /** List of artifact paths that were expected but missing. */
+  missing: string[];
+}
+
+/** Result of a CLAUDE.md merge operation. */
+export interface ClaudeMdMergeResult {
+  /** Whether the merge was performed. */
+  merged: boolean;
+  /** Path to the merged CLAUDE.md file. */
+  path: string;
+}
+
+/**
+ * Session Enhancement Provider — pluggable interface for enhancing agent
+ * sessions with additional context, tools, or behavior.
+ *
+ * The provider is called during session spawn to install itself into the
+ * workspace, configure per-story context, and optionally modify the session.
+ * On provider failure the system falls back to RawProvider (no-op).
+ *
+ * Epic 58, Story 58.1 (FR-P1-1, FR-P1-2).
+ */
+export interface SessionEnhancementProvider {
+  /** Provider name (for logging). */
+  readonly name: string;
+
+  /**
+   * Install the provider into a workspace directory.
+   * Called once after workspace creation.
+   * Implementations should be idempotent — safe to call on an already-installed workspace.
+   */
+  install(worktreePath: string, config: ProviderConfig): Promise<void>;
+
+  /**
+   * Configure the provider for a specific story/session.
+   * Called after install(), before agent launch.
+   */
+  configure(worktreePath: string, context: StoryContext): Promise<void>;
+
+  /**
+   * Enhance a session object (e.g., inject metadata, modify environment).
+   * Returns the (possibly modified) session.
+   *
+   * Reserved for future stories (58-3, 59-5) that will use this method to
+   * inject provider-specific context into active sessions. The raw provider
+   * returns the session unchanged.
+   */
+  enhance(session: Session): Promise<Session>;
+
+  /**
+   * Tear down provider artifacts from a workspace.
+   * Called during session kill/cleanup. Best-effort — errors are logged but not fatal.
+   */
+  teardown(worktreePath: string): Promise<void>;
+
+  /**
+   * Check provider health. If unhealthy, the system falls back to RawProvider.
+   */
+  healthCheck(): Promise<ProviderHealth>;
+}
+
+// =============================================================================
 // PLUGIN SYSTEM
 // =============================================================================
 
@@ -1073,7 +1467,8 @@ export type PluginSlot =
   | "tracker"
   | "scm"
   | "notifier"
-  | "terminal";
+  | "terminal"
+  | "provider";
 
 /** Plugin manifest — what every plugin exports */
 export interface PluginManifest {
@@ -1159,6 +1554,10 @@ export interface SessionManager {
   kill(sessionId: SessionId): Promise<void>;
   cleanup(projectId?: string, options?: { dryRun?: boolean }): Promise<CleanupResult>;
   send(sessionId: SessionId, message: string): Promise<void>;
+  /** Run pre-compact hooks for a session (saves working state before compaction). */
+  runPreCompactHooks(sessionId: SessionId, sessionMetadata?: Record<string, string>): Promise<void>;
+  /** Run post-compact hooks for a session and return context to re-inject. */
+  runPostCompactHooks(sessionId: SessionId): Promise<string>;
 }
 
 export interface CleanupResult {
@@ -1546,6 +1945,8 @@ export interface BlockedAgentDetectorConfig {
   defaultTimeout?: number;
   /** Agent-type specific timeouts (in milliseconds) */
   agentTypeTimeouts?: Partial<Record<"claude-code" | "codex" | "aider", number>>;
+  /** Per-execution-mode timeout multipliers (overrides defaults). */
+  executionModeTimeouts?: Partial<Record<"standard" | "persistent" | "lightweight", number>>;
 }
 
 export interface BlockedAgentStatus {
@@ -1557,6 +1958,8 @@ export interface BlockedAgentStatus {
   inactiveDuration?: number;
   /** Severity level: amber at 1x threshold, red at 2x threshold (Story 19.1). */
   severity?: "none" | "amber" | "red";
+  /** Cached execution mode from session metadata (refreshed periodically, Story 59-7). */
+  executionMode?: AgentMapping["executionMode"];
 }
 
 // =============================================================================
@@ -1772,6 +2175,8 @@ export interface NotificationStatus {
   dlqSize: number;
   /** Last processed notification timestamp */
   lastProcessedTime?: string;
+  /** Per-event-type count of suppressed duplicates */
+  dedupByType: Record<string, number>;
 }
 
 /** Dead letter notification (failed delivery) */
@@ -2019,6 +2424,8 @@ export interface StoryState {
   acceptanceCriteria?: string[];
   dependencies?: string[];
   assignedAgent?: string;
+  /** Story urgency for allocation prioritization. Default: "normal". */
+  urgency?: UrgencyLevel;
   version: string;
   updatedAt: string;
 }
@@ -3088,4 +3495,75 @@ export interface ClassifiedArtifact extends ScannedFile {
   phase: Phase | null;
   /** Human-readable classification result (e.g., "PRD", "Story Spec"). */
   type: string;
+}
+
+/**
+ * State of an active OMC mode (ralph, ultrawork, autopilot) read from .omc/state/*.json.
+ * Epic 60, Story 60-7 (FR-D4-1, FR-D4-2).
+ */
+export interface ActiveModeState {
+  /** Mode name (e.g., "ralph", "ultrawork", "autopilot"). */
+  mode: string;
+  /** Whether this mode is currently active. */
+  active: boolean;
+  /** Current iteration within the mode cycle. */
+  iteration?: number;
+  /** Maximum iterations configured for this mode. */
+  maxIterations?: number;
+  /** Current phase within the mode (e.g., "executing", "reviewing"). */
+  phase?: string;
+  /** Number of tasks completed so far. */
+  tasksCompleted?: number;
+  /** Total number of tasks in this mode run. */
+  tasksTotal?: number;
+}
+
+/**
+ * Health status of a session's provider integration.
+ */
+export interface SessionHealth {
+  /** Whether the session's provider integration is healthy. */
+  healthy: boolean;
+  /** Human-readable status message (set when unhealthy). */
+  message?: string;
+  /** ISO timestamp of the last health check. */
+  lastCheck: string | null;
+}
+
+/**
+ * Execution state of a session, read from metadata and .omc/state/ files.
+ * Epic 60, Story 60-7 (FR-D4-1, FR-D4-2).
+ */
+export interface SessionState {
+  /** Execution mode from metadata (e.g., "standard", null if unset). */
+  executionMode: string | null;
+  /** List of active agent names from metadata. */
+  activeAgents: string[];
+  /** Whether OMC has been configured for this session. */
+  configured: boolean;
+  /** State of each active OMC mode. */
+  activeModes: ActiveModeState[];
+  /** Aggregated health status (null if provider health not available). */
+  health: SessionHealth | null;
+}
+
+// =============================================================================
+// PROJECT MEMORY
+// =============================================================================
+
+/** Types of project memory entries. */
+export type ProjectMemoryEntryType = "convention" | "decision" | "directive" | "learning";
+
+/** A single project memory entry. */
+export interface ProjectMemoryEntry {
+  id: string;
+  type: ProjectMemoryEntryType;
+  content: string;
+  source?: string;
+  timestamp?: string;
+}
+
+/** Container for all project memory entries. */
+export interface ProjectMemory {
+  entries: ProjectMemoryEntry[];
 }

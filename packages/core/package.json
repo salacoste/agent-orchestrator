@@ -14,6 +14,14 @@
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
+    },
+    "./session-state": {
+      "types": "./dist/session-state.d.ts",
+      "import": "./dist/session-state.js"
+    },
+    "./project-memory": {
+      "types": "./dist/project-memory.d.ts",
+      "import": "./dist/project-memory.js"
     }
   },
   "files": [

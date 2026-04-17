@@ -50,7 +50,8 @@ export interface SprintNotification {
     | "sprint.column_aging"
     | "sprint.dependency_circular"
     | "sprint.dependency_blocked"
-    | "sprint.velocity_declining";
+    | "sprint.velocity_declining"
+    | "sprint.forecast_shifted";
   severity: "warning" | "critical" | "info";
   title: string;
   message: string;

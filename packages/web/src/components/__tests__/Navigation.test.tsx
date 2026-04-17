@@ -8,10 +8,13 @@ vi.mock("next/navigation", () => ({
 }));
 
 describe("Navigation", () => {
-  it("renders navigation menu with Dashboard, Fleet, Events, Settings links", () => {
+  it("renders navigation menu with all links including Conflicts", () => {
     render(<Navigation currentPath="/" />);
 
     expect(screen.getByRole("link", { name: /dashboard/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /portfolio/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /scenarios/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /conflicts/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /fleet/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /events/i })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /settings/i })).toBeInTheDocument();
@@ -22,6 +25,13 @@ describe("Navigation", () => {
 
     const fleetLink = screen.getByRole("link", { name: /fleet/i });
     expect(fleetLink).toHaveClass("active");
+  });
+
+  it("highlights Portfolio link when on portfolio page", () => {
+    render(<Navigation currentPath="/portfolio" />);
+
+    const portfolioLink = screen.getByRole("link", { name: /portfolio/i });
+    expect(portfolioLink).toHaveClass("active");
   });
 
   it("is responsive with collapsible mobile menu", () => {

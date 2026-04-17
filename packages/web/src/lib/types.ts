@@ -31,6 +31,7 @@ import {
   type ActivityState,
   type ReviewDecision,
 } from "@composio/ao-core/types";
+import type { SimulationResult } from "@composio/ao-core";
 
 // Re-export for use in client components
 export { TERMINAL_STATUSES, TERMINAL_ACTIVITIES, NON_RESTORABLE_STATUSES };
@@ -125,6 +126,106 @@ export interface DashboardStats {
   workingSessions: number;
   openPRs: number;
   needsReview: number;
+}
+
+/**
+ * Project summary for portfolio dashboard.
+ * Aggregated metrics for a single configured project.
+ */
+export interface PortfolioProject {
+  id: string;
+  name: string;
+  status: "active" | "idle" | "error";
+  activeAgents: number;
+  /** Total agents (sessions) for this project, including idle ones */
+  totalAgents: number;
+  stories: {
+    backlog: number;
+    inProgress: number;
+    done: number;
+    blocked: number;
+  };
+  lastActivity?: string; // ISO date string
+  /** Timestamp when this project was last updated via SSE (for highlight animation) */
+  lastUpdated?: number;
+  /** User-defined tags for filtering (e.g., ["production", "api"]) */
+  tags?: string[];
+  /** Custom metadata key-value pairs for filtering */
+  metadata?: Record<string, string>;
+  /** Shared pool configuration if this project participates in cross-project agent sharing */
+  sharedPool?: {
+    enabled: boolean;
+    eligibleProjects: string[];
+    maxConcurrent?: number;
+    /** Agents reserved for exclusive use by this project (not shared with others) */
+    reservedAgents?: string[];
+  };
+  /** Pool agents from other projects available for cross-project assignment */
+  poolAgentsAvailable?: Array<{
+    agentId: string;
+    sourceProjectId: string;
+    sourceProjectName: string;
+  }>;
+  /** Capacity status for this project's agents (from pool capacity API) */
+  capacityStatus?: {
+    /** Maximum concurrent assignments allowed per agent */
+    maxCapacity: number;
+    /** Available assignment slots across all agents */
+    availableSlots: number;
+    /** Whether any agent is at capacity */
+    isAtCapacity: boolean;
+    /** Whether any agent is near capacity (≥80%) */
+    isNearCapacity: boolean;
+    /** Overall utilization percentage */
+    utilizationPercent: number;
+  };
+}
+
+/**
+ * Cross-project dependency between stories in different projects.
+ * Source is blocked until target completes.
+ */
+export type { CrossProjectDependency, DependencyWithStatus } from "@composio/ao-core";
+
+/** Filter state for portfolio project filtering */
+export interface FilterState {
+  status: PortfolioProject["status"] | null;
+  tags: string[];
+  metadata: Record<string, string>;
+}
+
+/**
+ * Aggregated metrics for the entire portfolio dashboard.
+ * Summarizes health and utilization across all projects.
+ */
+export interface PortfolioMetrics {
+  /** Total active agents across all projects */
+  totalAgents: number;
+  /** Total agents configured (for utilization calculation) */
+  totalConfiguredAgents: number;
+  /** Story counts aggregated from all projects */
+  stories: {
+    backlog: number;
+    inProgress: number;
+    done: number;
+    blocked: number;
+    total: number;
+  };
+  /** Sprint health score 0-100 (completion % - blocked penalty) */
+  sprintHealthScore: number;
+  /** Resource utilization percentage 0-100 (active/configured) */
+  utilizationPercent: number;
+  /** Shared pool utilization: how many agents are reserved vs total pool agents */
+  poolUtilization?: {
+    /** Total agents across all pool-enabled projects */
+    totalPoolAgents: number;
+    /** Active (working) agents across pool-enabled projects */
+    activePoolAgents: number;
+    /** Total agents reserved for exclusive use */
+    totalReservedAgents: number;
+    /** Projects with shared pool enabled */
+    poolProjectCount: number;
+  };
 }
 
 /** SSE snapshot event from /api/events */
@@ -270,4 +371,180 @@ export function getAttentionLevel(session: DashboardSession): AttentionLevel {
 
   // ── Working: agents doing their thing ─────────────────────────────
   return "working";
+}
+
+// =============================================================================
+// Unified Sprint Dashboard Types (Epic 53)
+// =============================================================================
+
+/** Health status for a sprint across a single project. */
+export type SprintHealthStatus = "on-track" | "at-risk" | "blocked";
+
+/** A single project's sprint entry in the unified view. */
+export interface UnifiedSprintEntry {
+  /** Project identifier from config. */
+  projectId: string;
+  /** Human-readable project name. */
+  projectName: string;
+  /** Sprint name (derived from config or default "Sprint N"). */
+  sprintName: string;
+  /** ISO date string when sprint started, or null if unknown. */
+  startDate: string | null;
+  /** ISO date string when sprint ends, or null if unknown. */
+  endDate: string | null;
+  /** Story counts by status. */
+  stories: {
+    total: number;
+    done: number;
+    inProgress: number;
+    blocked: number;
+    backlog: number;
+  };
+  /** Completion percentage: done / total * 100. */
+  progressPercent: number;
+  /** Sprint lifecycle status. */
+  status: "active" | "completed" | "planning";
+  /** Computed health indicator. */
+  health: SprintHealthStatus;
+  /** Human-readable reasons for the health status. */
+  healthReasons: string[];
+  /** Stories completed per day of sprint time. 0 when dates unavailable or sprint is planning. */
+  velocity: number;
+  /** Inferred direction of sprint progress. */
+  velocityTrend: "improving" | "declining" | "stable" | "unknown";
+}
+
+/** Aggregated summary across all unified sprint entries. */
+export interface UnifiedSprintSummary {
+  /** Total number of projects with sprint data. */
+  totalSprints: number;
+  /** Projects with status "active". */
+  activeSprints: number;
+  /** Projects with status "completed". */
+  completedSprints: number;
+  /** Projects with status "planning". */
+  planningSprints: number;
+  /** Aggregate story counts. */
+  totalStories: number;
+  /** Stories marked done across all sprints. */
+  storiesDone: number;
+  /** Mean progress percentage across all sprints. */
+  avgProgress: number;
+  /** Count of sprints flagged as at-risk or blocked. */
+  atRiskSprints: number;
+  /** Average velocity (stories/day) across all sprints with velocity > 0. */
+  avgVelocity: number;
+  /** Maximum velocity across all sprints. */
+  maxVelocity: number;
+}
+
+// =============================================================================
+// Sprint Filtering Types (Story 53.5)
+// =============================================================================
+
+/** Filter state for the unified sprint view. All filters are optional (null = no filter). */
+export interface SprintFilterState {
+  /** Filter by sprint lifecycle status. */
+  status: UnifiedSprintEntry["status"] | null;
+  /** Filter by health indicator. */
+  health: SprintHealthStatus | null;
+  /** Filter by project ID. */
+  projectId: string | null;
+  /** Filter by date range overlap. Start/end are ISO date strings. */
+  dateRange: { start: string; end: string } | null;
+}
+
+/** Empty sprint filter state — no filters active. */
+export const EMPTY_SPRINT_FILTERS: SprintFilterState = {
+  status: null,
+  health: null,
+  projectId: null,
+  dateRange: null,
+};
+
+// =============================================================================
+// What-If Scenario Types (Epic 54)
+// =============================================================================
+
+/** Lifecycle status for a what-if scenario. */
+export type ScenarioStatus = "draft" | "simulated" | "applied";
+
+/** Snapshot of a single story captured at scenario creation time. */
+export interface ScenarioStorySnapshot {
+  /** Story key (e.g., "54-1-scenario-creation-interface"). */
+  id: string;
+  /** Project this story belongs to. */
+  projectId: string;
+  /** Story status at snapshot time. */
+  status: string;
+  /** Domain tags from the story's sprint status entry. */
+  domainTags: string[];
+}
+
+/** Priority level for a story within a scenario. */
+export type StoryPriority = "high" | "medium" | "low";
+
+/** Priority override for a specific story in a scenario. */
+export interface StoryPriorityOverride {
+  /** Story key (e.g., "54-1-scenario-creation-interface"). */
+  storyId: string;
+  /** Original priority (always "medium" — the default). */
+  originalPriority: StoryPriority;
+  /** New priority set by the user. */
+  newPriority: StoryPriority;
+}
+
+/** Parameters that can be modified in a what-if scenario. */
+export interface ScenarioParameters {
+  /** Number of agents to simulate. */
+  agentCount: number;
+  /** Maximum concurrent stories per agent. */
+  capacityLimit: number;
+  /** Story priority overrides (only stories with changed priorities). */
+  storyPriorities: StoryPriorityOverride[];
+}
+
+/** Diff between original and modified scenario parameters. */
+export interface ParameterDiff {
+  agentCount: { original: number; modified: number } | null;
+  capacityLimit: { original: number; modified: number } | null;
+  priorityChanges: StoryPriorityOverride[];
+  hasChanges: boolean;
+}
+
+/**
+ * A what-if scenario — a sandboxed copy of current state for experimentation.
+ * File persistence added in 54.5.
+ */
+export interface WhatIfScenario {
+  /** UUID (crypto.randomUUID()). */
+  id: string;
+  /** User-provided name. */
+  name: string;
+  /** ISO 8601 creation timestamp. */
+  createdAt: string;
+  /** ISO 8601 last-modified timestamp (updated on create, parameter change, simulate). */
+  updatedAt?: string;
+  /** Projects included in this scenario. */
+  projectIds: string[];
+  /** Captured story state at creation time. */
+  stories: ScenarioStorySnapshot[];
+  /** Lifecycle status. */
+  status: ScenarioStatus;
+  /** Configured parameters — undefined until user edits parameters (54.2). */
+  parameters?: ScenarioParameters;
+  /** Simulation result — null until 54.3 runs the simulation. */
+  result?: SimulationResult;
+}
+
+/** Project info for the scenario creator form. */
+export interface ScenarioProjectInfo {
+  id: string;
+  name: string;
+  storyCounts: {
+    total: number;
+    done: number;
+    inProgress: number;
+    backlog: number;
+  };
 }

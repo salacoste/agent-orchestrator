@@ -71,9 +71,10 @@ export function registerMonteCarlo(program: Command): void {
         console.log();
 
         if (!result.percentiles.p50) {
-          console.log(
-            chalk.dim("  No data available. Complete some stories to generate a forecast."),
-          );
+          const reason = result.insufficientData
+            ? "Insufficient throughput data — complete more stories to generate a forecast."
+            : "No data available. Complete some stories to generate a forecast.";
+          console.log(chalk.dim(`  ${reason}`));
           console.log();
           return;
         }
@@ -88,7 +89,7 @@ export function registerMonteCarlo(program: Command): void {
 
         console.log(chalk.bold("  Percentile Forecasts:"));
         console.log(`    P50 (likely):       ${chalk.green(result.percentiles.p50)}`);
-        console.log(`    P85 (conservative): ${chalk.yellow(result.percentiles.p85)}`);
+        console.log(`    P80 (conservative): ${chalk.yellow(result.percentiles.p80)}`);
         console.log(`    P95 (safe):         ${chalk.red(result.percentiles.p95)}`);
         console.log();
 

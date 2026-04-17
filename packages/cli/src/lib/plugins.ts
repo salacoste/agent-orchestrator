@@ -20,6 +20,7 @@ import { createNotificationPlugin as createDesktopNotificationPlugin } from "@co
 import { createNotificationPlugin as createSlackNotificationPlugin } from "@composio/ao-plugin-notifier-slack";
 import { createNotificationPlugin as createWebhookNotificationPlugin } from "@composio/ao-plugin-notifier-webhook";
 import { createNotificationPlugin as createComposioNotificationPlugin } from "@composio/ao-plugin-notifier-composio";
+import { createNotificationPlugin as createTelegramNotificationPlugin } from "@composio/ao-plugin-notifier-telegram";
 
 const runtimePlugins: Record<string, { create(): Runtime }> = {
   tmux: tmuxRuntimePlugin,
@@ -50,6 +51,7 @@ const notifierPluginFactories: Record<string, NotifierPluginFactory> = {
   slack: (config) => createSlackNotificationPlugin(config),
   webhook: (config) => createWebhookNotificationPlugin(config),
   composio: (config) => createComposioNotificationPlugin(config),
+  telegram: (config) => createTelegramNotificationPlugin(config),
 };
 
 /**

@@ -34,6 +34,7 @@ import {
   updateMetadata,
 } from "@composio/ao-core";
 import { createBMADTrackerAdapter } from "@composio/ao-plugin-tracker-bmad";
+import { validateDedupWindowByType } from "@composio/ao-plugin-notifier-telegram";
 import { getRuntime, getNotificationPlugins } from "./plugins.js";
 import { getSessionManager } from "./create-session-manager.js";
 
@@ -100,11 +101,20 @@ async function wireNotificationServices(
         }
       }
 
+      // Extract and validate per-event-type dedup windows from notifier configs
+      const telegramNotifier = (
+        config.notifiers as Record<string, Record<string, unknown>> | undefined
+      )?.telegram;
+      const dedupWindowByType = validateDedupWindowByType(
+        telegramNotifier?.dedupWindowByType as Record<string, number> | undefined,
+      );
+
       notificationService = createNotificationService({
         eventBus,
         plugins: notificationPlugins,
         dlqPath: join(auditDir, "notification-dlq.jsonl"),
         preferences: Object.keys(preferences).length > 0 ? preferences : undefined,
+        dedupWindowByType,
       });
 
       console.log(

@@ -55,8 +55,82 @@ export {
 } from "./tmux.js";
 
 // Session manager — session CRUD
-export { createSessionManager } from "./session-manager.js";
+export { createSessionManager, resolveModelTiers } from "./session-manager.js";
 export type { SessionManagerDeps } from "./session-manager.js";
+
+// Model routing — story complexity → model tier mapping
+export {
+  createModelRoutingService,
+  modelRoutingService,
+  classifyStoryComplexity,
+} from "./model-routing.js";
+export type { ModelRoutingService, ResolveTierOptions } from "./model-routing.js";
+
+// Notepad — compaction survival (Epic 59, Story 59-1)
+export { createNotepad, readNotepad, writeNotepadSection } from "./notepad.js";
+export type { NotepadSection, NotepadContent, SprintContext } from "./types.js";
+
+// Timeline — agent activity replay (Epic 60, Story 60-3)
+export { readTimeline } from "./timeline.js";
+export type { ReplayEventType, ReplayEvent, TimelineEntry } from "./types.js";
+
+// Hooks — compaction survival lifecycle (Epic 59, Story 59-2)
+export {
+  createHookRegistry,
+  notepadPreCompact,
+  notepadPostCompact,
+  projectMemoryPreCompact,
+  registerDefaultHooks,
+  HOOK_PROFILES,
+  detectStoryType,
+  registerHooksForProfile,
+} from "./hooks.js";
+export type {
+  HookPhase,
+  PreCompactHook,
+  PostCompactHook,
+  HookRegistry,
+  StoryType,
+  HookProfile,
+  AgentMapping,
+} from "./types.js";
+
+// Provider verification — post-install artifact checks (Epic 59, Story 59-3)
+export {
+  verifyInstallation,
+  verifyOmcInstallation,
+  verifyOmcConfigure,
+} from "./provider-verify.js";
+export type { InstallationResult } from "./types.js";
+
+// CLAUDE.md merge — project rules + provider additions (Epic 59, Story 59-4)
+export { mergeClaudeMd, readClaudeMd, writeClaudeMd, performMerge } from "./claudemd-merge.js";
+export type { ClaudeMdMergeResult } from "./types.js";
+
+// Model usage — per-session tier/token tracking
+export {
+  createModelUsageAggregator,
+  bootstrapModelUsageAggregator,
+  modelUsageAggregator,
+  validateModelTier,
+} from "./model-usage.js";
+export type {
+  ModelUsageAggregator,
+  ModelUsageEvent,
+  ModelTier,
+  UsageAggregate,
+} from "./model-usage.js";
+
+// Service registry — model usage aggregator registration
+export { registerModelUsageAggregator, getModelUsageAggregator } from "./service-registry.js";
+
+// Provider health monitor (Epic 58, Story 58.6)
+export {
+  createProviderHealthMonitor,
+  bootstrapProviderHealth,
+  createProviderHealthRule,
+} from "./provider-health.js";
+export type { ProviderHealthMonitor, ProviderHealthStatus } from "./provider-health.js";
 
 // Lifecycle manager — state machine + reaction engine
 export { createLifecycleManager } from "./lifecycle-manager.js";
@@ -301,6 +375,14 @@ export type {
   BlockedAgentStatus,
 } from "./types.js";
 
+// Session Timeout — persistence-aware timeout multipliers (Epic 59, Story 59-7)
+export {
+  EXECUTION_MODE_TIMEOUT_MULTIPLIERS,
+  resolveSessionTimeout,
+  MIN_TIMEOUT,
+  MAX_TIMEOUT,
+} from "./session-timeout.js";
+
 // Error Logger — structured error logging with secret redaction and classification
 export {
   createErrorLogger,
@@ -537,8 +619,128 @@ export type { PromptBuildConfig } from "./prompt-builder.js";
 export { generateOrchestratorPrompt } from "./orchestrator-prompt.js";
 export type { OrchestratorPromptConfig } from "./orchestrator-prompt.js";
 
+// Shared Pool — cross-project agent sharing (Epic 50)
+export {
+  resolvePoolMemberships,
+  validatePoolReferences,
+  getEligibleProjects,
+  getPoolProjects,
+  canReceiveAgents,
+  isAgentReserved,
+  getReservedAgents,
+  getAvailablePoolAgents,
+} from "./shared-pool.js";
+export type { PoolMembership, PoolValidationWarning } from "./shared-pool.js";
+
+// Pool Allocation — intelligent allocation algorithm (Epic 50, Story 50.3)
+export {
+  computeUrgencyScore,
+  computePriorityScore,
+  computeWorkloadScore,
+  computeAllocationScore,
+  allocateAgents,
+  DEFAULT_MAX_CONCURRENT,
+} from "./pool-allocation.js";
+export type {
+  AllocationRequest,
+  AllocationStory,
+  AllocationDecision,
+  AllocationFactors,
+  CapacitySkip,
+} from "./pool-allocation.js";
+
+// Cross-Project Assignment — bridges allocation to runtime execution (Epic 50, Story 50.4)
+export {
+  gatherPoolStories,
+  buildAgentWorkloadMap,
+  buildProjectAgentsMapFromSessions,
+  buildAllocationRequest,
+  getAssignableAgents,
+  executeCrossProjectAssignment,
+} from "./cross-project-assignment.js";
+export type { SprintDataReader, AssignableAgent } from "./cross-project-assignment.js";
+
+// Agent Utilization — per-agent and pool-level utilization tracking (Epic 50, Story 50.5)
+export {
+  computeAgentUtilization,
+  computeProjectUtilization,
+  computePoolUtilizationOverview,
+} from "./agent-utilization.js";
+export type {
+  ProjectTimeBreakdown,
+  AgentUtilization,
+  ProjectAgentUtilization,
+  PoolUtilizationOverview,
+} from "./agent-utilization.js";
+
+// Capacity Check — over-allocation prevention (Epic 50, Story 50.6)
+export {
+  resolveMaxCapacity,
+  checkCapacity,
+  isAtCapacity,
+  getCapacityStatus,
+  guardAssignment,
+  CapacityExceededError,
+} from "./capacity-check.js";
+export type { CapacityResult, GuardResult } from "./capacity-check.js";
+
 // Shared utilities
 export { shellEscape, escapeAppleScript, validateUrl, readLastJsonlEntry } from "./utils.js";
+
+// Cross-Project Dependencies — cross-project dependency management (Epic 51, Story 51.1)
+export {
+  CROSS_PROJECT_DEPS_FILENAME,
+  generateDepId,
+  isDuplicate,
+  addCrossProjectDependency,
+  removeCrossProjectDependency,
+  getDependenciesForStory,
+  validateDependencyReferences,
+  listDependencies,
+  deriveStoryTitle,
+  searchCrossProjectStories,
+  resolveDepMaxCapacity,
+  resolveDependencyStatus,
+  resolveAllDependencyStatuses,
+  areCrossProjectDepsSatisfied,
+  getBlockedCrossProjectDeps,
+  findCrossProjectDependents,
+  autoUnblockCrossProjectDeps,
+  detectCircularDependency,
+  CircularDependencyError,
+  buildCrossProjectGraph,
+  computeBlockingStartTimes,
+  getBlockingAlerts,
+  formatDurationLabel,
+  DEFAULT_BLOCKING_THRESHOLD_MS,
+  CrossProjectDepFileStore,
+  createCrossProjectDepStore,
+} from "./cross-project-deps.js";
+export type {
+  CrossProjectDependency,
+  DependencyWithStatus,
+  StorySummary,
+  DependencyValidationError,
+  ValidationResult,
+  SprintDataMap,
+  CrossProjectDepStore,
+  UnblockCandidate,
+  CrossProjectGraphNode,
+  CrossProjectGraphEdge,
+  CrossProjectGraph,
+  BlockingStartTimeMap,
+  DependencyBlockingAlert,
+  CyclePathNode,
+  CircularDependencyResult,
+} from "./cross-project-deps.js";
+
+// Cross-project blocking times store (Story 51.5)
+export {
+  createBlockingTimesStore,
+  BlockingTimesFileStore,
+  BLOCKING_TIMES_FILENAME,
+} from "./cross-project-blocking-times.js";
+export type { BlockingTimesStore } from "./cross-project-blocking-times.js";
 
 // Path utilities — hash-based directory structure
 export {
@@ -795,6 +997,44 @@ export type {
   VersionCompatibilityMatrix,
 } from "./plugin-version-compatibility.js";
 
+// Resource Conflict Detection — detect when multiple projects target the same resources (Epic 52, Story 52.1)
+export {
+  RESOURCE_CONFLICTS_FILENAME,
+  RESOURCE_CONFLICTS_AUDIT_FILENAME,
+  generateConflictId,
+  extractProjectResources,
+  computeConflictSeverity,
+  detectResourceConflicts,
+  runConflictDetection,
+  checkResourceConflicts,
+  appendConflictAudit,
+  ResourceConflictFileStore,
+  createResourceConflictStore,
+} from "./resource-conflict.js";
+export type {
+  ResourceConflictType,
+  ResourceConflictSeverity,
+  ProjectResource,
+  ResourceConflict,
+  ConflictDetectionResult,
+  ResourceConflictStore,
+  ConflictDetectionCallbacks,
+} from "./resource-conflict.js";
+
+// Resource Conflict Resolution Suggestions — generate actionable strategies for detected conflicts (Epic 52, Story 52.3)
+export {
+  generateSuggestionId,
+  computeImpactEstimate,
+  generateSuggestions,
+  selectRecommendedStrategy,
+} from "./resource-conflict-suggestions.js";
+export type {
+  ResourceConflictResolutionStrategy,
+  SuggestionAction,
+  ResourceConflictSuggestion,
+  ConflictResolutionResponse,
+} from "./resource-conflict-suggestions.js";
+
 // Plugin Marketplace — search, browse, and install plugins from registry
 export { createPluginMarketplace } from "./plugin-marketplace.js";
 export type {
@@ -807,3 +1047,39 @@ export type {
   PluginMarketplaceConfig,
   PluginMarketplace,
 } from "./plugin-marketplace.js";
+
+// Conflict Policy — configurable auto-resolution policies for resource conflicts (Epic 52, Story 52.4)
+export { resolvePolicyForResource, applyPolicy } from "./conflict-policy.js";
+export type {
+  ConflictResolutionMode,
+  ResourceConflictPolicy,
+  ResourceConflictPolicyConfig,
+  GlobalConflictResolutionConfig,
+  PolicyResolutionResult,
+} from "./conflict-policy.js";
+
+// Conflict History Tracking — record resolution outcomes, query/filter, pattern analysis, export (Epic 52, Story 52.5)
+export {
+  CONFLICT_HISTORY_FILENAME,
+  generateHistoryId,
+  appendConflictResolution,
+  readConflictHistory,
+  filterConflictHistory,
+  exportConflictHistory,
+  computeConflictPatterns,
+  createHistoryEntry,
+} from "./conflict-history.js";
+export type {
+  ConflictResolutionOutcome,
+  ConflictHistoryEntry,
+  ConflictHistoryFilter,
+  ConflictPatternSummary,
+} from "./conflict-history.js";
+
+// Session State — OMC execution state reader (Epic 60, Story 60-7)
+export { readSessionState } from "./session-state.js";
+export type { SessionState, ActiveModeState, SessionHealth } from "./types.js";
+
+// Project Memory — typed reader/writer for .omc/project-memory.json (Epic 60, Story 60-9)
+export { readProjectMemory, writeProjectMemory, emptyProjectMemory } from "./project-memory.js";
+export type { ProjectMemory, ProjectMemoryEntry, ProjectMemoryEntryType } from "./types.js";

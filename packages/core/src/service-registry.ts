@@ -6,6 +6,8 @@
 import type { CircuitBreakerManager } from "./circuit-breaker-manager.js";
 import type { DegradedModeService } from "./degraded-mode.js";
 import type { LearningStore } from "./learning-store.js";
+import type { ModelUsageAggregator } from "./model-usage.js";
+import type { ProviderHealthMonitor } from "./provider-health.js";
 import type { SpawnQueue } from "./spawn-queue.js";
 import type { BMADTracker, EventPublisher } from "./types.js";
 
@@ -16,6 +18,8 @@ interface ServiceRegistry {
   circuitBreakerManager?: CircuitBreakerManager;
   learningStore?: LearningStore;
   spawnQueue?: SpawnQueue;
+  providerHealthMonitor?: ProviderHealthMonitor;
+  modelUsageAggregator?: ModelUsageAggregator;
 }
 
 // Global registry instance
@@ -110,10 +114,32 @@ export function getSpawnQueue(): SpawnQueue | undefined {
   return registry.spawnQueue;
 }
 
+/** Register the ProviderHealthMonitor instance (Story 58.6). */
+export function registerProviderHealthMonitor(monitor: ProviderHealthMonitor): void {
+  registry.providerHealthMonitor = monitor;
+}
+
+/** Get the registered ProviderHealthMonitor instance. */
+export function getProviderHealthMonitor(): ProviderHealthMonitor | undefined {
+  return registry.providerHealthMonitor;
+}
+
+/** Register a persistent ModelUsageAggregator instance (Story 58.5). */
+export function registerModelUsageAggregator(aggregator: ModelUsageAggregator): void {
+  registry.modelUsageAggregator = aggregator;
+}
+
+/** Get the registered ModelUsageAggregator instance. */
+export function getModelUsageAggregator(): ModelUsageAggregator | undefined {
+  return registry.modelUsageAggregator;
+}
+
 /**
  * Clear all registered services
  * Called during application shutdown
  */
 export function clearServiceRegistry(): void {
+  // Stop the provider health monitor before clearing to prevent orphaned timers
+  registry.providerHealthMonitor?.stop();
   registry = {};
 }

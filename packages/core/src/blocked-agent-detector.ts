@@ -5,6 +5,7 @@
  * - Activity tracking per agent (last activity timestamp)
  * - Configurable inactivity timeout (default: 30 minutes)
  * - Agent-type specific timeouts (claude-code: 10m, codex: 5m, aider: 15m)
+ * - Execution-mode aware timeouts (persistent: 3x, lightweight: 0.5x)
  * - Automatic blocked detection with periodic checks
  * - Pause functionality to suppress blocked detection for intentional pauses
  * - Event publishing for agent.blocked and agent.resumed
@@ -18,19 +19,15 @@ import type {
   BlockedAgentDetector,
   BlockedAgentDetectorConfig,
   BlockedAgentStatus,
+  AgentMapping,
 } from "./types.js";
+import { resolveSessionTimeout, MIN_TIMEOUT, MAX_TIMEOUT } from "./session-timeout.js";
 
 /** Default check interval (60 seconds) */
 const DEFAULT_CHECK_INTERVAL = 60_000;
 
 /** Default timeout (30 minutes) — used for unknown/new agent types */
 const DEFAULT_TIMEOUT = 30 * 60 * 1000;
-
-/** Minimum timeout (1 minute) */
-const MIN_TIMEOUT = 1 * 60 * 1000;
-
-/** Maximum timeout (60 minutes) */
-const MAX_TIMEOUT = 60 * 60 * 1000;
 
 /** Agent-type specific defaults (milliseconds) */
 const AGENT_TYPE_DEFAULTS: Record<string, number> = {
@@ -71,12 +68,17 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
   private checkInterval: number;
   private defaultTimeout: number;
   private agentTypeTimeouts: Record<string, number>;
+  private executionModeTimeouts: Partial<Record<"standard" | "persistent" | "lightweight", number>>;
 
   // Track agent state
   private agentStatus = new Map<string, BlockedAgentStatus>();
 
   // Detection timer
   private detectionTimer?: ReturnType<typeof setInterval>;
+
+  /** How many check cycles between execution-mode refreshes (5 × 60s = 5 minutes). */
+  private static readonly EXECUTION_MODE_REFRESH_INTERVAL = 5;
+  private checkCycle = 0;
 
   constructor(deps: BlockedAgentDetectorDeps) {
     this.eventBus = deps.eventBus;
@@ -88,6 +90,7 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
       ...AGENT_TYPE_DEFAULTS,
       ...(deps.config?.agentTypeTimeouts ?? {}),
     };
+    this.executionModeTimeouts = deps.config?.executionModeTimeouts ?? {};
   }
 
   async trackActivity(agentId: string): Promise<void> {
@@ -122,6 +125,11 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
 
   async checkBlocked(): Promise<void> {
     const now = Date.now();
+    this.checkCycle++;
+
+    // Determine whether this cycle should refresh cached execution modes
+    const shouldRefresh =
+      this.checkCycle % BlockedAgentDetectorImpl.EXECUTION_MODE_REFRESH_INTERVAL === 1;
 
     for (const [agentId, status] of this.agentStatus.entries()) {
       // Skip paused agents
@@ -130,8 +138,23 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
         continue;
       }
 
+      // Refresh cached execution mode periodically to avoid N+1 lookups (Story 59-7)
+      if (shouldRefresh) {
+        try {
+          const session = await this.sessionManager.get(agentId);
+          const mode = session?.metadata?.["ao:executionMode"];
+          if (mode === "standard" || mode === "persistent" || mode === "lightweight") {
+            status.executionMode = mode;
+          } else {
+            status.executionMode = undefined;
+          }
+        } catch {
+          // Execution mode lookup failure must not crash detection — keep cached value
+        }
+      }
+
       const inactiveMs = now - status.lastActivity.getTime();
-      const timeout = this.getTimeoutForAgent(agentId);
+      const timeout = this.getTimeoutForAgent(agentId, status.executionMode);
 
       // Compute severity tiers (Story 19.1): amber at 1x, red at 2x threshold
       if (inactiveMs > timeout * 2) {
@@ -194,13 +217,25 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
     this.agentStatus.clear();
   }
 
-  private getTimeoutForAgent(agentId: string): number {
-    // Extract agent type from agent ID
+  private getTimeoutForAgent(
+    agentId: string,
+    executionMode?: AgentMapping["executionMode"],
+  ): number {
+    // Get agent-type base timeout
     const agentType = this.extractAgentType(agentId);
-    if (agentType === "unknown") {
-      return this.defaultTimeout;
+    const baseTimeout =
+      agentType === "unknown"
+        ? this.defaultTimeout
+        : (this.agentTypeTimeouts[agentType] ?? this.defaultTimeout);
+
+    // Apply execution mode multiplier if available
+    if (executionMode) {
+      return resolveSessionTimeout(baseTimeout, executionMode, {
+        executionModeTimeouts: this.executionModeTimeouts,
+      });
     }
-    return this.agentTypeTimeouts[agentType] ?? this.defaultTimeout;
+
+    return baseTimeout;
   }
 
   private extractAgentType(agentId: string): string {

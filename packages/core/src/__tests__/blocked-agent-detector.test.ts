@@ -110,6 +110,8 @@ const mockSessionManager = {
   kill: vi.fn(async (): Promise<void> => {}),
   cleanup: vi.fn(async (): Promise<CleanupResult> => ({ killed: [], skipped: [], errors: [] })),
   send: vi.fn(async (): Promise<void> => {}),
+  runPreCompactHooks: vi.fn(async (): Promise<void> => {}),
+  runPostCompactHooks: vi.fn(async (): Promise<string> => ""),
 } satisfies SessionManager;
 
 describe("BlockedAgentDetector", () => {

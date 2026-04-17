@@ -193,6 +193,8 @@ function createMockSessionManager(): SessionManager {
     kill: vi.fn(async () => {}),
     cleanup: vi.fn(async (): Promise<CleanupResult> => ({ killed: [], skipped: [], errors: [] })),
     send: vi.fn(async () => {}),
+    runPreCompactHooks: vi.fn(async () => {}),
+    runPostCompactHooks: vi.fn(async () => ""),
   };
 }
 

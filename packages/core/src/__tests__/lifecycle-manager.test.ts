@@ -117,6 +117,8 @@ beforeEach(() => {
     kill: vi.fn().mockResolvedValue(undefined),
     cleanup: vi.fn(),
     send: vi.fn().mockResolvedValue(undefined),
+    runPreCompactHooks: vi.fn().mockResolvedValue(undefined),
+    runPostCompactHooks: vi.fn().mockResolvedValue(""),
   };
 
   config = {

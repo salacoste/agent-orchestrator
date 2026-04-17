@@ -61,16 +61,56 @@ const BUILTIN_PLUGINS: Array<{ slot: PluginSlot; name: string; pkg: string }> = 
   // Terminals
   { slot: "terminal", name: "iterm2", pkg: "@composio/ao-plugin-terminal-iterm2" },
   { slot: "terminal", name: "web", pkg: "@composio/ao-plugin-terminal-web" },
+  // Providers
+  { slot: "provider", name: "raw", pkg: "@composio/ao-plugin-provider-raw" },
+  { slot: "provider", name: "omc", pkg: "@composio/ao-plugin-provider-omc" },
 ];
 
-/** Extract plugin-specific config from orchestrator config */
+/**
+ * Extract plugin-specific config from orchestrator config.
+ * Currently handles the "provider" slot only; extend with additional
+ * slot branches as other plugins need config passthrough.
+ */
 function extractPluginConfig(
-  _slot: PluginSlot,
-  _name: string,
-  _config: OrchestratorConfig,
+  slot: PluginSlot,
+  name: string,
+  config: OrchestratorConfig,
 ): Record<string, unknown> | undefined {
-  // Reserved for future plugin-specific config mapping
+  if (slot === "provider") {
+    // Only pass config when the provider name matches the configured one
+    const configuredProvider = config.sessionEnhancement?.provider;
+    if (configuredProvider === name) {
+      return config.sessionEnhancement?.config;
+    }
+  }
   return undefined;
+}
+
+/** Validate that configured providers are available at startup. Logs warnings for missing providers. */
+function validateConfiguredProviders(config: OrchestratorConfig, registry: PluginRegistry): void {
+  const available = registry.list("provider").map((m) => m.name);
+
+  // Check global provider
+  const globalProvider = config.sessionEnhancement?.provider;
+  if (globalProvider && !available.includes(globalProvider)) {
+    console.warn(
+      `[provider] Configured provider '${globalProvider}' not found. Sessions will use raw provider.`,
+    );
+  }
+
+  // Check per-project overrides
+  for (const [projectId, project] of Object.entries(config.projects)) {
+    const projectProvider = project.sessionEnhancement?.provider;
+    if (
+      projectProvider &&
+      projectProvider !== globalProvider &&
+      !available.includes(projectProvider)
+    ) {
+      console.warn(
+        `[provider] Configured provider '${projectProvider}' for project '${projectId}' not found. Sessions will use raw provider.`,
+      );
+    }
+  }
 }
 
 export function createPluginRegistry(): PluginRegistry {
@@ -230,6 +270,11 @@ export function createPluginRegistry(): PluginRegistry {
         } catch {
           // Plugin not installed — that's fine, only load what's available
         }
+      }
+
+      // Startup validation: warn if configured provider is not available
+      if (orchestratorConfig) {
+        validateConfiguredProviders(orchestratorConfig, this);
       }
     },
 

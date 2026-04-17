@@ -16,9 +16,10 @@ import type {
   StateManager,
   StoryStatus,
   EventPublisher,
+  ModelUsageEvent,
 } from "./types.js";
 import { captureSessionLearning } from "./session-learning.js";
-import { getLearningStore } from "./service-registry.js";
+import { getLearningStore, getModelUsageAggregator } from "./service-registry.js";
 import {
   readFileSync,
   writeFileSync,
@@ -29,8 +30,67 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { parse, stringify } from "yaml";
-import { updateMetadata, getSessionsDir, type SessionId } from "./metadata.js";
+import { updateMetadata, getSessionsDir, readMetadataRaw, type SessionId } from "./metadata.js";
 import { captureTmuxSessionLogs, getLogFilePath, storeLogPathInMetadata } from "./log-capture.js";
+import { modelUsageAggregator, validateModelTier } from "./model-usage.js";
+
+/**
+ * Extract model usage data from session metadata and record it.
+ * Shared by completion and failure handlers (Story 58.5).
+ */
+function captureModelUsage(
+  raw: Record<string, string>,
+  agentId: string,
+  storyId: string,
+  timestamp: string,
+  auditDir: string,
+): void {
+  const modelTier = validateModelTier(raw["ao:modelTier"]);
+  const model = raw["ao:model"] || "unknown";
+  const projectId = raw["project"] || "";
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let estimatedCostUsd = 0;
+  const costStr = raw["cost"];
+  if (costStr) {
+    try {
+      const cost = JSON.parse(costStr) as {
+        inputTokens?: number;
+        outputTokens?: number;
+        estimatedCostUsd?: number;
+      };
+      inputTokens = cost.inputTokens ?? 0;
+      outputTokens = cost.outputTokens ?? 0;
+      estimatedCostUsd = cost.estimatedCostUsd ?? 0;
+    } catch {
+      // Malformed cost JSON — use zeros
+    }
+  }
+  const usageEvent: ModelUsageEvent = {
+    sessionId: agentId,
+    storyId,
+    projectId,
+    modelTier,
+    model,
+    inputTokens,
+    outputTokens,
+    estimatedCostUsd,
+    timestamp,
+  };
+  const aggregator = getModelUsageAggregator() ?? modelUsageAggregator;
+  aggregator.recordUsage(usageEvent);
+  logAuditEvent(auditDir, {
+    timestamp: usageEvent.timestamp,
+    event_type: "model_usage",
+    agent_id: agentId,
+    story_id: storyId,
+    model_tier: modelTier,
+    model,
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    estimated_cost_usd: estimatedCostUsd,
+  });
+}
 
 /**
  * Log an event to the JSONL audit trail
@@ -369,6 +429,22 @@ export function createCompletionHandler(
       duration_ms: event.duration,
     });
 
+    // Track model usage (Story 58.5) — non-fatal
+    try {
+      const raw = readMetadataRaw(sessionsDir, event.agentId as SessionId);
+      if (raw) {
+        captureModelUsage(
+          raw,
+          event.agentId,
+          event.storyId,
+          event.completedAt.toISOString(),
+          auditDir,
+        );
+      }
+    } catch {
+      // Usage tracking failure must never break completion flow
+    }
+
     // Capture session learning for AI intelligence (Cycle 3 — opt-in)
     try {
       const learningStore = getLearningStore();
@@ -462,6 +538,22 @@ export function createFailureHandler(
       signal: event.signal,
       duration_ms: event.duration,
     });
+
+    // Track model usage on failure (Story 58.5) — zero-values if cost unavailable
+    try {
+      const raw = readMetadataRaw(sessionsDir, event.agentId as SessionId);
+      if (raw) {
+        captureModelUsage(
+          raw,
+          event.agentId,
+          event.storyId,
+          event.failedAt.toISOString(),
+          auditDir,
+        );
+      }
+    } catch {
+      // Usage tracking failure must never break failure handling flow
+    }
 
     // Capture session learning for AI intelligence (Cycle 3 — opt-in, failures too)
     try {

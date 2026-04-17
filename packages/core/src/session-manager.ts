@@ -36,8 +36,19 @@ import {
   type PluginRegistry,
   type RuntimeHandle,
   type Issue,
+  type SessionEnhancementProvider,
+  type ProviderConfig,
+  type ModelTierMapping,
+  type ModelTier,
+  type HookRegistry,
+  type StoryContext,
+  type AgentMapping,
+  DEFAULT_MODEL_TIERS,
   PR_STATE,
 } from "./types.js";
+import { modelRoutingService } from "./model-routing.js";
+import { verifyInstallation, verifyOmcConfigure } from "./provider-verify.js";
+import { performMerge } from "./claudemd-merge.js";
 import {
   readMetadataRaw,
   readArchivedMetadataRaw,
@@ -164,6 +175,21 @@ export interface SessionManagerDeps {
   registry: PluginRegistry;
 }
 
+/**
+ * Resolve model tier mapping for a project.
+ * Cascade: project override > global config > DEFAULT_MODEL_TIERS.
+ */
+export function resolveModelTiers(
+  config: OrchestratorConfig,
+  project: ProjectConfig,
+): ModelTierMapping {
+  return (
+    project.sessionEnhancement?.modelTiers ??
+    config.sessionEnhancement?.modelTiers ??
+    DEFAULT_MODEL_TIERS
+  );
+}
+
 /** Create a SessionManager instance. */
 export function createSessionManager(deps: SessionManagerDeps): SessionManager {
   const { config, registry } = deps;
@@ -229,6 +255,24 @@ export function createSessionManager(deps: SessionManagerDeps): SessionManager {
     const scm = project.scm ? registry.get<SCM>("scm", project.scm.plugin) : null;
 
     return { runtime, agent, workspace, tracker, scm };
+  }
+
+  /**
+   * Resolve the session enhancement provider for a project.
+   * Falls back to "raw" if no provider configured or if the configured provider is not loaded.
+   */
+  function resolveProvider(project: ProjectConfig): {
+    provider: SessionEnhancementProvider | null;
+    providerConfig: ProviderConfig;
+  } {
+    const providerName =
+      project.sessionEnhancement?.provider ?? config.sessionEnhancement?.provider ?? "raw";
+    const provider = registry.get<SessionEnhancementProvider>("provider", providerName);
+    // Fall back to "raw" if configured provider is not loaded
+    const resolved = provider ?? registry.get<SessionEnhancementProvider>("provider", "raw");
+    const providerConfig =
+      project.sessionEnhancement?.config ?? config.sessionEnhancement?.config ?? {};
+    return { provider: resolved, providerConfig };
   }
 
   /**
@@ -462,6 +506,85 @@ export function createSessionManager(deps: SessionManagerDeps): SessionManager {
       }
     }
 
+    // Session Enhancement Provider — install after workspace, before agent launch (Epic 58, Story 58.1)
+    const { provider: resolvedProvider, providerConfig } = resolveProvider(project);
+    const rawProvider = registry.get<SessionEnhancementProvider>("provider", "raw");
+    let activeProvider: SessionEnhancementProvider | null = resolvedProvider ?? rawProvider ?? null;
+    let providerFallback = false;
+
+    // Circuit breaker check: if provider health monitor says breaker is OPEN, fall back to raw (Story 58.6)
+    if (activeProvider && activeProvider.name !== "raw") {
+      try {
+        const { getProviderHealthMonitor } = await import("./service-registry.js");
+        const healthMonitor = getProviderHealthMonitor();
+        if (healthMonitor && !healthMonitor.isProviderAvailable()) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[provider] circuit breaker OPEN for ${activeProvider.name}, falling back to raw`,
+          );
+          if (rawProvider) {
+            activeProvider = rawProvider;
+            providerFallback = true;
+          }
+        }
+      } catch {
+        // Health monitor not available — continue with resolved provider
+      }
+    }
+
+    if (!activeProvider) {
+      // Neither configured nor raw provider available — skip provider flow silently
+    } else if (workspacePath) {
+      try {
+        // Health check before install
+        const health = await activeProvider.healthCheck();
+        if (!health.healthy) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[provider] ${activeProvider.name} unhealthy: ${health.message ?? "unknown"}, falling back to raw`,
+          );
+          if (rawProvider) activeProvider = rawProvider;
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[provider] health check failed, falling back to raw:`, err);
+        if (rawProvider) activeProvider = rawProvider;
+      }
+
+      try {
+        await activeProvider.install(workspacePath, providerConfig);
+
+        // Post-install verification (Epic 59, Story 59-3)
+        try {
+          const result = await verifyInstallation(workspacePath, activeProvider.name);
+          if (!result.verified) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[provider] ${activeProvider.name} verification failed, missing: ${result.missing.join(", ")}. Falling back to raw.`,
+            );
+            if (rawProvider) {
+              activeProvider = rawProvider;
+            }
+          }
+        } catch (verifyErr) {
+          // Verification itself failed (permissions, I/O) — log and continue
+          // eslint-disable-next-line no-console
+          console.warn(`[provider] verification error:`, verifyErr);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[provider] install failed, falling back to raw:`, err);
+        if (rawProvider) {
+          activeProvider = rawProvider;
+          try {
+            await rawProvider.install(workspacePath, {});
+          } catch {
+            // Best effort — raw install should be a no-op anyway
+          }
+        }
+      }
+    }
+
     // Generate prompt with validated issue
     let issueContext: string | undefined;
     if (spawnConfig.issueId && plugins.tracker && resolvedIssue) {
@@ -502,14 +625,194 @@ export function createSessionManager(deps: SessionManagerDeps): SessionManager {
       learnings,
     });
 
+    // Provider configure — set up story context in workspace before agent launch
+    const storyContext: StoryContext = {
+      storyId: spawnConfig.issueId ?? "",
+      storyTitle: resolvedIssue?.title,
+      acceptanceCriteria: [] as string[] | undefined,
+      relevantFiles: [] as string[] | undefined,
+      dependencies: [] as string[] | undefined,
+    };
+
+    // Story-level agent override extracted from <!-- ao-agents: [...] --> comment
+    let storyOverrideAgents: string[] | undefined;
+
+    // Enrich storyContext from implementation artifact (best-effort)
+    if (spawnConfig.issueId) {
+      try {
+        const storyDir =
+          typeof project.tracker?.["storyDir"] === "string"
+            ? join(project.path, project.tracker["storyDir"] as string)
+            : join(project.path, "_bmad-output/implementation-artifacts");
+        const artifactPath = join(storyDir, `${spawnConfig.issueId}.md`);
+        if (existsSync(artifactPath)) {
+          const { readFile: readFileAsync } = await import("node:fs/promises");
+          const artifactContent = await readFileAsync(artifactPath, "utf-8");
+          // Extract acceptance criteria from "## Acceptance Criteria" section
+          const acMatch = artifactContent.match(
+            /## Acceptance Criteria\s*\n([\s\S]*?)(?=\n## (?![#])|\n---|$)/,
+          );
+          if (acMatch?.[1]) {
+            const acs = acMatch[1]
+              .split("\n")
+              .map((l) => l.trim())
+              .filter((l) => l.startsWith("- ") || /^\d+\./.test(l));
+            if (acs.length > 0) {
+              storyContext.acceptanceCriteria = acs;
+            }
+          }
+          // Extract relevant files from Dev Notes → File Change Impact table (all extensions)
+          const fileMatch = artifactContent.match(
+            /\| `([^`]+\.\w+)` \| (?:NEW|MODIFY|MODIFIED) \|/g,
+          );
+          if (fileMatch && fileMatch.length > 0) {
+            storyContext.relevantFiles = fileMatch.map((m) => m.match(/`([^`]+)`/)?.[1] ?? m);
+          }
+          // Extract dependencies from Dev Notes or Dependency Review sections
+          const depMatch = artifactContent.match(
+            /## Dependencies[\s\S]*?\n([\s\S]*?)(?=\n## |\n---|$)/,
+          );
+          if (depMatch?.[1]) {
+            const deps = depMatch[1]
+              .split("\n")
+              .map((l) => l.trim())
+              .filter((l) => l.startsWith("- ") || l.startsWith("* "));
+            if (deps.length > 0) {
+              storyContext.dependencies = deps.map((d) => d.replace(/^[-*]\s+/, ""));
+            }
+          }
+          // Extract story-level agent override: <!-- ao-agents: ["agent1", "agent2"] -->
+          const agentsMatch = artifactContent.match(/<!--\s*ao-agents:\s*(\[[\s\S]*?\])\s*-->/);
+          if (agentsMatch?.[1]) {
+            try {
+              const parsed = JSON.parse(agentsMatch[1]);
+              if (Array.isArray(parsed) && parsed.length > 0 && typeof parsed[0] === "string") {
+                storyOverrideAgents = parsed;
+              }
+            } catch {
+              // Invalid JSON — skip story-level override
+            }
+          }
+        }
+      } catch {
+        // Best-effort — enrichment failure must never block spawning
+      }
+    }
+    if (workspacePath && activeProvider) {
+      try {
+        await activeProvider.configure(workspacePath, storyContext);
+
+        // Post-configure verification (Epic 59, Story 59-3)
+        try {
+          const result = await verifyOmcConfigure(workspacePath);
+          if (!result.verified) {
+            // eslint-disable-next-line no-console
+            console.warn(
+              `[provider] post-configure verification: missing ${result.missing.join(", ")}. Session continues — no fallback.`,
+            );
+          }
+        } catch {
+          // Verification failure must never block spawn
+        }
+
+        // CLAUDE.md merge — project rules + provider additions (Epic 59, Story 59-4)
+        try {
+          const mergeResult = await performMerge(workspacePath, activeProvider.name);
+          if (mergeResult.merged) {
+            // eslint-disable-next-line no-console
+            console.log(`[provider] CLAUDE.md merged successfully at ${mergeResult.path}`);
+          }
+        } catch (mergeErr) {
+          // Merge failure must never block spawn — agent still has project CLAUDE.md
+          // eslint-disable-next-line no-console
+          console.warn("[provider] CLAUDE.md merge failed:", mergeErr);
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[provider] configure failed, falling back to raw:`, err);
+        if (rawProvider) {
+          try {
+            await rawProvider.configure(workspacePath, storyContext);
+          } catch {
+            // Raw provider configure is no-op, but guard anyway
+          }
+        }
+      }
+    }
+
+    // Hook registry — compaction survival hooks (Epic 59, Story 59-2)
+    // Story-type hook profiles (Epic 59, Story 59-5)
+    // Initialize only for non-raw providers; raw sessions have no compact lifecycle.
+    let hookRegistry: HookRegistry | undefined;
+    let hookMetadata: Record<string, string> = {};
+    if (activeProvider && activeProvider.name !== "raw") {
+      try {
+        const { createHookRegistry, detectStoryType, HOOK_PROFILES, registerHooksForProfile } =
+          await import("./hooks.js");
+        hookRegistry = createHookRegistry();
+        const storyType = detectStoryType(storyContext.storyId, storyContext.storyTitle);
+        storyContext.storyType = storyType;
+        let profile = HOOK_PROFILES[storyType];
+        // Merge per-project config override if present
+        const configOverride = project.sessionEnhancement?.hookProfile;
+        if (configOverride) {
+          profile = {
+            ...profile,
+            ...configOverride,
+            // Deep-merge metadata so override adds to, not replaces, base profile
+            metadata: { ...profile.metadata, ...configOverride.metadata },
+          };
+        }
+        registerHooksForProfile(hookRegistry, profile);
+        // Store profile metadata for merge into sessionMetadata during pre-compact
+        hookMetadata = profile.metadata;
+      } catch {
+        // Hook registry failure must never block spawning
+      }
+    }
+
+    // Agent mapping — resolve which OMC agents to activate per story type (Epic 59, Story 59-6)
+    // Story-level override (<!-- ao-agents -->) > project config > defaults
+    if (activeProvider && activeProvider.name !== "raw") {
+      try {
+        const { resolveAgentMapping } = await import("./agent-mapping.js");
+        let resolved: AgentMapping = resolveAgentMapping(
+          storyContext.storyType,
+          project.sessionEnhancement?.agentMappings,
+        );
+        // Story-level override takes highest priority
+        if (storyOverrideAgents && storyOverrideAgents.length > 0) {
+          resolved = { ...resolved, agents: storyOverrideAgents };
+        }
+        storyContext.agents = resolved;
+      } catch {
+        // Agent mapping failure must never block spawning
+      }
+    }
+
     // Get agent launch config and create runtime — clean up workspace on failure
+    const isRoutingActive = activeProvider !== null && activeProvider.name !== "raw";
+
+    let routedModel: string | undefined;
+    let routedTier: ModelTier | undefined;
+    if (isRoutingActive) {
+      const tier = modelRoutingService.resolveTier({
+        storyKey: spawnConfig.issueId ?? "",
+        explicitTier: spawnConfig.modelTier,
+        defaultTier: config.sessionEnhancement?.config?.defaultTier as ModelTier | undefined,
+        sessionId,
+      });
+      routedModel = modelRoutingService.tierToModel(tier, config, project);
+      routedTier = tier;
+    }
+
     const agentLaunchConfig = {
       sessionId,
       projectConfig: project,
       issueId: spawnConfig.issueId,
       prompt: composedPrompt ?? spawnConfig.prompt,
       permissions: project.agentConfig?.permissions,
-      model: project.agentConfig?.model,
+      model: isRoutingActive ? routedModel : project.agentConfig?.model,
     };
 
     let handle: RuntimeHandle;
@@ -560,7 +863,16 @@ export function createSessionManager(deps: SessionManagerDeps): SessionManager {
       agentInfo: null,
       createdAt: new Date(),
       lastActivityAt: new Date(),
-      metadata: {},
+      metadata: {
+        ...(routedTier && { "ao:modelTier": routedTier }),
+        ...(routedModel && { "ao:model": routedModel }),
+        ...(providerFallback && { "ao:providerFallback": "true" }),
+        ...(storyContext.agents?.executionMode && {
+          "ao:executionMode": storyContext.agents.executionMode,
+        }),
+        ...hookMetadata,
+      },
+      ...(hookRegistry && { hookRegistry }),
     };
 
     try {
@@ -860,6 +1172,21 @@ export function createSessionManager(deps: SessionManagerDeps): SessionManager {
           } catch {
             // Runtime might already be gone
           }
+        }
+      }
+    }
+
+    // Provider teardown — clean up provider artifacts before workspace destruction
+    const worktreeForTeardown = raw["worktree"];
+    if (worktreeForTeardown) {
+      const { provider: teardownProvider } = project
+        ? resolveProvider(project)
+        : { provider: null };
+      if (teardownProvider) {
+        try {
+          await teardownProvider.teardown(worktreeForTeardown);
+        } catch {
+          // Provider teardown failure must not block kill
         }
       }
     }
@@ -1245,5 +1572,74 @@ export function createSessionManager(deps: SessionManagerDeps): SessionManager {
     return restoredSession;
   }
 
-  return { spawn, spawnOrchestrator, restore, list, get, kill, cleanup, send };
+  // -------------------------------------------------------------------------
+  // Compaction survival hooks (Epic 59, Story 59-2)
+  // -------------------------------------------------------------------------
+
+  /** Store hook registries keyed by session ID for lifecycle access. */
+  const hookRegistries = new Map<SessionId, HookRegistry>();
+
+  /**
+   * Run pre-compact hooks for a session.
+   * Saves working state to notepad and project-memory before compaction.
+   */
+  async function runPreCompactHooks(
+    sessionId: SessionId,
+    sessionMetadata: Record<string, string> = {},
+  ): Promise<void> {
+    const registry = hookRegistries.get(sessionId);
+    if (!registry) return; // No hooks registered for this session
+
+    // Find the session to get worktreePath
+    const session = await get(sessionId);
+    if (!session?.workspacePath) return;
+
+    await registry.runPreCompact(session.workspacePath, sessionMetadata);
+  }
+
+  /**
+   * Run post-compact hooks for a session.
+   * Returns context string to re-inject into the session after compaction.
+   */
+  async function runPostCompactHooks(sessionId: SessionId): Promise<string> {
+    const registry = hookRegistries.get(sessionId);
+    if (!registry) return ""; // No hooks registered
+
+    const session = await get(sessionId);
+    if (!session?.workspacePath) return "";
+
+    return registry.runPostCompact(session.workspacePath);
+  }
+
+  // Monkey-patch spawn to also register the hook registry in our map.
+  // This is cleaner than modifying the large spawn function.
+  const originalSpawn = spawn;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const wrappedSpawn = (async (config: any) => {
+    const session = await originalSpawn(config as SessionSpawnConfig);
+    if (session.hookRegistry) {
+      hookRegistries.set(session.id, session.hookRegistry);
+    }
+    return session;
+  }) as typeof spawn;
+
+  // Clean up hook registry on kill
+  const originalKill = kill;
+  const wrappedKill = (async (sessionId: SessionId) => {
+    hookRegistries.delete(sessionId);
+    await originalKill(sessionId);
+  }) as typeof kill;
+
+  return {
+    spawn: wrappedSpawn,
+    spawnOrchestrator,
+    restore,
+    list,
+    get,
+    kill: wrappedKill,
+    cleanup,
+    send,
+    runPreCompactHooks,
+    runPostCompactHooks,
+  };
 }

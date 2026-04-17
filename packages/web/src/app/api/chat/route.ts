@@ -83,7 +83,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!response.ok) {
       // Log full error server-side, return generic message to client
       const errorText = await response.text().catch(() => "unknown");
-      // eslint-disable-next-line no-console
       console.error(`[chat] Anthropic API error (${response.status}):`, errorText);
       return NextResponse.json({
         answer: `LLM request failed (${response.status}). Check your API key and try again.`,

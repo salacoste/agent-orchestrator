@@ -2314,4 +2314,182 @@ describe("NotificationService", () => {
       await service.close();
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Dedup count tracking (Story 57.15)
+  // -------------------------------------------------------------------------
+
+  describe("dedup count tracking", () => {
+    it("first notification has no _dedupOccurrences in metadata", async () => {
+      const plugin = mockPlugins[0];
+      await notificationService.send({
+        eventId: randomUUID(),
+        eventType: "agent.blocked",
+        priority: "critical",
+        title: "Test",
+        message: "Agent blocked",
+        metadata: { agentId: "agent-1" },
+        timestamp: new Date().toISOString(),
+      });
+
+      expect(plugin.send).toHaveBeenCalledTimes(1);
+      const sentNotification = (plugin.send as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as Notification;
+      expect(sentNotification.metadata?._dedupOccurrences).toBeUndefined();
+    });
+
+    it("duplicate notifications are still suppressed", async () => {
+      const base = {
+        eventId: randomUUID(),
+        eventType: "agent.blocked",
+        priority: "critical",
+        title: "Test",
+        message: "Agent blocked",
+        metadata: { agentId: "agent-1" },
+        timestamp: new Date().toISOString(),
+      };
+
+      await notificationService.send({ ...base });
+      const result = await notificationService.send({
+        ...base,
+        eventId: randomUUID(),
+      });
+
+      expect(result.duplicate).toBe(true);
+    });
+
+    it("after duplicates suppressed, next notification carries _dedupOccurrences count", async () => {
+      const base = {
+        eventType: "agent.blocked",
+        priority: "critical",
+        title: "Test",
+        message: "Agent blocked",
+        metadata: { agentId: "agent-1" },
+        timestamp: new Date().toISOString(),
+      };
+
+      // First notification
+      await notificationService.send({ ...base, eventId: randomUUID() });
+
+      // Send 4 duplicates
+      for (let i = 0; i < 4; i++) {
+        await notificationService.send({ ...base, eventId: randomUUID() });
+      }
+
+      // Advance past dedup window (5 minutes)
+      vi.advanceTimersByTime(301_000);
+
+      // Next notification should carry the count
+      const plugin = mockPlugins[0];
+      (plugin.send as ReturnType<typeof vi.fn>).mockClear();
+
+      await notificationService.send({ ...base, eventId: randomUUID() });
+
+      expect(plugin.send).toHaveBeenCalledTimes(1);
+      const sentNotification = (plugin.send as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as Notification;
+      // 4 duplicates + 1 current = 5 total
+      expect(sentNotification.metadata?._dedupOccurrences).toBe(5);
+      expect(sentNotification.metadata?._dedupWindowMs).toBe(300000);
+    });
+
+    it("_dedupOccurrences count resets after being carried forward", async () => {
+      const base = {
+        eventType: "agent.blocked",
+        priority: "critical",
+        title: "Test",
+        message: "Agent blocked",
+        metadata: { agentId: "agent-1" },
+        timestamp: new Date().toISOString(),
+      };
+
+      // First notification + duplicates
+      await notificationService.send({ ...base, eventId: randomUUID() });
+      await notificationService.send({ ...base, eventId: randomUUID() }); // duplicate
+      vi.advanceTimersByTime(301_000);
+
+      // Carry-forward notification
+      await notificationService.send({ ...base, eventId: randomUUID() });
+
+      // Wait for another window, send again — should NOT carry previous count
+      vi.advanceTimersByTime(301_000);
+      const plugin = mockPlugins[0];
+      (plugin.send as ReturnType<typeof vi.fn>).mockClear();
+
+      await notificationService.send({ ...base, eventId: randomUUID() });
+
+      expect(plugin.send).toHaveBeenCalledTimes(1);
+      const sentNotification = (plugin.send as ReturnType<typeof vi.fn>).mock
+        .calls[0][0] as Notification;
+      // No previous duplicates in this window — should be undefined
+      expect(sentNotification.metadata?._dedupOccurrences).toBeUndefined();
+    });
+
+    it("getStatus().dedupByType reflects per-type dedup counts", async () => {
+      // agent-1: 1 original + 2 duplicates
+      await notificationService.send({
+        eventId: randomUUID(),
+        eventType: "agent.blocked",
+        priority: "critical",
+        title: "Test",
+        message: "Agent blocked",
+        metadata: { agentId: "agent-1" },
+        timestamp: new Date().toISOString(),
+      });
+      await notificationService.send({
+        eventId: randomUUID(),
+        eventType: "agent.blocked",
+        priority: "critical",
+        title: "Test",
+        message: "Agent blocked",
+        metadata: { agentId: "agent-1" },
+        timestamp: new Date().toISOString(),
+      });
+      await notificationService.send({
+        eventId: randomUUID(),
+        eventType: "agent.blocked",
+        priority: "critical",
+        title: "Test",
+        message: "Agent blocked",
+        metadata: { agentId: "agent-1" },
+        timestamp: new Date().toISOString(),
+      });
+
+      const status = notificationService.getStatus();
+      expect(status.dedupByType["agent.blocked"]).toBe(2);
+    });
+
+    it("cleanExpiredDedupKeys cleans up zero-count dedup counts", async () => {
+      // Send one notification, let it expire without duplicates
+      await notificationService.send({
+        eventId: randomUUID(),
+        eventType: "agent.offline",
+        priority: "warning",
+        title: "Test",
+        message: "Agent offline",
+        metadata: { agentId: "agent-x" },
+        timestamp: new Date().toISOString(),
+      });
+
+      // Advance past dedup window — no duplicates means count is 0
+      vi.advanceTimersByTime(301_000);
+
+      // Send a new notification to trigger cleanExpiredDedupKeys
+      await notificationService.send({
+        eventId: randomUUID(),
+        eventType: "agent.offline",
+        priority: "warning",
+        title: "Test",
+        message: "Agent offline",
+        metadata: { agentId: "agent-x" },
+        timestamp: new Date().toISOString(),
+      });
+
+      const status = notificationService.getStatus();
+      // Zero-count entries should be cleaned up
+      // dedupByType may or may not have agent.offline depending on timing,
+      // but it should NOT have a stale zero-count entry
+      expect(status.dedupByType["agent.offline"]).toBeUndefined();
+    });
+  });
 });

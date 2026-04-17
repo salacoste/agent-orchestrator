@@ -55,6 +55,7 @@ const DEFAULT_DEDUP_WINDOWS: Record<string, number> = {
   "agent.offline": 300000, // 5 min
   "conflict.detected": 600000, // 10 min
   "eventbus.backlog": 600000, // 10 min
+  "dependency.blocking": 1800000, // 30 min (Story 51.5)
 };
 
 /** Default event-type-to-notification trigger map.
@@ -68,6 +69,7 @@ const DEFAULT_TRIGGER_MAP: Record<string, NotificationTrigger> = {
   "conflict.detected": { priority: "critical", title: "Conflict Detected" },
   "eventbus.backlog": { priority: "critical", title: "Event Bus Backlog" },
   "agent.offline": { priority: "warning", title: "Agent Offline" },
+  "dependency.blocking": { priority: "warning", title: "Cross-Project Dependency Blocking" }, // Story 51.5
   "story.completed": { priority: "info", title: "Story Completed" },
   "story.started": { priority: "info", title: "Story Started" },
   "story.assigned": { priority: "info", title: "Story Assigned" },
@@ -102,6 +104,7 @@ export class NotificationServiceImpl implements NotificationService {
   private processing = false;
   private closed = false;
   private dedupCount = 0; // Track actual duplicates, not all tracked notifications
+  private dedupCounts: Map<string, number> = new Map(); // Per-key dedup occurrence counts
   private eventBusUnsubscribe: (() => void) | null = null; // Store unsubscribe function
   private digestBuffer: Notification[] = [];
   private digestTimer: ReturnType<typeof setInterval> | null = null;
@@ -110,6 +113,7 @@ export class NotificationServiceImpl implements NotificationService {
     queueDepth: 0,
     dedupCount: 0,
     dlqSize: 0,
+    dedupByType: {},
   };
 
   constructor(config: NotificationServiceConfig) {
@@ -170,6 +174,8 @@ export class NotificationServiceImpl implements NotificationService {
     if (this.dedupSet.has(dedupKey)) {
       this.dedupCount++;
       this.stats.dedupCount = this.dedupCount;
+      // Track per-key occurrence count for carry-forward
+      this.dedupCounts.set(dedupKey, (this.dedupCounts.get(dedupKey) ?? 0) + 1);
       return {
         success: true,
         deliveredPlugins: [],
@@ -185,6 +191,21 @@ export class NotificationServiceImpl implements NotificationService {
       eventType: notification.eventType,
       expiresAt: Date.now() + this.getDedupWindow(notification.eventType),
     });
+
+    // Carry forward dedup occurrence count from previous window (if any)
+    const previousCount = this.dedupCounts.get(dedupKey);
+    if (previousCount && previousCount > 0) {
+      const enrichedNotification: Notification = {
+        ...notification,
+        metadata: {
+          ...(notification.metadata ?? {}),
+          _dedupOccurrences: previousCount + 1, // +1 for the current notification itself
+          _dedupWindowMs: this.getDedupWindow(notification.eventType),
+        },
+      };
+      this.dedupCounts.delete(dedupKey); // Reset after carrying forward
+      notification = enrichedNotification;
+    }
 
     // Track as pending for backlog detection
     this.queue.push({
@@ -250,7 +271,18 @@ export class NotificationServiceImpl implements NotificationService {
    * Get notification queue status
    */
   getStatus(): NotificationStatus {
-    return { ...this.stats, queueDepth: this.queue.length, dlqSize: this.deadLetterQueue.length };
+    // Build dedupByType from dedupCounts by extracting eventType from key
+    const dedupByType: Record<string, number> = {};
+    for (const [key, count] of this.dedupCounts) {
+      const eventType = key.split(":")[0];
+      dedupByType[eventType] = (dedupByType[eventType] ?? 0) + count;
+    }
+    return {
+      ...this.stats,
+      queueDepth: this.queue.length,
+      dlqSize: this.deadLetterQueue.length,
+      dedupByType,
+    };
   }
 
   /**
@@ -335,6 +367,7 @@ export class NotificationServiceImpl implements NotificationService {
     this.dedupSet.clear();
     this.dedupKeys = [];
     this.dedupCount = 0;
+    this.dedupCounts.clear();
     this.digestBuffer = [];
     this.history = [];
     this.updateStats();
@@ -678,6 +711,14 @@ export class NotificationServiceImpl implements NotificationService {
     for (const key of this.dedupKeys) {
       if (key.expiresAt > now) {
         activeKeys.add(`${key.eventType}:${key.entityId}`);
+      }
+    }
+
+    // Prune dedupCounts for keys that have expired AND have no count worth keeping.
+    // Keys with counts > 0 are kept so the next event can carry forward the count.
+    for (const [key] of this.dedupCounts) {
+      if (!activeKeys.has(key) && (this.dedupCounts.get(key) ?? 0) === 0) {
+        this.dedupCounts.delete(key);
       }
     }
 

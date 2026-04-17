@@ -8,7 +8,10 @@ import { CfdChart } from "./CfdChart";
 import { CreateStoryForm } from "./CreateStoryForm";
 import { CycleTimeChart } from "./CycleTimeChart";
 import { DependencyGraphView } from "./DependencyGraphView";
+import { ForecastAccuracyChart } from "./ForecastAccuracyChart";
 import { MonteCarloChart } from "./MonteCarloChart";
+import { SimulationConfigPanel } from "./SimulationConfigPanel";
+import { useSimulationConfig } from "@/lib/useSimulationConfig";
 import { EpicManager } from "./EpicManager";
 import { EpicProgress, type EpicSummary } from "./EpicProgress";
 import { HealthIndicators } from "./HealthIndicators";
@@ -102,6 +105,11 @@ function buildColumnColors(meta?: ColumnMetaEntry[]): Record<string, string> {
 }
 
 export function SprintBoard({ projectId }: { projectId: string }) {
+  const {
+    config: simConfig,
+    setConfig: setSimConfig,
+    reset: resetSimConfig,
+  } = useSimulationConfig(projectId);
   const [data, setData] = useState<SprintData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -121,6 +129,7 @@ export function SprintBoard({ projectId }: { projectId: string }) {
     limit: number;
   } | null>(null);
   const [sprintEndDate, setSprintEndDate] = useState<string | null>(null);
+  const [dataPointsUsed, setDataPointsUsed] = useState<number | undefined>(undefined);
   const [cycleData, setCycleData] = useState<{
     cycles: Array<{ cycle: string[]; length: number; statuses: Record<string, string> }>;
     totalCycles: number;
@@ -634,7 +643,24 @@ export function SprintBoard({ projectId }: { projectId: string }) {
             <ReworkChart projectId={projectId} epicFilter={activeEpic} />
           </SectionCard>
           <SectionCard title="Monte Carlo Forecast">
-            <MonteCarloChart projectId={projectId} epicFilter={activeEpic} />
+            <SimulationConfigPanel
+              config={simConfig}
+              dataPointsUsed={dataPointsUsed}
+              onChange={setSimConfig}
+              onReset={resetSimConfig}
+            />
+            <MonteCarloChart
+              projectId={projectId}
+              epicFilter={activeEpic}
+              simulations={simConfig.simulations}
+              confidenceLevels={simConfig.confidenceLevels}
+              throughputWindowDays={simConfig.throughputWindowDays}
+              excludeWeekends={simConfig.excludeWeekends}
+              onEffectiveConfig={(cfg) => setDataPointsUsed(cfg.dataPointsUsed)}
+            />
+          </SectionCard>
+          <SectionCard title="Forecast Accuracy">
+            <ForecastAccuracyChart projectId={projectId} />
           </SectionCard>
           <SectionCard title="History Search">
             <HistorySearchView projectId={projectId} epicFilter={activeEpic} />

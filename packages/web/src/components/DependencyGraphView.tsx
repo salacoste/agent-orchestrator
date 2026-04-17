@@ -27,13 +27,7 @@ const NODE_H = 36;
 const LAYER_GAP = 160;
 const NODE_GAP = 56;
 
-const STATUS_FILL: Record<string, string> = {
-  backlog: "#3f3f46",
-  "ready-for-dev": "#a16207",
-  "in-progress": "#1d4ed8",
-  review: "#7e22ce",
-  done: "#15803d",
-};
+import { STATUS_FILL } from "@/lib/status-colors";
 
 /** Topological sort → assign depth layers. Returns storyId→depth map. */
 function assignLayers(graph: DependencyGraph): Map<string, number> {

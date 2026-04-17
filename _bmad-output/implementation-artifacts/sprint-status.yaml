@@ -1,4 +1,4 @@
-# generated: 2026-03-21
+# generated: 2026-04-03
 # project: agent-orchestrator
 # project_key: NOKEY
 # tracking_system: file-system
@@ -43,9 +43,11 @@
 # epics-cycle-7.md — Epics 34-37 (13 stories), Planning Cycle 7
 # epics-cycle-8.md — Epics 38-42 (23 stories), Planning Cycle 8
 # epics-cycle-9.md — Epics 43-48 (43 stories), Planning Cycle 9
-# Total: 49 epics, 241 stories
+# epics-cycle-10.md — Epics 49-57 (65 stories), Planning Cycle 10
+# epics-cycle-11.md — Epics 58-61 (29 stories), Planning Cycle 11
+# Total: 62 epics, 335 stories
 
-generated: 2026-03-21
+generated: 2026-04-03
 project: agent-orchestrator
 project_key: NOKEY
 tracking_system: file-system
@@ -598,6 +600,198 @@ previous_cycle:
   48-6-spike-swarm-intelligence: done
   epic-48-retrospective: done
 
+  # ==========================================================================
+  # CYCLE 10 — Multi-Project Management, Simulation & Telegram (Epics 49-57)
+  # Source: epics-cycle-10.md, prd-cycle-10.md
+  # Phase 1: Foundation (Epics 49-53)
+  # Phase 2: Intelligence (Epics 54-56)
+  # Phase 3: Integration (Epic 57)
+  # ==========================================================================
+
+  # Epic 49: Portfolio Dashboard
+  # FRs: FR-F1-1 to FR-F1-5 (Portfolio Dashboard)
+  # User Outcome: Users can view all configured projects in a single dashboard with aggregated metrics
+  epic-49: done
+  49-1-portfolio-dashboard-page-structure: done
+  49-2-aggregated-metrics-widget: done
+  49-3-project-drill-down-navigation: done
+  49-4-real-time-sse-updates: done
+  49-5-project-filtering: done
+  epic-49-retrospective: optional
+
+  # Epic 50: Shared Agent Pool
+  # FRs: FR-F2-1 to FR-F2-6 (Shared Agent Pool)
+  # User Outcome: Users can configure agents to work across multiple projects
+  epic-50: done
+  50-1-shared-pool-configuration: done
+  50-2-agent-reservation-exclusive-use: done
+  50-3-intelligent-allocation-algorithm: done
+  50-4-cross-project-story-assignment: done
+  50-5-agent-utilization-tracking: done
+  50-6-over-allocation-prevention: done
+  epic-50-retrospective: optional
+
+  # Epic 51: Cross-Project Dependencies
+  # FRs: FR-F3-1 to FR-F3-6 (Cross-Project Dependencies)
+  # User Outcome: Users can define dependencies between stories in different projects
+  epic-51: done
+  51-1-cross-project-dependency-definition: done
+  51-2-dependency-status-tracking: done
+  51-3-automatic-story-unblocking: done
+  51-4-cross-project-dependency-graph: done
+  51-5-dependency-blocking-notifications: done
+  51-6-circular-dependency-detection: done
+  epic-51-retrospective: optional
+
+  # Epic 52: Resource Conflict Detection
+  # FRs: FR-F4-1 to FR-F4-5 (Resource Conflicts)
+  # User Outcome: Users are alerted when multiple projects compete for resources
+  epic-52: done
+  52-1-resource-conflict-detection-engine: done
+  52-2-conflict-alert-dashboard: done
+  52-3-conflict-resolution-suggestions: done
+  52-4-conflict-resolution-policy-configuration: done
+  52-5-conflict-history-tracking: done
+  epic-52-retrospective: optional
+
+  # Epic 53: Unified Sprint View
+  # FRs: FR-F5-1 to FR-F5-5 (Unified Sprint View)
+  # User Outcome: Users can view all active sprints across projects in a single view
+  epic-53: done
+  53-1-unified-sprint-dashboard: done
+  53-2-sprint-progress-visualization: done
+  53-3-at-risk-sprint-identification: done
+  53-4-cross-project-velocity-comparison: done
+  53-5-sprint-filtering-aggregation: done
+  epic-53-retrospective: optional
+
+  # Epic 54: What-If Simulation Engine
+  # FRs: FR-E1-1 to FR-E1-6 (What-If Scenarios)
+  # User Outcome: Users can simulate changes before committing resources
+  epic-54: done
+  54-1-scenario-creation-interface: done
+  54-2-scenario-parameter-configuration: done
+  54-3-simulation-execution-engine: done
+  54-4-side-by-side-scenario-comparison: done
+  54-5-scenario-persistence-history: done
+  54-6-apply-scenario-to-production: done
+  epic-54-retrospective: optional
+
+  # Epic 55: Monte Carlo Forecasting
+  # FRs: FR-E2-1 to FR-E2-6 (Monte Carlo Forecasting)
+  # User Outcome: Users get probabilistic completion dates with confidence intervals
+  epic-55: done
+  55-1-monte-carlo-simulation-core: done
+  55-2-probability-distribution-visualization: done
+  55-3-historical-velocity-learning: done
+  55-4-automatic-forecast-updates: done
+  55-5-forecast-accuracy-tracking: done
+  55-6-simulation-parameter-configuration: done
+  epic-55-retrospective: optional
+
+  # Epic 56: Risk & Optimization Dashboard
+  # FRs: FR-E3-1 to FR-E3-6 (Risk Analysis) + FR-E4-1 to FR-E4-5 (Resource Optimization)
+  # User Outcome: Users can identify risks, analyze bottlenecks, and get optimization recommendations
+  epic-56: done
+  56-1-risk-dashboard-overview: done
+  56-2-bottleneck-identification: done
+  56-3-risk-score-calculation: done
+  56-4-emerging-risk-detection: done
+  56-5-configurable-risk-alerts: done
+  56-6-resource-utilization-metrics: done
+  56-7-optimization-recommendations: done
+  56-8-optimization-scenario-runner: done
+  56-9-underutilized-agent-detection: done
+  56-10-optimization-impact-analysis: done
+  56-11-optimization-learning-loop: done
+  epic-56-retrospective: optional
+
+  # Epic 57: Telegram Bot Integration
+  # FRs: FR-I1-1 to FR-I1-5 (Notifications) + FR-I2-1 to FR-I2-6 (Commands) + FR-I3-1 to FR-I3-5 (Interactive)
+  # User Outcome: Users can receive notifications and control orchestrator from Telegram
+  epic-57: done
+  57-1-telegram-bot-registration: done
+  57-2-critical-event-notifications: done
+  57-3-notification-preference-configuration: done
+  57-4-multi-channel-configuration: done
+  57-5-status-command: done
+  57-6-fleet-command: done
+  57-7-sprint-command: done
+  57-8-health-command: done
+  57-9-conflicts-command: done
+  57-10-project-context-in-commands: done
+  57-11-inline-action-buttons: done
+  57-12-interactive-approval-flow: done
+  57-13-story-quick-actions: done
+  57-14-multi-step-conversation-support: done
+  57-15-notification-deduplication: done
+  epic-57-retrospective: optional
+
+  # ==========================================================================
+  # CYCLE 11 — OMC Integration: Session Enhancement Platform (Epics 58-61)
+  # Source: epics-cycle-11.md
+  # Phase 1: Epic 58 (Foundation — Provider Abstraction)
+  # Phase 2: Epic 59 (Session Enhancement)
+  # Phase 3: Epics 60, 61 (parallel — Dashboard Intelligence, Learning & Quality)
+  # ==========================================================================
+
+  # Epic 58: Provider Abstraction & Model Routing
+  # FRs: FR-P1-1 to FR-P1-5 (Provider Interface), FR-P2-1 to FR-P2-5 (Model Routing)
+  # User Outcome: Every spawned session can be transparently enhanced by a configurable provider.
+  #   Model routing reduces costs 50-70% on simple tasks.
+  epic-58: done
+  58-1-session-enhancement-provider-interface: done
+  58-2-provider-configuration-discovery: done
+  58-3-omc-provider-implementation: done
+  58-4-model-routing-service: done
+  58-5-model-usage-tracking: done
+  58-6-provider-health-graceful-degradation: done
+  epic-58-retrospective: optional
+
+  # Epic 59: Session Lifecycle Enhancement
+  # FRs: FR-S1-1 to FR-S1-4 (Compaction Survival), FR-S2-1 to FR-S2-4 (Auto-Install), FR-S3-1 to FR-S3-3 (Agent Routing)
+  # User Outcome: Every session gets compaction survival, auto-installed enhancements, and smart agent routing.
+  # Depends on: Epic 58
+  epic-59: done
+  59-1-notepad-creation-story-context: done
+  59-2-compaction-survival-hooks: done
+  59-3-auto-install-omc-worktrees: done
+  59-4-claudemd-merge-strategy: done
+  59-5-story-type-hook-configuration: done
+  59-6-story-agent-mapping-configuration: done
+  59-7-persistence-aware-session-timeout: done
+  epic-59-retrospective: done
+
+  # Epic 60: Dashboard Intelligence
+  # FRs: FR-D1-1 to FR-D1-3 (Notepad), FR-D2-1 to FR-D2-3 (Timeline), FR-D3-1 to FR-D3-3 (Cost), FR-D4-1 to FR-D4-3 (State)
+  # User Outcome: Users see inside agent sessions: notepad, sub-agent timeline, cost breakdown, session state — all in real-time.
+  # Depends on: Epic 59 | Parallel with: Epic 61
+  epic-60: in-progress
+  60-1-notepad-api-route: done
+  60-2-notepad-dashboard-panel: done
+  60-3-agent-timeline-api-route: done
+  60-4-agent-activity-timeline-component: done
+  60-5-model-cost-api-route: done
+  60-6-model-cost-dashboard-panel: done
+  60-7-session-state-api-route: done
+  60-8-session-state-dashboard-panel: done
+  60-9-project-memory-api-viewer: done
+  epic-60-retrospective: optional
+
+  # Epic 61: Learning, Verification & Notifications
+  # FRs: FR-Q1-1 to FR-Q1-4 (Memory Bridge), FR-Q2-1 to FR-Q2-3 (Verification), FR-Q3-1 to FR-Q3-3 (Persistent), FR-Q4-1 to FR-Q4-4 (Notifications)
+  # User Outcome: Sessions learn from each other, stories are verified before completion, notifications reach users via Telegram/Discord/Slack.
+  # Depends on: Epic 59 | Parallel with: Epic 60
+  epic-61: backlog
+  61-1-cross-session-memory-bridge: backlog
+  61-2-project-memory-dashboard-viewer: backlog
+  61-3-verification-gate-service: backlog
+  61-4-auto-retry-verification-failure: backlog
+  61-5-persistent-execution-mode: backlog
+  61-6-telegram-notifier-plugin: backlog
+  61-7-discord-slack-notifier-plugins: backlog
+  epic-61-retrospective: optional
+
 # Known Limitations & Feature Flags
 limitations:
   runtime-exit-code-detection:
@@ -640,3 +834,15 @@ dependencies:
     approved: true
     reviewed_at: "2026-03-09"
     added_in: "Story 2-1-1 (Integration Test Framework)"
+  grammy:
+    version: "^1.36.0"
+    license: MIT
+    approved: true
+    reviewed_at: "2026-04-08"
+    added_in: "Story 57-1 (Telegram Bot Registration)"
+  "@grammyjs/conversations":
+    version: "^2.1.1"
+    license: MIT
+    approved: true
+    reviewed_at: "2026-04-10"
+    added_in: "Story 57-14 (Multi-Step Conversation Support)"

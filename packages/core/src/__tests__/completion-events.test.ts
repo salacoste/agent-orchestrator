@@ -33,7 +33,7 @@ function createTempProject(): { dir: string; configPath: string } {
   );
 
   const configPath = join(dir, "agent-orchestrator.yaml");
-  writeFileSync(configPath, "# mock config\n", "utf-8");
+  writeFileSync(configPath, "projects: {}\n", "utf-8");
 
   return { dir, configPath };
 }

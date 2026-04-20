@@ -615,6 +615,17 @@ export function createSessionManager(deps: SessionManagerDeps): SessionManager {
       }
     }
 
+    // Inject cross-session memory if opt-in via config (Epic 61, Story 61-1)
+    let crossSessionMemoryLayer = "";
+    if (project.learning?.crossSessionMemory) {
+      try {
+        const { buildCrossSessionMemoryLayer } = await import("./memory-bridge.js");
+        crossSessionMemoryLayer = await buildCrossSessionMemoryLayer(project.path);
+      } catch {
+        // Cross-session memory injection failure must never block spawning
+      }
+    }
+
     const composedPrompt = buildPrompt({
       project,
       projectId: spawnConfig.projectId,
@@ -623,6 +634,7 @@ export function createSessionManager(deps: SessionManagerDeps): SessionManager {
       storyContext: spawnConfig.storyContext,
       userPrompt: spawnConfig.prompt,
       learnings,
+      crossSessionMemory: crossSessionMemoryLayer || undefined,
     });
 
     // Provider configure — set up story context in workspace before agent launch

@@ -1083,3 +1083,41 @@ export type { SessionState, ActiveModeState, SessionHealth } from "./types.js";
 // Project Memory — typed reader/writer for .omc/project-memory.json (Epic 60, Story 60-9)
 export { readProjectMemory, writeProjectMemory, emptyProjectMemory } from "./project-memory.js";
 export type { ProjectMemory, ProjectMemoryEntry, ProjectMemoryEntryType } from "./types.js";
+
+// Memory Bridge — cross-session knowledge persistence (Epic 61, Story 61-1)
+export {
+  computeContentHash,
+  extractMemoryFromWorkspace,
+  deduplicateEntries,
+  appendEntries,
+  loadAccumulatedMemory,
+  removeEntry,
+  updateEntry,
+  extractAndBridgeMemory,
+  buildCrossSessionMemoryLayer,
+} from "./memory-bridge.js";
+export type { CrossSessionMemoryEntry } from "./types.js";
+
+// Verification Gate — quality checks before story completion (Story 61-3)
+// Verification Retry — auto-retry on verification failure (Story 61-4)
+// Persistent Execution — re-queue persistent sessions on verification failure (Story 61-5)
+export {
+  runVerification,
+  storeVerificationResult,
+  loadVerificationResult,
+  getVerificationRetryCount,
+  storeVerificationRetryAttempt,
+  loadVerificationRetryHistory,
+  writeRetryContextToNotepad,
+  scheduleVerificationRetry,
+  getExecutionMode,
+  getPersistentRequeueCount,
+  storePersistentRequeueAttempt,
+  schedulePersistentRequeue,
+} from "./verification-gate.js";
+
+export type {
+  VerificationRetryConfig,
+  VerificationRetryAttempt,
+  PersistentConfig,
+} from "./types.js";

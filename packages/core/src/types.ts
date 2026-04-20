@@ -815,7 +815,10 @@ export type EventType =
   | "agent.resumed"
   // Agent capacity (Epic 50, Story 50.6)
   | "agent.capacity_reached"
-  | "agent.capacity_warning";
+  | "agent.capacity_warning"
+  // Verification gates (Epic 61, Story 61-3)
+  | "verification.passed"
+  | "verification.failed";
 
 /** An event emitted by the orchestrator */
 export interface OrchestratorEvent {
@@ -1171,10 +1174,103 @@ export interface ProjectConfig {
     injectFindings?: boolean;
     /** Retention period in days for learning data (default: 90) */
     retentionDays?: number;
+    /** Enable cross-session memory bridge — extract knowledge from completed sessions and inject into new ones (Epic 61, Story 61-1) */
+    crossSessionMemory?: boolean;
   };
 
   /** Per-project session enhancement provider override (Epic 58, Story 58.1). */
   sessionEnhancement?: SessionEnhancementConfig;
+
+  /** Verification gate configuration (Epic 61, Story 61-3). */
+  verification?: VerificationConfig;
+}
+
+// =============================================================================
+// VERIFICATION GATE (Epic 61, Story 61-3)
+// =============================================================================
+
+/** A single verification check to run before story completion. */
+export interface VerificationCheck {
+  /** Category of the check */
+  type: "test" | "lint" | "typecheck" | "custom";
+  /** Shell command to execute (e.g. "pnpm test", "pnpm lint") */
+  command: string;
+  /** Whether failure blocks story completion (default: true) */
+  required?: boolean;
+}
+
+/** Result of a single verification check. */
+export interface CheckResult {
+  /** Category of the check */
+  type: VerificationCheck["type"];
+  /** Command that was executed */
+  command: string;
+  /** Whether the check passed (exit code 0) */
+  passed: boolean;
+  /** Process exit code (0 = pass, non-zero = fail, -1 = timeout/kill) */
+  exitCode: number;
+  /** Last 500 chars of stdout */
+  stdout: string;
+  /** Last 500 chars of stderr */
+  stderr: string;
+  /** Execution time in ms */
+  duration: number;
+  /** Whether this was a required check */
+  required: boolean;
+}
+
+/** Aggregate result of all verification checks. */
+export interface VerificationResult {
+  /** Whether all required checks passed */
+  passed: boolean;
+  /** Individual check results */
+  checks: CheckResult[];
+  /** ISO timestamp when verification ran */
+  ranAt: string;
+  /** Total verification duration in ms */
+  duration: number;
+}
+
+/** Retry configuration for failed verification checks. */
+export interface VerificationRetryConfig {
+  /** Enable automatic retry on verification failure (default: true) */
+  enabled?: boolean;
+  /** Maximum retry attempts (default: 2, max: 5) */
+  maxAttempts?: number;
+  /** Milliseconds to wait between retries (default: 5000) */
+  backoffMs?: number;
+}
+
+/** A single verification retry attempt record. */
+export interface VerificationRetryAttempt {
+  /** Retry attempt number (1-based) */
+  attempt: number;
+  /** ISO timestamp when the verification ran */
+  ranAt: string;
+  /** Verification result from this attempt */
+  result: VerificationResult;
+}
+
+/** Per-project verification gate configuration. */
+export interface VerificationConfig {
+  /** Enable verification gate for this project */
+  enabled: boolean;
+  /** Checks to run before marking story as done */
+  checks: VerificationCheck[];
+  /** What to do when verification fails (default: "review") */
+  onFailure?: "block" | "review";
+  /** Retry configuration for failed verifications (Epic 61, Story 61-4) */
+  retry?: VerificationRetryConfig;
+  /** Persistent execution configuration (Epic 61, Story 61-5) */
+  persistent?: PersistentConfig;
+}
+
+/** Persistent execution mode configuration. */
+export interface PersistentConfig {
+  /** Maximum re-queue attempts for persistent sessions (default: 5) */
+  persistentMaxRetries?: number;
+  /** Maximum timeout extensions for persistent sessions (default: 3) */
+  persistentMaxExtensions?: number;
 }
 
 export interface TrackerConfig {
@@ -1947,6 +2043,8 @@ export interface BlockedAgentDetectorConfig {
   agentTypeTimeouts?: Partial<Record<"claude-code" | "codex" | "aider", number>>;
   /** Per-execution-mode timeout multipliers (overrides defaults). */
   executionModeTimeouts?: Partial<Record<"standard" | "persistent" | "lightweight", number>>;
+  /** Max timeout extensions for persistent sessions before blocking (default: 3, Story 61-5). */
+  persistentMaxExtensions?: number;
 }
 
 export interface BlockedAgentStatus {
@@ -1960,6 +2058,8 @@ export interface BlockedAgentStatus {
   severity?: "none" | "amber" | "red";
   /** Cached execution mode from session metadata (refreshed periodically, Story 59-7). */
   executionMode?: AgentMapping["executionMode"];
+  /** Number of timeout extensions granted for persistent sessions (Story 61-5). */
+  persistentExtensions?: number;
 }
 
 // =============================================================================
@@ -3545,6 +3645,10 @@ export interface SessionState {
   activeModes: ActiveModeState[];
   /** Aggregated health status (null if provider health not available). */
   health: SessionHealth | null;
+  /** Persistent re-queue count for persistent execution mode (Story 61-5). */
+  persistentRequeueCount?: number;
+  /** Max persistent re-queues configured (Story 61-5). */
+  persistentMaxRetries?: number;
 }
 
 // =============================================================================
@@ -3566,4 +3670,20 @@ export interface ProjectMemoryEntry {
 /** Container for all project memory entries. */
 export interface ProjectMemory {
   entries: ProjectMemoryEntry[];
+}
+
+// =============================================================================
+// CROSS-SESSION MEMORY (Epic 61, Story 61-1)
+// =============================================================================
+
+/** A project memory entry enriched with cross-session dedup metadata. */
+export interface CrossSessionMemoryEntry extends ProjectMemoryEntry {
+  /** Content-hash dedup key: MD5(type + ":" + content). */
+  contentHash: string;
+  /** Source session IDs where this knowledge originated. */
+  sourceSessionIds: string[];
+  /** ISO timestamp of first extraction. */
+  firstSeenAt: string;
+  /** ISO timestamp of most recent extraction. */
+  lastSeenAt: string;
 }

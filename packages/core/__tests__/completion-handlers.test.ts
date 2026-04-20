@@ -22,6 +22,11 @@ vi.mock("../src/metadata.js", async (importOriginal) => {
   };
 });
 
+// Mock config loading — handler now calls loadConfig internally (Story 61-3)
+vi.mock("../src/config.js", () => ({
+  loadConfig: vi.fn(() => ({ projects: {} })),
+}));
+
 // Mock getSessionsDir to avoid realpathSync on non-existent files
 vi.mock("../src/paths.js", async (importOriginal) => {
   const actual = await importOriginal<typeof _PathsModule>();

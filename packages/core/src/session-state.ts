@@ -112,11 +112,16 @@ export async function readSessionState(
 
   const activeModes = await readModeStateFiles(join(worktreePath, ".omc", "state"));
 
+  // Persistent execution state (Story 61-5)
+  const requeueStr = metadata["persistent_requeue_count"];
+  const persistentRequeueCount = requeueStr ? parseInt(requeueStr, 10) || undefined : undefined;
+
   return {
     executionMode,
     activeAgents,
     configured,
     activeModes,
     health: null, // Deferred — requires live provider instance
+    persistentRequeueCount,
   };
 }

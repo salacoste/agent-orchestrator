@@ -45,7 +45,7 @@ function createTempProject(): { dir: string; configPath: string; sessionsDir: st
   );
 
   const configPath = join(dir, "agent-orchestrator.yaml");
-  writeFileSync(configPath, "# mock config\n", "utf-8");
+  writeFileSync(configPath, "projects: {}\n", "utf-8");
 
   // Create sessions dir with metadata for agent-1
   const sessionsDir = join(dir, "sessions");

@@ -13,6 +13,7 @@ import { TimelineViewer } from "./TimelineViewer";
 import { CostBreakdownPanel } from "./CostBreakdownPanel";
 import { SessionStatePanel } from "./SessionStatePanel";
 import { ProjectMemoryViewer } from "./ProjectMemoryViewer";
+import { CrossSessionMemoryViewer } from "./CrossSessionMemoryViewer";
 
 interface OrchestratorZones {
   merge: number;
@@ -463,6 +464,9 @@ export function SessionDetail({
         {session.workspacePath && <CostBreakdownPanel />}
         {session.workspacePath && <SessionStatePanel sessionId={session.id} />}
         {session.workspacePath && <ProjectMemoryViewer sessionId={session.id} />}
+        {session.workspacePath && session.projectId && (
+          <CrossSessionMemoryViewer projectName={session.projectId} />
+        )}
 
         {/* ── Terminal ─────────────────────────────────────────────── */}
         <div className={pr ? "mt-6" : ""}>

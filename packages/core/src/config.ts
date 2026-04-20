@@ -116,6 +116,31 @@ const SessionEnhancementConfigSchema = z.object({
   agentMappings: z.record(AgentMappingSchema).optional(),
 });
 
+const VerificationCheckSchema = z.object({
+  type: z.enum(["test", "lint", "typecheck", "custom"]),
+  command: z.string().min(1),
+  required: z.boolean().default(true),
+});
+
+const VerificationRetryConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  maxAttempts: z.number().int().min(1).max(5).default(2),
+  backoffMs: z.number().int().min(0).default(5000),
+});
+
+const VerificationConfigSchema = z.object({
+  enabled: z.boolean(),
+  checks: z.array(VerificationCheckSchema).min(1),
+  onFailure: z.enum(["block", "review"]).default("review"),
+  retry: VerificationRetryConfigSchema.optional(),
+  persistent: z
+    .object({
+      persistentMaxRetries: z.number().int().min(1).max(20).default(5),
+      persistentMaxExtensions: z.number().int().min(1).max(10).default(3),
+    })
+    .optional(),
+});
+
 const ConflictResolutionConfigSchema = z.object({
   default: z.enum(["priority-based", "manual", "isolation"]).optional(),
   policies: z
@@ -151,6 +176,7 @@ const ProjectConfigSchema = z.object({
   sharedPool: SharedPoolConfigSchema.optional(),
   conflictResolution: ConflictResolutionConfigSchema.optional(),
   sessionEnhancement: SessionEnhancementConfigSchema.optional(),
+  verification: VerificationConfigSchema.optional(),
 });
 
 const DefaultPluginsSchema = z.object({

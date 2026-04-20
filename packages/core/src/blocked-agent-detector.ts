@@ -23,6 +23,11 @@ import type {
 } from "./types.js";
 import { resolveSessionTimeout, MIN_TIMEOUT, MAX_TIMEOUT } from "./session-timeout.js";
 
+/** Clamp timeout to valid range [MIN_TIMEOUT, MAX_TIMEOUT]. */
+function clampTimeout(value: number): number {
+  return Math.max(MIN_TIMEOUT, Math.min(MAX_TIMEOUT, value));
+}
+
 /** Default check interval (60 seconds) */
 const DEFAULT_CHECK_INTERVAL = 60_000;
 
@@ -69,6 +74,7 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
   private defaultTimeout: number;
   private agentTypeTimeouts: Record<string, number>;
   private executionModeTimeouts: Partial<Record<"standard" | "persistent" | "lightweight", number>>;
+  private persistentMaxExtensions: number;
 
   // Track agent state
   private agentStatus = new Map<string, BlockedAgentStatus>();
@@ -91,6 +97,7 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
       ...(deps.config?.agentTypeTimeouts ?? {}),
     };
     this.executionModeTimeouts = deps.config?.executionModeTimeouts ?? {};
+    this.persistentMaxExtensions = deps.config?.persistentMaxExtensions ?? 3;
   }
 
   async trackActivity(agentId: string): Promise<void> {
@@ -154,7 +161,11 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
       }
 
       const inactiveMs = now - status.lastActivity.getTime();
-      const timeout = this.getTimeoutForAgent(agentId, status.executionMode);
+      const timeout = this.getTimeoutForAgent(
+        agentId,
+        status.executionMode,
+        status.persistentExtensions,
+      );
 
       // Compute severity tiers (Story 19.1): amber at 1x, red at 2x threshold
       if (inactiveMs > timeout * 2) {
@@ -169,6 +180,22 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
       if (status.isBlocked) continue;
 
       if (inactiveMs > timeout) {
+        // Persistent extension mechanism (Story 61-5) — grant timeout extension
+        // instead of blocking, up to persistentMaxExtensions times
+        if (status.executionMode === "persistent") {
+          const currentExtensions = status.persistentExtensions ?? 0;
+          if (currentExtensions < this.persistentMaxExtensions) {
+            status.persistentExtensions = currentExtensions + 1;
+            // Recompute severity with new extended timeout
+            const extendedTimeout = this.getTimeoutForAgent(
+              agentId,
+              status.executionMode,
+              status.persistentExtensions,
+            );
+            status.severity = inactiveMs > extendedTimeout * 2 ? "red" : "amber";
+            continue;
+          }
+        }
         await this.blockAgent(agentId, inactiveMs);
       }
     }
@@ -220,6 +247,7 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
   private getTimeoutForAgent(
     agentId: string,
     executionMode?: AgentMapping["executionMode"],
+    persistentExtensions?: number,
   ): number {
     // Get agent-type base timeout
     const agentType = this.extractAgentType(agentId);
@@ -230,9 +258,18 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
 
     // Apply execution mode multiplier if available
     if (executionMode) {
-      return resolveSessionTimeout(baseTimeout, executionMode, {
+      const modeTimeout = resolveSessionTimeout(baseTimeout, executionMode, {
         executionModeTimeouts: this.executionModeTimeouts,
       });
+
+      // Persistent extension multiplier (Story 61-5): each extension adds another
+      // full mode-timeout window, so timeout = modeTimeout × (1 + extensions)
+      if (executionMode === "persistent" && persistentExtensions && persistentExtensions > 0) {
+        const extensionMultiplier = 1 + persistentExtensions;
+        return clampTimeout(Math.round(modeTimeout * extensionMultiplier));
+      }
+
+      return modeTimeout;
     }
 
     return baseTimeout;

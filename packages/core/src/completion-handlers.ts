@@ -19,6 +19,18 @@ import type {
   ModelUsageEvent,
 } from "./types.js";
 import { captureSessionLearning } from "./session-learning.js";
+import { extractAndBridgeMemory } from "./memory-bridge.js";
+import {
+  runVerification,
+  storeVerificationResult,
+  storeVerificationRetryAttempt,
+  writeRetryContextToNotepad,
+  scheduleVerificationRetry,
+  getVerificationRetryCount,
+  schedulePersistentRequeue,
+  storePersistentRequeueAttempt,
+} from "./verification-gate.js";
+import { loadConfig } from "./config.js";
 import { getLearningStore, getModelUsageAggregator } from "./service-registry.js";
 import {
   readFileSync,
@@ -400,8 +412,117 @@ export function createCompletionHandler(
       registry.remove(event.agentId);
     }
 
-    // Update story status to "done" — via StateManager if available, else direct YAML
-    updateSprintStatus(projectPath, event.storyId, "done", stateManager);
+    // Verification gate — run quality checks before marking story as done (Story 61-3)
+    // Only runs if project.verification.enabled is true; non-fatal on any error
+    let finalStatus: StoryStatus = "done";
+    // Cache config and metadata for reuse by verification gate and memory bridge
+    let config: ReturnType<typeof loadConfig> | null = null;
+    let rawMeta: ReturnType<typeof readMetadataRaw> = null;
+    try {
+      config = loadConfig(configPath);
+      // Read metadata once and cache for reuse by verification retry, model usage, and memory bridge
+      rawMeta = readMetadataRaw(sessionsDir, event.agentId as SessionId);
+      const cfg = config!;
+      const projectKey = Object.keys(cfg.projects ?? {}).find((k) => {
+        const p = cfg.projects?.[k];
+        return p?.path === projectPath || (p?.path && projectPath.startsWith(p.path));
+      });
+      const verification = projectKey ? cfg.projects?.[projectKey]?.verification : undefined;
+      if (verification?.enabled) {
+        const result = await runVerification(projectPath, verification);
+        await storeVerificationResult(sessionsDir, event.agentId as SessionId, result);
+        if (!result.passed) {
+          // Auto-retry logic (Story 61-4) — try again if under retry limit
+          const currentRetryCount = getVerificationRetryCount(
+            sessionsDir,
+            event.agentId as SessionId,
+          );
+          const retryOutcome = scheduleVerificationRetry(
+            sessionsDir,
+            event.agentId as SessionId,
+            verification,
+            currentRetryCount,
+          );
+          const attemptNum = currentRetryCount + 1;
+          const maxAttempts = verification.retry?.maxAttempts ?? 2;
+          if (retryOutcome.shouldRetry) {
+            // Record the retry attempt and write error context to notepad
+            storeVerificationRetryAttempt(sessionsDir, event.agentId as SessionId, {
+              attempt: attemptNum,
+              ranAt: new Date().toISOString(),
+              result,
+            });
+            writeRetryContextToNotepad(rawMeta?.["worktree"], result, attemptNum);
+            finalStatus = "in-progress";
+            logAuditEvent(auditDir, {
+              timestamp: new Date().toISOString(),
+              event_type: "verification.retry_scheduled",
+              agent_id: event.agentId,
+              story_id: event.storyId,
+              attempt: String(attemptNum),
+              max_attempts: String(maxAttempts),
+              checks_failed: String(result.checks.filter((c) => !c.passed).length),
+              backoff_ms: String(retryOutcome.backoffMs),
+            });
+          } else {
+            // Persistent execution mode (Story 61-5) — re-queue persistent sessions
+            // that failed verification even after auto-retry exhausted
+            const persistentOutcome = schedulePersistentRequeue(
+              sessionsDir,
+              event.agentId as SessionId,
+              verification,
+            );
+            if (persistentOutcome.shouldRequeue) {
+              storePersistentRequeueAttempt(sessionsDir, event.agentId as SessionId);
+              writeRetryContextToNotepad(
+                rawMeta?.["worktree"],
+                result,
+                persistentOutcome.requeueCount + 1,
+              );
+              finalStatus = "in-progress";
+              logAuditEvent(auditDir, {
+                timestamp: new Date().toISOString(),
+                event_type: "verification.persistent_requeue",
+                agent_id: event.agentId,
+                story_id: event.storyId,
+                requeue_count: String(persistentOutcome.requeueCount),
+                checks_failed: String(result.checks.filter((c) => !c.passed).length),
+              });
+            } else {
+              finalStatus = verification.onFailure === "block" ? "blocked" : "review";
+              logAuditEvent(auditDir, {
+                timestamp: new Date().toISOString(),
+                event_type: "verification.retry_exhausted",
+                agent_id: event.agentId,
+                story_id: event.storyId,
+                attempt: String(currentRetryCount),
+                max_attempts: String(maxAttempts),
+                checks_failed: String(result.checks.filter((c) => !c.passed).length),
+                final_status: finalStatus,
+              });
+            }
+          }
+        }
+        // Log verification result for audit trail
+        logAuditEvent(auditDir, {
+          timestamp: new Date().toISOString(),
+          event_type: result.passed ? "verification.passed" : "verification.failed",
+          agent_id: event.agentId,
+          story_id: event.storyId,
+          duration_ms: result.duration,
+          checks_total: String(result.checks.length),
+          checks_passed: String(result.checks.filter((c) => c.passed).length),
+          checks_failed: String(result.checks.filter((c) => !c.passed).length),
+        });
+      }
+    } catch (err) {
+      // Verification runner failure must never break completion flow
+      // eslint-disable-next-line no-console
+      console.warn("[completion-handlers] Verification gate error, proceeding as done:", err);
+    }
+
+    // Update story status — "done" if verification passed/disabled, "review" if failed
+    updateSprintStatus(projectPath, event.storyId, finalStatus, stateManager);
 
     // Publish story.completed event (non-fatal)
     if (eventPublisher) {
@@ -410,7 +531,7 @@ export function createCompletionHandler(
           storyId: event.storyId,
           agentId: event.agentId,
           previousStatus: "in-progress",
-          newStatus: "done",
+          newStatus: finalStatus,
           duration: event.duration,
         });
       } catch (err) {
@@ -431,10 +552,9 @@ export function createCompletionHandler(
 
     // Track model usage (Story 58.5) — non-fatal
     try {
-      const raw = readMetadataRaw(sessionsDir, event.agentId as SessionId);
-      if (raw) {
+      if (rawMeta) {
         captureModelUsage(
-          raw,
+          rawMeta,
           event.agentId,
           event.storyId,
           event.completedAt.toISOString(),
@@ -463,8 +583,30 @@ export function createCompletionHandler(
       // Learning capture failure must never break completion flow
     }
 
-    // Unblock dependent stories
-    await unblockDependentStories(projectPath, event.storyId, auditDir, notifier);
+    // Cross-session memory bridge — extract knowledge from workspace (Epic 61, Story 61-1)
+    // Only runs if project.learning.crossSessionMemory is enabled (AC#7 — opt-in config gate)
+    try {
+      const projectKey = config
+        ? Object.keys(config.projects ?? {}).find((k) => {
+            const p = config.projects?.[k];
+            return p?.path === projectPath || (p?.path && projectPath.startsWith(p.path));
+          })
+        : undefined;
+      const learning = projectKey ? config?.projects?.[projectKey]?.learning : undefined;
+      if (learning?.crossSessionMemory) {
+        const workspacePath = rawMeta?.["worktree"];
+        if (workspacePath) {
+          await extractAndBridgeMemory(projectPath, workspacePath, event.agentId);
+        }
+      }
+    } catch {
+      // Bridge extraction failure must never break completion flow
+    }
+
+    // Unblock dependent stories — only if story passed verification (or verification was disabled)
+    if (finalStatus === "done") {
+      await unblockDependentStories(projectPath, event.storyId, auditDir, notifier);
+    }
   };
 }
 

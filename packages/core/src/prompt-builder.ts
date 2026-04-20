@@ -64,6 +64,9 @@ export interface PromptBuildConfig {
 
   /** Past session learnings to inject for AI intelligence (Story 12.1) */
   learnings?: SessionLearning[];
+
+  /** Pre-formatted cross-session memory layer (Epic 61, Story 61-1) */
+  crossSessionMemory?: string;
 }
 
 // =============================================================================
@@ -185,6 +188,11 @@ export function buildPrompt(config: PromptBuildConfig): string | null {
   const learningsSection = buildLearningsLayer(config.learnings);
   if (learningsSection) {
     sections.push(learningsSection);
+  }
+
+  // Layer 5: Cross-session memory bridge (Epic 61, Story 61-1)
+  if (config.crossSessionMemory) {
+    sections.push(config.crossSessionMemory);
   }
 
   // Explicit user prompt (appended last, highest priority)

@@ -64,3 +64,15 @@ agent-orchestrator.yaml
 
 # Scenario persistence data (test/development artifacts)
 .ao-scenarios/
+
+# Jekyll build output
+docs/_site/
+
+# BMAD local state and backlog (project management artifacts)
+backlog/
+
+# Temporary files
+_tmp/
+
+# OMC state
+.omc/

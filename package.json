@@ -27,7 +27,9 @@
     "version-packages": "changeset version",
     "release": "pnpm -r --filter '!@composio/ao-web' build && changeset publish",
     "prepare": "husky",
-    "postinstall": "node scripts/rebuild-node-pty.js"
+    "postinstall": "node scripts/rebuild-node-pty.js",
+    "docs:dev": "cd docs && bundle exec jekyll serve --livereload",
+    "docs:build": "cd docs && JEKYLL_ENV=production bundle exec jekyll build"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.8",

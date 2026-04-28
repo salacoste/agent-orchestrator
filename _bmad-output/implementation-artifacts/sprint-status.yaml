@@ -249,7 +249,7 @@ previous_cycle:
   16-4-artifact-scanner-service: done
   16-5-workflow-event-types-sse-integration: done
   16-6-zero-config-default-workflow: done
-  epic-16-retrospective: optional
+  epic-16-retrospective: done
 
   # Epic 17: Workflow Dashboard Experience (was Epic 6b)
   # FRs: FR-WF-6, FR-WF-7, FR-WF-8, FR-WF-9, FR-WF-10
@@ -260,7 +260,7 @@ previous_cycle:
   17-3-deterministic-recommendation-engine: done
   17-4-phase-readiness-scoring: done
   17-5-recommendation-reasoning-display: done
-  epic-17-retrospective: optional
+  epic-17-retrospective: done
 
   # Epic 18: Agent Communication & Intelligence (was Epic 7)
   # FRs: FR-WF-12, FR-WF-13, FR-WF-14, FR-WF-22, FR-WF-30
@@ -270,7 +270,7 @@ previous_cycle:
   18-3-structured-help-request-protocol: done
   18-4-workflow-anti-pattern-detector: done
   18-5-recommendation-feedback-loop: done
-  epic-18-retrospective: optional
+  epic-18-retrospective: done
 
   # Epic 19: Agent Health & Recovery (was Epic 8a)
   # FRs: FR-WF-17, FR-WF-18
@@ -278,7 +278,7 @@ previous_cycle:
   19-1-dead-agent-detection: done
   19-2-agent-recovery-actions: done
   19-3-cascade-failure-circuit-breaker: done
-  epic-19-retrospective: optional
+  epic-19-retrospective: done
 
   # Epic 20: Conflict & Checkpoint Management (was Epic 8b)
   # FRs: FR-WF-19, FR-WF-20, FR-WF-21
@@ -287,7 +287,7 @@ previous_cycle:
   20-1-merge-conflict-resolution-wizard: done
   20-2-agent-work-checkpoint-rollback: done
   20-3-parallelism-opportunity-finder: done
-  epic-20-retrospective: optional
+  epic-20-retrospective: done
 
   # Epic 21: Cost & Efficiency Analytics (was Epic 9)
   # FRs: FR-WF-15, FR-WF-16, FR-WF-27
@@ -295,7 +295,7 @@ previous_cycle:
   21-1-token-consumption-tracking: done
   21-2-agent-efficiency-scoring: done
   21-3-sprint-clock-countdown: done
-  epic-21-retrospective: optional
+  epic-21-retrospective: done
 
   # Epic 22: Dashboard Command Center (was Epic 10)
   # FRs: FR-WF-11, FR-WF-23, FR-WF-24, FR-WF-25, FR-WF-26
@@ -305,7 +305,7 @@ previous_cycle:
   22-3-keyboard-shortcut-system: done
   22-4-hover-preview-tooltips: done
   22-5-notification-priority-tiers: done
-  epic-22-retrospective: optional
+  epic-22-retrospective: done
 
   # Epic 23: Project Intelligence & Conversational Interface (was Epic 12, STRETCH)
   # FRs: FR-WF-29
@@ -313,7 +313,7 @@ previous_cycle:
   23-1-project-context-aggregator: done
   23-2-project-chat-interface: done
   23-3-proactive-project-insights: done
-  epic-23-retrospective: optional
+  epic-23-retrospective: done
 
   # ==========================================================================
   # CYCLE 5 — UI Wiring, Power Features, Collaboration, SDK (Epics 24-28)
@@ -327,7 +327,7 @@ previous_cycle:
   epic-24: done
   24-1-eslint-no-node-imports-in-client: done
   24-2-dead-button-audit-fix: done
-  epic-24-retrospective: optional
+  epic-24-retrospective: done
 
   # Epic 25a: API Backend Wiring
   # FRs: FR-C5-4, FR-C5-5, FR-C5-6
@@ -336,7 +336,7 @@ previous_cycle:
   25a-1-agent-recovery-api-endpoints: done
   25a-2-jsonl-recommendation-feedback-persistence: done
   25a-3-state-machine-recommendation-full-integration: done
-  epic-25a-retrospective: optional
+  epic-25a-retrospective: done
 
   # Epic 25b: Dashboard Component Wiring
   # FRs: FR-C5-3
@@ -347,7 +347,7 @@ previous_cycle:
   25b-3-conflict-checkpoint-ui: done
   25b-4-project-chat-panel: done
   25b-5-keyboard-shortcut-hook-help-modal: done
-  epic-25b-retrospective: optional
+  epic-25b-retrospective: done
 
   # Epic 26: Command Palette & Agent Profiles
   # FRs: Brainstorm #24, #70, #128
@@ -356,7 +356,7 @@ previous_cycle:
   26-1-command-palette-cmd-k: done
   26-2-agent-personality-profiles: done
   26-3-story-agent-personality-matching: done
-  epic-26-retrospective: optional
+  epic-26-retrospective: done
 
   # Epic 27: Multi-User Collaboration (MVP)
   # FRs: Brainstorm #111, #112, #115
@@ -365,7 +365,7 @@ previous_cycle:
   27-1-team-presence: done
   27-2-review-claim-system: done
   27-3-decision-log: done
-  epic-27-retrospective: optional
+  epic-27-retrospective: done
 
   # Epic 28: SDK & Headless Mode
   # FRs: Brainstorm #83, #85
@@ -375,7 +375,7 @@ previous_cycle:
   28-2-sdk-client-implementation: done
   28-3-headless-daemon-mode: done
   28-4-sdk-documentation-examples: done
-  epic-28-retrospective: optional
+  epic-28-retrospective: done
 
   # ==========================================================================
   # CYCLE 6 — Accessibility, Learning, Integrations, Psychology, Collab v2
@@ -390,7 +390,7 @@ previous_cycle:
   29-2-high-contrast-mode: done
   29-3-reduced-motion-toggle: done
   29-4-accessibility-audit-wcag-compliance: done
-  epic-29-retrospective: optional
+  epic-29-retrospective: done
 
   # Epic 30: Compound Learning System
   # FRs: Brainstorm #43, #50, #56, #176
@@ -399,7 +399,7 @@ previous_cycle:
   30-2-failure-analysis-knowledge-base: done
   30-3-recommendation-improvement-from-feedback: done
   30-4-learning-dashboard-panel: done
-  epic-30-retrospective: optional
+  epic-30-retrospective: done
 
   # Epic 31: IDE & CI Integrations
   # FRs: Brainstorm #123, #125, #124
@@ -407,7 +407,7 @@ previous_cycle:
   31-1-vscode-extension-orchestrator-sidebar: done
   31-2-github-action-cicd-orchestration: done
   31-3-git-hook-integration: done
-  epic-31-retrospective: optional
+  epic-31-retrospective: done
 
   # Epic 32: Developer Psychology & Engagement
   # FRs: Brainstorm #201, #204, #206
@@ -415,7 +415,7 @@ previous_cycle:
   32-1-flow-state-protector: done
   32-2-celebration-moments: done
   32-3-streak-counter: done
-  epic-32-retrospective: optional
+  epic-32-retrospective: done
 
   # Epic 33: Multi-User Collaboration v2
   # FRs: Brainstorm #113, #114, #116 (deferred from Cycle 5 MVP)
@@ -424,7 +424,7 @@ previous_cycle:
   33-2-role-based-agent-ownership: done
   33-3-handoff-protocol: done
   33-4-collaboration-integration-test: done
-  epic-33-retrospective: optional
+  epic-33-retrospective: done
 
   # ==========================================================================
   # CYCLE 7 — Production Wiring, IDE Integrations, DX Conventions
@@ -436,7 +436,7 @@ previous_cycle:
   34-1-create-packages-sdk-workspace: done
   34-2-sdk-integration-tests: done
   34-3-sdk-readme-quickstart: done
-  epic-34-retrospective: optional
+  epic-34-retrospective: done
 
   # Epic 35: IDE & CI Production Integrations
   epic-35: done
@@ -444,21 +444,21 @@ previous_cycle:
   35-2-vscode-extension-sprint-sidebar: done
   35-3-github-action-orchestration-commands: done
   35-4-git-hook-integration-commit-tagging: done
-  epic-35-retrospective: optional
+  epic-35-retrospective: done
 
   # Epic 36: Collaboration Production Features
   epic-36: done
   36-1-shared-annotation-ui-component: done
   36-2-role-based-agent-ownership-ui: done
   36-3-handoff-protocol-implementation: done
-  epic-36-retrospective: optional
+  epic-36-retrospective: done
 
   # Epic 37: DX Conventions & Lint Rules
   epic-37: done
   37-1-dead-button-lint-rule: done
   37-2-test-per-story-convention-enforcement: done
   37-3-renders-in-parent-ac-convention: done
-  epic-37-retrospective: optional
+  epic-37-retrospective: done
 
   # ==========================================================================
   # CYCLE 8 — Technical Debt Zero (Epics 38-42)
@@ -474,7 +474,7 @@ previous_cycle:
   38-3-agent-logs-api-runtime-getoutput-integration: done
   38-4-agent-resume-api-full-resume-implementation: done
   38-5-agent-restart-api-kill-respawn-with-context: done
-  epic-38-retrospective: optional
+  epic-38-retrospective: done
 
   # Epic 39: Module Persistence & Real-Time
   # Add JSONL/WebSocket persistence to in-memory-only modules
@@ -483,7 +483,7 @@ previous_cycle:
   39-2-collaboration-jsonl-persistence: done
   39-3-cascade-detector-event-bus-integration: done
   39-4-compound-learning-real-data-connection: done
-  epic-39-retrospective: optional
+  epic-39-retrospective: done
 
   # Epic 40: Dashboard Real Data Integration
   # Wire placeholder components to actual data sources
@@ -492,7 +492,7 @@ previous_cycle:
   40-2-sprint-cost-panel-real-token-data: done
   40-3-conflict-checkpoint-panel-real-git-data: done
   40-4-project-chat-panel-llm-integration: done
-  epic-40-retrospective: optional
+  epic-40-retrospective: done
 
   # Epic 41: SDK & Integration Completion
   # SSE client, VS Code testing, GitHub Action CI, git hook installation
@@ -501,7 +501,7 @@ previous_cycle:
   41-2-vscode-extension-vsce-package-testing: done
   41-3-github-action-ci-workflow-testing: done
   41-4-git-hook-installation-command: done
-  epic-41-retrospective: optional
+  epic-41-retrospective: done
 
   # Epic 42: Spec-to-Implementation Completion
   # Implement all spec-only stories from Cycles 6-7
@@ -512,7 +512,7 @@ previous_cycle:
   42-4-dead-button-eslint-rule: done
   42-5-test-per-story-convention-enforcement: done
   42-6-renders-in-parent-ac-convention: done
-  epic-42-retrospective: optional
+  epic-42-retrospective: done
 
   # ==========================================================================
   # CYCLE 9 — Autonomy, Scale & Frontier (Epics 43-48)
@@ -533,7 +533,7 @@ previous_cycle:
   43-4-priority-queue-upgrade: done
   43-7-business-hours-awareness: done
   43-8-deadline-pressure-adaptation: done
-  epic-43-retrospective: optional
+  epic-43-retrospective: done
 
   # Epic 44: Power User Dashboard
   # Executive view, split screen, log streaming, health score, progressive UI
@@ -546,7 +546,7 @@ previous_cycle:
   44-6-focus-mode-single-story: done
   44-7-notification-digest: done
   44-8-mobile-companion-pwa: done
-  epic-44-retrospective: optional
+  epic-44-retrospective: done
 
   # Epic 45: Intelligence & Replay
   # Story replay, time travel, post-mortem, ROI, standup, confidence, reasoning, sprint diff
@@ -559,7 +559,7 @@ previous_cycle:
   45-6-confidence-indicators: done
   45-7-reasoning-trail: done
   45-8-sprint-diff-comparison: done
-  epic-45-retrospective: optional
+  epic-45-retrospective: done
 
   # Epic 46a: Infrastructure Foundation (Phase 1)
   # Audit log, state snapshots, inter-agent messaging
@@ -567,7 +567,7 @@ previous_cycle:
   46a-1-immutable-audit-log: done
   46a-2-state-snapshots-export-import: done
   46a-3-inter-agent-messaging-bus: done
-  epic-46a-retrospective: optional
+  epic-46a-retrospective: done
 
   # Epic 46b: Team Features (Phase 2 — after 46a)
   # Auth, approvals, resource pool, isolation
@@ -576,7 +576,7 @@ previous_cycle:
   46b-2-approval-workflows: done
   46b-3-resource-pool-shared-capacity: done
   46b-4-agent-isolation-levels: done
-  epic-46b-retrospective: optional
+  epic-46b-retrospective: done
 
   # Epic 47: Agent Autonomy v2 (Phase 2 — after 46a)
   # Agent negotiation, sandbox, NLU, conflict wizard, hot-swap, pre-flight
@@ -587,7 +587,7 @@ previous_cycle:
   47-4-conflict-resolution-wizard: done
   47-5-agent-hot-swap: done
   47-6-pre-flight-check: done
-  epic-47-retrospective: optional
+  epic-47-retrospective: done
 
   # Epic 48: Frontier & Simulation
   # Monte Carlo simulator (impl) + 3 investigation spikes
@@ -618,7 +618,7 @@ previous_cycle:
   49-3-project-drill-down-navigation: done
   49-4-real-time-sse-updates: done
   49-5-project-filtering: done
-  epic-49-retrospective: optional
+  epic-49-retrospective: done
 
   # Epic 50: Shared Agent Pool
   # FRs: FR-F2-1 to FR-F2-6 (Shared Agent Pool)
@@ -630,7 +630,7 @@ previous_cycle:
   50-4-cross-project-story-assignment: done
   50-5-agent-utilization-tracking: done
   50-6-over-allocation-prevention: done
-  epic-50-retrospective: optional
+  epic-50-retrospective: done
 
   # Epic 51: Cross-Project Dependencies
   # FRs: FR-F3-1 to FR-F3-6 (Cross-Project Dependencies)
@@ -642,7 +642,7 @@ previous_cycle:
   51-4-cross-project-dependency-graph: done
   51-5-dependency-blocking-notifications: done
   51-6-circular-dependency-detection: done
-  epic-51-retrospective: optional
+  epic-51-retrospective: done
 
   # Epic 52: Resource Conflict Detection
   # FRs: FR-F4-1 to FR-F4-5 (Resource Conflicts)
@@ -653,7 +653,7 @@ previous_cycle:
   52-3-conflict-resolution-suggestions: done
   52-4-conflict-resolution-policy-configuration: done
   52-5-conflict-history-tracking: done
-  epic-52-retrospective: optional
+  epic-52-retrospective: done
 
   # Epic 53: Unified Sprint View
   # FRs: FR-F5-1 to FR-F5-5 (Unified Sprint View)
@@ -664,7 +664,7 @@ previous_cycle:
   53-3-at-risk-sprint-identification: done
   53-4-cross-project-velocity-comparison: done
   53-5-sprint-filtering-aggregation: done
-  epic-53-retrospective: optional
+  epic-53-retrospective: done
 
   # Epic 54: What-If Simulation Engine
   # FRs: FR-E1-1 to FR-E1-6 (What-If Scenarios)
@@ -676,7 +676,7 @@ previous_cycle:
   54-4-side-by-side-scenario-comparison: done
   54-5-scenario-persistence-history: done
   54-6-apply-scenario-to-production: done
-  epic-54-retrospective: optional
+  epic-54-retrospective: done
 
   # Epic 55: Monte Carlo Forecasting
   # FRs: FR-E2-1 to FR-E2-6 (Monte Carlo Forecasting)
@@ -688,7 +688,7 @@ previous_cycle:
   55-4-automatic-forecast-updates: done
   55-5-forecast-accuracy-tracking: done
   55-6-simulation-parameter-configuration: done
-  epic-55-retrospective: optional
+  epic-55-retrospective: done
 
   # Epic 56: Risk & Optimization Dashboard
   # FRs: FR-E3-1 to FR-E3-6 (Risk Analysis) + FR-E4-1 to FR-E4-5 (Resource Optimization)
@@ -705,7 +705,7 @@ previous_cycle:
   56-9-underutilized-agent-detection: done
   56-10-optimization-impact-analysis: done
   56-11-optimization-learning-loop: done
-  epic-56-retrospective: optional
+  epic-56-retrospective: done
 
   # Epic 57: Telegram Bot Integration
   # FRs: FR-I1-1 to FR-I1-5 (Notifications) + FR-I2-1 to FR-I2-6 (Commands) + FR-I3-1 to FR-I3-5 (Interactive)
@@ -726,7 +726,7 @@ previous_cycle:
   57-13-story-quick-actions: done
   57-14-multi-step-conversation-support: done
   57-15-notification-deduplication: done
-  epic-57-retrospective: optional
+  epic-57-retrospective: done
 
   # ==========================================================================
   # CYCLE 11 — OMC Integration: Session Enhancement Platform (Epics 58-61)
@@ -747,7 +747,7 @@ previous_cycle:
   58-4-model-routing-service: done
   58-5-model-usage-tracking: done
   58-6-provider-health-graceful-degradation: done
-  epic-58-retrospective: optional
+  epic-58-retrospective: done
 
   # Epic 59: Session Lifecycle Enhancement
   # FRs: FR-S1-1 to FR-S1-4 (Compaction Survival), FR-S2-1 to FR-S2-4 (Auto-Install), FR-S3-1 to FR-S3-3 (Agent Routing)
@@ -777,7 +777,7 @@ previous_cycle:
   60-7-session-state-api-route: done
   60-8-session-state-dashboard-panel: done
   60-9-project-memory-api-viewer: done
-  epic-60-retrospective: optional
+  epic-60-retrospective: done
 
   # Epic 61: Learning, Verification & Notifications
   # FRs: FR-Q1-1 to FR-Q1-4 (Memory Bridge), FR-Q2-1 to FR-Q2-3 (Verification), FR-Q3-1 to FR-Q3-3 (Persistent), FR-Q4-1 to FR-Q4-4 (Notifications)

@@ -79,7 +79,7 @@ describe("GET /api/conflicts", () => {
         detectedAt: "2026-03-31T12:00:00.000Z",
         metadata: { competingCount: 2 },
       },
-    ]);
+    ] as never[]);
 
     const req = makeRequest("http://localhost/api/conflicts");
     const res = await GET(req);

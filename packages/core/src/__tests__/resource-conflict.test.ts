@@ -24,8 +24,10 @@ import {
   createResourceConflictStore,
   RESOURCE_CONFLICTS_FILENAME,
   RESOURCE_CONFLICTS_AUDIT_FILENAME,
+  type ProjectResource,
+  type ConflictDetectionResult,
 } from "../resource-conflict.js";
-import type { ProjectResource, OrchestratorConfig } from "../types.js";
+import type { OrchestratorConfig } from "../types.js";
 import { writeFileSync, mkdirSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -40,7 +42,7 @@ function makeConfig(projects: Record<string, { repo: string; path: string }>): O
     readyThresholdMs: 300_000,
     defaults: { runtime: "tmux", agent: "claude-code", workspace: "worktree", notifiers: [] },
     notifiers: {},
-    notificationRouting: { info: [], warning: [], error: [], critical: [] },
+    notificationRouting: { info: [], warning: [], action: [], urgent: [] },
     reactions: {},
     projects: Object.fromEntries(
       Object.entries(projects).map(([id, cfg]) => [
@@ -512,7 +514,7 @@ describe("appendConflictAudit", () => {
   });
 
   it("appends JSONL entry to audit file", () => {
-    const result: { conflicts: unknown[]; scanDurationMs: number } = {
+    const result: ConflictDetectionResult = {
       conflicts: [
         {
           id: "conflict-test",
@@ -542,7 +544,7 @@ describe("appendConflictAudit", () => {
   });
 
   it("appends multiple entries", () => {
-    const result: { conflicts: unknown[]; scanDurationMs: number } = {
+    const result: ConflictDetectionResult = {
       conflicts: [],
       scanDurationMs: 0.5,
     };

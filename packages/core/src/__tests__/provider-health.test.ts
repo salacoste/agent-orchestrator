@@ -521,7 +521,7 @@ describe("session-manager fallback integration", () => {
     expect(monitor.isProviderAvailable()).toBe(false);
 
     // Simulate the session-manager check logic
-    const activeProviderName = "omc";
+    const activeProviderName: string = "omc";
     let providerFallback = false;
 
     if (activeProviderName !== "raw") {
@@ -543,7 +543,7 @@ describe("session-manager fallback integration", () => {
 
     expect(monitor.isProviderAvailable()).toBe(true);
 
-    const activeProviderName = "omc";
+    const activeProviderName: string = "omc";
     let providerFallback = false;
 
     if (activeProviderName !== "raw") {
@@ -559,7 +559,7 @@ describe("session-manager fallback integration", () => {
   it("no registered monitor does not trigger fallback", () => {
     clearServiceRegistry();
 
-    const activeProviderName = "omc";
+    const activeProviderName: string = "omc";
     let providerFallback = false;
 
     if (activeProviderName !== "raw") {

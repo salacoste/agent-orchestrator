@@ -96,9 +96,7 @@ function makeRequest(url: string) {
 
 describe("GET /api/conflicts/history", () => {
   it("returns history entries and patterns", async () => {
-    const res = await historyGET(makeRequest("http://localhost/api/conflicts/history"), {
-      params: Promise.resolve({}),
-    });
+    const res = await historyGET(makeRequest("http://localhost/api/conflicts/history"));
     expect(res.status).toBe(200);
 
     const body = await res.json();
@@ -115,7 +113,6 @@ describe("GET /api/conflicts/history", () => {
       makeRequest(
         "http://localhost/api/conflicts/history?resourceType=agent&outcome=auto-resolved&dateFrom=2026-04-01T00:00:00Z",
       ),
-      { params: Promise.resolve({}) },
     );
     expect(res.status).toBe(200);
 
@@ -141,9 +138,7 @@ describe("GET /api/conflicts/history", () => {
       recurringConflicts: [],
     });
 
-    const res = await historyGET(makeRequest("http://localhost/api/conflicts/history"), {
-      params: Promise.resolve({}),
-    });
+    const res = await historyGET(makeRequest("http://localhost/api/conflicts/history"));
     expect(res.status).toBe(200);
 
     const body = await res.json();
@@ -155,9 +150,7 @@ describe("GET /api/conflicts/history", () => {
     const { getServices } = await import("@/lib/services");
     vi.mocked(getServices).mockRejectedValueOnce(new Error("Config missing"));
 
-    const res = await historyGET(makeRequest("http://localhost/api/conflicts/history"), {
-      params: Promise.resolve({}),
-    });
+    const res = await historyGET(makeRequest("http://localhost/api/conflicts/history"));
     expect(res.status).toBe(500);
 
     const body = await res.json();
@@ -169,9 +162,7 @@ describe("GET /api/conflicts/history", () => {
 
 describe("GET /api/conflicts/history/export", () => {
   it("returns JSON with download headers", async () => {
-    const res = await exportGET(makeRequest("http://localhost/api/conflicts/history/export"), {
-      params: Promise.resolve({}),
-    });
+    const res = await exportGET(makeRequest("http://localhost/api/conflicts/history/export"));
     expect(res.status).toBe(200);
 
     const disposition = res.headers.get("Content-Disposition");
@@ -190,7 +181,6 @@ describe("GET /api/conflicts/history/export", () => {
   it("respects projectId filter", async () => {
     const res = await exportGET(
       makeRequest("http://localhost/api/conflicts/history/export?projectId=project-a"),
-      { params: Promise.resolve({}) },
     );
     expect(res.status).toBe(200);
 
@@ -202,7 +192,6 @@ describe("GET /api/conflicts/history/export", () => {
   it("respects resourceType filter", async () => {
     const res = await exportGET(
       makeRequest("http://localhost/api/conflicts/history/export?resourceType=agent"),
-      { params: Promise.resolve({}) },
     );
     expect(res.status).toBe(200);
 
@@ -215,7 +204,6 @@ describe("GET /api/conflicts/history/export", () => {
       makeRequest(
         "http://localhost/api/conflicts/history/export?dateFrom=2026-04-01T00:00:00Z&dateTo=2026-04-02T00:00:00Z",
       ),
-      { params: Promise.resolve({}) },
     );
     expect(res.status).toBe(200);
 
@@ -229,7 +217,6 @@ describe("GET /api/conflicts/history/export", () => {
   it("respects outcome filter", async () => {
     const res = await exportGET(
       makeRequest("http://localhost/api/conflicts/history/export?outcome=auto-resolved"),
-      { params: Promise.resolve({}) },
     );
     expect(res.status).toBe(200);
 
@@ -241,9 +228,7 @@ describe("GET /api/conflicts/history/export", () => {
     const { getServices } = await import("@/lib/services");
     vi.mocked(getServices).mockRejectedValueOnce(new Error("Service unavailable"));
 
-    const res = await exportGET(makeRequest("http://localhost/api/conflicts/history/export"), {
-      params: Promise.resolve({}),
-    });
+    const res = await exportGET(makeRequest("http://localhost/api/conflicts/history/export"));
     expect(res.status).toBe(500);
   });
 });

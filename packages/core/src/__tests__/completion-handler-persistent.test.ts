@@ -114,7 +114,6 @@ const mockWriteFileSync = vi.mocked(writeFileSync);
 
 function makeCompletionEvent(overrides?: Partial<CompletionEvent>): CompletionEvent {
   return {
-    type: "agent.completed",
     agentId: "agent-1",
     storyId: "story-1",
     completedAt: new Date("2026-04-18T12:00:00Z"),
@@ -125,17 +124,22 @@ function makeCompletionEvent(overrides?: Partial<CompletionEvent>): CompletionEv
 }
 
 const mockRegistry: AgentRegistry = {
-  add: vi.fn(),
+  register: vi.fn(),
   remove: vi.fn(),
-  getByAgent: vi.fn(() => ({
+  getByAgent: vi.fn((() => ({
     agentId: "agent-1",
     storyId: "story-1",
     projectId: "project-a",
-  })),
+  })) as unknown as AgentRegistry["getByAgent"]),
   getByStory: vi.fn(),
+  findActiveByStory: vi.fn(),
   list: vi.fn(() => []),
+  updateStatus: vi.fn(),
+  getZombies: vi.fn(() => []),
+  reload: vi.fn(),
   getRetryCount: vi.fn(() => 0),
-  clear: vi.fn(),
+  incrementRetry: vi.fn(),
+  getRetryHistory: vi.fn(),
 };
 
 const VERIFICATION_CONFIG = {

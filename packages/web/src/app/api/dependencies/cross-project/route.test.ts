@@ -40,8 +40,8 @@ vi.mock("@composio/ao-core", async (importOriginal) => {
     validateDependencyReferences: vi.fn(() => ({ valid: true, errors: [] })),
     resolveAllDependencyStatuses: vi.fn((deps: unknown[]) =>
       Array.isArray(deps)
-        ? deps.map((d: Record<string, unknown>) => ({
-            ...d,
+        ? deps.map((d) => ({
+            ...(d as Record<string, unknown>),
             targetStatus: "done",
             isResolved: true,
           }))

@@ -323,8 +323,8 @@ describe("loadVerificationResult", () => {
     let storedData: Record<string, string> = {};
     mockReadMetadataRaw.mockImplementation(() => storedData);
     mockUpdateMetadata.mockImplementation(
-      (_dir: string, _id: string, updates: Record<string, string>) => {
-        storedData = { ...storedData, ...updates };
+      (_dir: string, _id: string, updates: Partial<Record<string, string>>) => {
+        storedData = { ...storedData, ...updates } as Record<string, string>;
       },
     );
 

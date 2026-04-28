@@ -109,7 +109,7 @@ describe("POST /api/telegram/webhook", () => {
 
   it("returns 200 for valid secret and update", async () => {
     // Re-import to get fresh module state
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -124,7 +124,7 @@ describe("POST /api/telegram/webhook", () => {
   });
 
   it("returns 401 for invalid secret", async () => {
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -139,7 +139,7 @@ describe("POST /api/telegram/webhook", () => {
   });
 
   it("returns 401 for missing secret when configured", async () => {
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -151,7 +151,7 @@ describe("POST /api/telegram/webhook", () => {
   });
 
   it("returns 400 for invalid payload without update_id", async () => {
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -166,7 +166,7 @@ describe("POST /api/telegram/webhook", () => {
   });
 
   it("returns 500 when handleUpdate throws", async () => {
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     mockHandleUpdate.mockRejectedValueOnce(new Error("Internal bot error"));
 
     const req = new Request("http://localhost/api/telegram/webhook", {
@@ -208,7 +208,7 @@ describe("createConflictsProvider wiring", () => {
     ]);
 
     // Trigger getBot() via POST — this wires the provider
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -241,7 +241,7 @@ describe("createConflictsProvider wiring", () => {
   it("provider returns empty array when store has no conflicts", async () => {
     mockGetActive.mockReturnValue([]);
 
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -291,7 +291,7 @@ describe("Provider project filtering", () => {
       },
     ]);
 
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -347,7 +347,7 @@ describe("Provider project filtering", () => {
       },
     ]);
 
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -394,7 +394,7 @@ describe("Provider project filtering", () => {
       sessionManager: { list: vi.fn(async () => []) },
     });
 
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -424,7 +424,7 @@ describe("registerCallbackHandler wiring", () => {
   });
 
   it("wires registerCallbackHandler with resume and dismiss handlers", async () => {
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -463,7 +463,7 @@ describe("registerCallbackHandler wiring", () => {
       sessionManager: { list: vi.fn(async () => []), send: mockSend },
     });
 
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -484,7 +484,7 @@ describe("registerCallbackHandler wiring", () => {
   });
 
   it("dismiss handler returns Acknowledged", async () => {
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -538,7 +538,7 @@ describe("TelegramBot constructor wiring", () => {
     // Import TelegramBot mock to check constructor args
     const { TelegramBot: MockTelegramBot } = await import("@composio/ao-plugin-notifier-telegram");
 
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -576,7 +576,7 @@ describe("TelegramBot constructor wiring", () => {
 
     const { TelegramBot: MockTelegramBot } = await import("@composio/ao-plugin-notifier-telegram");
 
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -605,7 +605,7 @@ describe("registerCallbackHandler approve/deny wiring", () => {
   });
 
   it("wires approve handler that calls approvalService.approve()", async () => {
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -629,7 +629,7 @@ describe("registerCallbackHandler approve/deny wiring", () => {
   });
 
   it("wires deny handler that calls approvalService.reject()", async () => {
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -667,7 +667,7 @@ describe("registerCallbackHandler approve/deny wiring", () => {
       },
     }));
 
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -702,7 +702,7 @@ describe("registerCallbackHandler approve/deny wiring", () => {
       },
     }));
 
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -736,7 +736,7 @@ describe("registerCallbackHandler approve/deny wiring", () => {
       },
     }));
 
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -794,7 +794,7 @@ describe("registerCallbackHandler story action wiring", () => {
       sessionManager: { list: vi.fn(async () => []) },
     });
 
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -931,7 +931,7 @@ describe("resolveProjectForStory edge cases", () => {
       sessionManager: { list: vi.fn(async () => []) },
     });
 
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -980,7 +980,7 @@ describe("resolveProjectForStory edge cases", () => {
       sessionManager: { list: vi.fn(async () => []) },
     });
 
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -1015,7 +1015,7 @@ describe("registerCancelCommand and registerSpawnCommand wiring", () => {
   });
 
   it("calls registerCancelCommand during getBot()", async () => {
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {
@@ -1030,7 +1030,7 @@ describe("registerCancelCommand and registerSpawnCommand wiring", () => {
   });
 
   it("calls registerSpawnCommand during getBot()", async () => {
-    const { POST: freshPost } = await import("./route.ts");
+    const { POST: freshPost } = await import("./route.js");
     const req = new Request("http://localhost/api/telegram/webhook", {
       method: "POST",
       headers: {

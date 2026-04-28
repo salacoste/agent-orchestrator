@@ -7,7 +7,7 @@ import { describe, it, expect, vi } from "vitest";
 import { checkAndNotifyBlockingDeps } from "../cross-project-blocking-notifier.js";
 import type { BlockingTimesStore } from "../cross-project-blocking-times.js";
 import type {
-  CrossProjectDependency,
+  DependencyWithStatus,
   DependencyBlockingAlert,
   SprintDataMap,
 } from "../cross-project-deps.js";
@@ -22,13 +22,15 @@ const makeDep = (
   sourceStoryId: string,
   targetProjectId: string,
   targetStoryId: string,
-): CrossProjectDependency => ({
+): DependencyWithStatus => ({
   id,
   sourceProjectId,
   sourceStoryId,
   targetProjectId,
   targetStoryId,
   createdAt: "2026-03-30T10:00:00.000Z",
+  targetStatus: "in-progress",
+  isResolved: false,
 });
 
 const createMockEventBus = () => ({
@@ -42,7 +44,7 @@ const createMockStore = (_times: Record<string, string> = {}): BlockingTimesStor
 });
 
 function makeAlert(
-  dep: CrossProjectDependency,
+  dep: DependencyWithStatus,
   overrides: Partial<DependencyBlockingAlert> = {},
 ): DependencyBlockingAlert {
   return {

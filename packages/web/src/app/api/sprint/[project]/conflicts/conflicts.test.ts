@@ -81,6 +81,8 @@ describe("/api/sprint/[project]/conflicts", () => {
         kill: vi.fn(),
         cleanup: vi.fn(),
         send: vi.fn(),
+        runPreCompactHooks: vi.fn().mockResolvedValue(undefined),
+        runPostCompactHooks: vi.fn().mockResolvedValue(""),
       };
       vi.mocked(getServices).mockResolvedValueOnce({
         config: {

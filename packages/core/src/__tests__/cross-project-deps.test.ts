@@ -38,7 +38,7 @@ function makeConfig(
   } = {},
 ): OrchestratorConfig {
   return {
-    projects: (options.projects ?? {}) as OrchestratorConfig["projects"],
+    projects: (options.projects ?? {}) as unknown as OrchestratorConfig["projects"],
     configPath: "/tmp/test-config.yaml",
     maxConcurrentAgents: options.globalMax,
   } as unknown as OrchestratorConfig;

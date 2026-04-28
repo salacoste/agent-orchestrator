@@ -98,7 +98,7 @@ vi.mock("@composio/ao-plugin-tracker-bmad", () => ({
 }));
 
 // Import after mocks
-import { GET, DELETE } from "./route.ts";
+import { GET, DELETE } from "./route.js";
 import {
   _resetOptimizationFeedback,
   recordOptimizationFeedback,

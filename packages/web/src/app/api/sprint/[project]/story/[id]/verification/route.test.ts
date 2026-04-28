@@ -42,7 +42,7 @@ vi.mock("@composio/ao-core", async (importOriginal) => {
 });
 
 // Import after mocks
-import { GET } from "./route.ts";
+import { GET } from "./route.js";
 
 beforeEach(() => {
   vi.clearAllMocks();

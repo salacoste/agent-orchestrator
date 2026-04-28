@@ -50,6 +50,8 @@ describe("GET /api/sprint/[project]/utilization", () => {
       agentDetails: [],
       poolAgentsTotal: 0,
       poolAgentsActive: 0,
+      totalActiveTimeMs: 0,
+      totalIdleTimeMs: 0,
     });
     const request = new Request("http://localhost/api/sprint/test-project/utilization");
     const res = await GET(request, { params: Promise.resolve({ project: "test-project" }) });

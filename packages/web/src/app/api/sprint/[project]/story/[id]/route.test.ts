@@ -76,8 +76,8 @@ vi.mock("@composio/ao-core", async (importOriginal) => {
     createCrossProjectDepStore: mockCreateStore,
     resolveAllDependencyStatuses: vi.fn((deps: unknown[]) =>
       Array.isArray(deps)
-        ? deps.map((d: Record<string, unknown>) => ({
-            ...d,
+        ? deps.map((d) => ({
+            ...(d as Record<string, unknown>),
             targetStatus: "done",
             isResolved: true,
           }))
@@ -102,7 +102,7 @@ vi.mock("@composio/ao-plugin-tracker-bmad", () => ({
 }));
 
 // Import after mocks
-import { PATCH } from "./route.ts";
+import { PATCH } from "./route.js";
 
 function makeRequest(body: Record<string, unknown>) {
   return new Request("http://localhost/api/sprint/project-a/story/test-story", {
@@ -149,14 +149,16 @@ describe("PATCH /api/sprint/[project]/story/[id] — auto-unblock", () => {
         targetStoryId: "test-story",
         createdAt: "2026-03-29T00:00:00.000Z",
       },
-    ]);
+    ] as never[]);
 
     // Mock autoUnblockCrossProjectDeps to return the blocked story as eligible
-    mockAutoUnblock.mockReturnValue([{ projectId: "project-b", storyId: "blocked-story" }]);
+    mockAutoUnblock.mockReturnValue([
+      { projectId: "project-b", storyId: "blocked-story" },
+    ] as never[]);
 
     // Mock sprint status: project-a has test-story in-progress, project-b has blocked-story as blocked
-    mockReadSprintStatus.mockImplementation((project: Record<string, unknown>) => {
-      if ((project as { name?: string }).name === "Project A") {
+    mockReadSprintStatus.mockImplementation(((project: { name?: string }) => {
+      if (project.name === "Project A") {
         return {
           development_status: { "test-story": { status: "in-progress" } },
         };
@@ -164,7 +166,7 @@ describe("PATCH /api/sprint/[project]/story/[id] — auto-unblock", () => {
       return {
         development_status: { "blocked-story": { status: "blocked" } },
       };
-    });
+    }) as never);
 
     const res = await PATCH(makeRequest({ status: "done" }), {
       params: Promise.resolve({ project: "project-a", id: "test-story" }),
@@ -198,7 +200,7 @@ describe("PATCH /api/sprint/[project]/story/[id] — auto-unblock", () => {
         targetStoryId: "test-story",
         createdAt: "2026-03-29T00:00:00.000Z",
       },
-    ]);
+    ] as never[]);
 
     // autoUnblockCrossProjectDeps returns empty (deps not satisfied)
     mockAutoUnblock.mockReturnValue([]);
@@ -249,15 +251,15 @@ describe("PATCH /api/sprint/[project]/story/[id] — auto-unblock", () => {
         targetStoryId: "test-story",
         createdAt: "2026-03-29T00:00:00.000Z",
       },
-    ]);
+    ] as never[]);
 
     mockAutoUnblock.mockReturnValue([
       { projectId: "project-b", storyId: "already-in-progress-story" },
-    ]);
+    ] as never[]);
 
     // Source story is "in-progress", not "blocked"
-    mockReadSprintStatus.mockImplementation((project: Record<string, unknown>) => {
-      if ((project as { name?: string }).name === "Project A") {
+    mockReadSprintStatus.mockImplementation(((project: { name?: string }) => {
+      if (project.name === "Project A") {
         return {
           development_status: { "test-story": { status: "in-progress" } },
         };
@@ -265,7 +267,7 @@ describe("PATCH /api/sprint/[project]/story/[id] — auto-unblock", () => {
       return {
         development_status: { "already-in-progress-story": { status: "in-progress" } },
       };
-    });
+    }) as never);
 
     const res = await PATCH(makeRequest({ status: "done" }), {
       params: Promise.resolve({ project: "project-a", id: "test-story" }),

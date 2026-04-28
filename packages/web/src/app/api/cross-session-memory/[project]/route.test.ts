@@ -4,6 +4,7 @@
  * Story 61-2, AC #4, #5, #6.
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { NextRequest } from "next/server";
 
 vi.mock("@/lib/services", () => ({
   getServices: vi.fn(),
@@ -67,7 +68,7 @@ describe("GET /api/cross-session-memory/[project]", () => {
     } as never);
     mockLoad.mockResolvedValue(SAMPLE_ENTRIES);
 
-    const res = await GET(new Request("http://localhost"), makeContext("myproject"));
+    const res = await GET(new NextRequest("http://localhost"), makeContext("myproject"));
     expect(res.status).toBe(200);
 
     const data = await res.json();
@@ -88,7 +89,7 @@ describe("GET /api/cross-session-memory/[project]", () => {
       },
     } as never);
 
-    const res = await GET(new Request("http://localhost"), makeContext("myproject"));
+    const res = await GET(new NextRequest("http://localhost"), makeContext("myproject"));
     expect(res.status).toBe(200);
 
     const data = await res.json();
@@ -102,14 +103,14 @@ describe("GET /api/cross-session-memory/[project]", () => {
       config: { projects: {} },
     } as never);
 
-    const res = await GET(new Request("http://localhost"), makeContext("unknown"));
+    const res = await GET(new NextRequest("http://localhost"), makeContext("unknown"));
     expect(res.status).toBe(404);
   });
 
   it("returns 500 when getServices throws", async () => {
     mockGetServices.mockRejectedValue(new Error("Service unavailable"));
 
-    const res = await GET(new Request("http://localhost"), makeContext("myproject"));
+    const res = await GET(new NextRequest("http://localhost"), makeContext("myproject"));
     expect(res.status).toBe(500);
   });
 });
@@ -129,7 +130,7 @@ describe("DELETE /api/cross-session-memory/[project]", () => {
     mockRemove.mockResolvedValue(undefined);
     mockLoad.mockResolvedValue([SAMPLE_ENTRIES[1]!]);
 
-    const req = new Request("http://localhost", {
+    const req = new NextRequest("http://localhost", {
       method: "DELETE",
       body: JSON.stringify({ contentHash: "hash-1" }),
       headers: { "Content-Type": "application/json" },
@@ -155,7 +156,7 @@ describe("DELETE /api/cross-session-memory/[project]", () => {
       },
     } as never);
 
-    const req = new Request("http://localhost", {
+    const req = new NextRequest("http://localhost", {
       method: "DELETE",
       body: JSON.stringify({}),
       headers: { "Content-Type": "application/json" },
@@ -177,7 +178,7 @@ describe("DELETE /api/cross-session-memory/[project]", () => {
       },
     } as never);
 
-    const req = new Request("http://localhost", {
+    const req = new NextRequest("http://localhost", {
       method: "DELETE",
       body: "not-json{",
       headers: { "Content-Type": "application/json" },
@@ -198,7 +199,7 @@ describe("DELETE /api/cross-session-memory/[project]", () => {
       },
     } as never);
 
-    const req = new Request("http://localhost", {
+    const req = new NextRequest("http://localhost", {
       method: "DELETE",
       body: JSON.stringify({ contentHash: "hash-1" }),
       headers: { "Content-Type": "application/json" },
@@ -213,7 +214,7 @@ describe("DELETE /api/cross-session-memory/[project]", () => {
       config: { projects: {} },
     } as never);
 
-    const req = new Request("http://localhost", {
+    const req = new NextRequest("http://localhost", {
       method: "DELETE",
       body: JSON.stringify({ contentHash: "hash-1" }),
       headers: { "Content-Type": "application/json" },
@@ -244,7 +245,7 @@ describe("PUT /api/cross-session-memory/[project]", () => {
     };
     mockLoad.mockResolvedValue([updatedEntry, SAMPLE_ENTRIES[1]!]);
 
-    const req = new Request("http://localhost", {
+    const req = new NextRequest("http://localhost", {
       method: "PUT",
       body: JSON.stringify({ contentHash: "hash-1", content: "Use PascalCase" }),
       headers: { "Content-Type": "application/json" },
@@ -270,7 +271,7 @@ describe("PUT /api/cross-session-memory/[project]", () => {
       },
     } as never);
 
-    const req = new Request("http://localhost", {
+    const req = new NextRequest("http://localhost", {
       method: "PUT",
       body: JSON.stringify({ content: "new content" }),
       headers: { "Content-Type": "application/json" },
@@ -292,7 +293,7 @@ describe("PUT /api/cross-session-memory/[project]", () => {
       },
     } as never);
 
-    const req = new Request("http://localhost", {
+    const req = new NextRequest("http://localhost", {
       method: "PUT",
       body: JSON.stringify({ contentHash: "hash-1" }),
       headers: { "Content-Type": "application/json" },
@@ -314,7 +315,7 @@ describe("PUT /api/cross-session-memory/[project]", () => {
       },
     } as never);
 
-    const req = new Request("http://localhost", {
+    const req = new NextRequest("http://localhost", {
       method: "PUT",
       body: "broken-json[",
       headers: { "Content-Type": "application/json" },
@@ -335,7 +336,7 @@ describe("PUT /api/cross-session-memory/[project]", () => {
       },
     } as never);
 
-    const req = new Request("http://localhost", {
+    const req = new NextRequest("http://localhost", {
       method: "PUT",
       body: JSON.stringify({ contentHash: "hash-1", content: "new" }),
       headers: { "Content-Type": "application/json" },
@@ -350,7 +351,7 @@ describe("PUT /api/cross-session-memory/[project]", () => {
       config: { projects: {} },
     } as never);
 
-    const req = new Request("http://localhost", {
+    const req = new NextRequest("http://localhost", {
       method: "PUT",
       body: JSON.stringify({ contentHash: "hash-1", content: "new" }),
       headers: { "Content-Type": "application/json" },

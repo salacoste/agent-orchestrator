@@ -813,6 +813,7 @@ export type EventType =
   // Agent blocked/resumed
   | "agent.blocked"
   | "agent.resumed"
+  | "persistent.timeout_extended"
   // Agent capacity (Epic 50, Story 50.6)
   | "agent.capacity_reached"
   | "agent.capacity_warning"

@@ -30,7 +30,7 @@ import {
   getPersistentRequeueCount,
   storePersistentRequeueAttempt,
   schedulePersistentRequeue,
-} from "../verification-gate.js";
+} from "../verification/index.js";
 import { readMetadataRaw, updateMetadata } from "../metadata.js";
 
 const mockReadMetadataRaw = vi.mocked(readMetadataRaw);

@@ -632,8 +632,8 @@ describe("extractProjectResources — agent from sharedPool", () => {
     const config = makeConfig({
       "project-a": { repo: "org/repo-a", path: "/path/a" },
     });
-    config.resourcePool = { maxSize: 5, defaultConcurrency: 2 };
-    config.projects["project-a"].sharedPool = { enabled: true };
+    config.resourcePool = { total: 5, projects: { "project-a": 2 } };
+    config.projects["project-a"].sharedPool = { enabled: true, eligibleProjects: ["*"] };
 
     const resources = extractProjectResources(config);
 
@@ -648,8 +648,8 @@ describe("extractProjectResources — agent from sharedPool", () => {
     const config = makeConfig({
       "project-a": { repo: "org/repo-a", path: "/path/a" },
     });
-    config.resourcePool = { maxSize: 5, defaultConcurrency: 2 };
-    config.projects["project-a"].sharedPool = { enabled: false };
+    config.resourcePool = { total: 5, projects: { "project-a": 2 } };
+    config.projects["project-a"].sharedPool = { enabled: false, eligibleProjects: ["*"] };
 
     const resources = extractProjectResources(config);
     const agentResources = resources.filter((r) => r.resourceType === "agent");
@@ -660,7 +660,7 @@ describe("extractProjectResources — agent from sharedPool", () => {
     const config = makeConfig({
       "project-a": { repo: "org/repo-a", path: "/path/a" },
     });
-    config.projects["project-a"].sharedPool = { enabled: true };
+    config.projects["project-a"].sharedPool = { enabled: true, eligibleProjects: ["*"] };
 
     const resources = extractProjectResources(config);
     const agentResources = resources.filter((r) => r.resourceType === "agent");
@@ -672,9 +672,9 @@ describe("extractProjectResources — agent from sharedPool", () => {
       "project-a": { repo: "org/repo-a", path: "/path/a" },
       "project-b": { repo: "org/repo-b", path: "/path/b" },
     });
-    config.resourcePool = { maxSize: 5, defaultConcurrency: 2 };
-    config.projects["project-a"].sharedPool = { enabled: true };
-    config.projects["project-b"].sharedPool = { enabled: true };
+    config.resourcePool = { total: 5, projects: { "project-a": 2, "project-b": 2 } };
+    config.projects["project-a"].sharedPool = { enabled: true, eligibleProjects: ["*"] };
+    config.projects["project-b"].sharedPool = { enabled: true, eligibleProjects: ["*"] };
 
     const resources = extractProjectResources(config);
     const conflicts = detectResourceConflicts(resources);

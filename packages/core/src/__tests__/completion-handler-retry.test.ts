@@ -49,7 +49,7 @@ const {
   mockGetModelUsageAggregator: vi.fn(() => null),
 }));
 
-vi.mock("../verification-gate.js", () => ({
+vi.mock("../verification/index.js", () => ({
   runVerification: mockRunVerification,
   storeVerificationResult: mockStoreVerificationResult,
   scheduleVerificationRetry: mockScheduleVerificationRetry,

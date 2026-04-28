@@ -19,7 +19,7 @@ import {
   runVerification,
   storeVerificationResult,
   loadVerificationResult,
-} from "../verification-gate.js";
+} from "../verification/index.js";
 import { readMetadataRaw, updateMetadata } from "../metadata.js";
 
 const mockExecFile = vi.mocked(execFile);

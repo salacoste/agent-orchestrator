@@ -1,6 +1,6 @@
 # Story 62.36: Scenario Comparison
 
-Status: review
+Status: done
 
 ## Story
 

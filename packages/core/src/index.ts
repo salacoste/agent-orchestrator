@@ -1114,7 +1114,7 @@ export {
   getPersistentRequeueCount,
   storePersistentRequeueAttempt,
   schedulePersistentRequeue,
-} from "./verification-gate.js";
+} from "./verification/index.js";
 
 export type {
   VerificationRetryConfig,

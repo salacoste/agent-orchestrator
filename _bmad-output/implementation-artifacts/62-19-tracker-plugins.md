@@ -1,6 +1,6 @@
 # Story 62.19: Tracker Plugin Pages (github, linear, bmad)
 
-Status: review
+Status: done
 
 ## Story
 

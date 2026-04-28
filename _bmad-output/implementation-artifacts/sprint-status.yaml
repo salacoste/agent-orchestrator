@@ -885,7 +885,7 @@ previous_cycle:
   62-63-testing-conventions: done
   62-64-about-pages-changelog-license: done
 
-  epic-62-retrospective: optional
+  epic-62-retrospective: done
 
 # Known Limitations & Feature Flags
 limitations:

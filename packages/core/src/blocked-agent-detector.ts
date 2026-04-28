@@ -193,6 +193,23 @@ class BlockedAgentDetectorImpl implements BlockedAgentDetector {
               status.persistentExtensions,
             );
             status.severity = inactiveMs > extendedTimeout * 2 ? "red" : "amber";
+            try {
+              await this.eventBus.publish({
+                eventType: "persistent.timeout_extended",
+                metadata: {
+                  agentId,
+                  extensionNumber: status.persistentExtensions,
+                  maxExtensions: this.persistentMaxExtensions,
+                  inactiveMs,
+                },
+              });
+            } catch (error) {
+              // eslint-disable-next-line no-console -- No logger available; stderr is the only output channel for event publish failures
+              console.error(
+                `[BlockedAgentDetector] Failed to publish persistent.timeout_extended event:`,
+                error,
+              );
+            }
             continue;
           }
         }

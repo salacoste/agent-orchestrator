@@ -31,7 +31,7 @@ import {
   loadVerificationRetryHistory,
   writeRetryContextToNotepad,
   scheduleVerificationRetry,
-} from "../verification-gate.js";
+} from "../verification/index.js";
 import { readMetadataRaw, updateMetadata } from "../metadata.js";
 import { appendFileSync, writeFileSync, existsSync } from "node:fs";
 

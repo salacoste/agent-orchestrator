@@ -1,6 +1,6 @@
 # Story 62.16: Runtime Plugin Pages (tmux, process)
 
-Status: review
+Status: done
 
 ## Story
 

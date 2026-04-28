@@ -29,7 +29,7 @@ import {
   getVerificationRetryCount,
   schedulePersistentRequeue,
   storePersistentRequeueAttempt,
-} from "./verification-gate.js";
+} from "./verification/index.js";
 import { loadConfig } from "./config.js";
 import { getLearningStore, getModelUsageAggregator } from "./service-registry.js";
 import {

@@ -11,6 +11,8 @@ export default tseslint.config(
       "**/.next/**",
       "**/coverage/**",
       ".claude/**",
+      "_tmp/**",
+      "docs/_site/**",
       "packages/web/next-env.d.ts",
       "packages/web/next.config.js",
       "packages/web/postcss.config.mjs",

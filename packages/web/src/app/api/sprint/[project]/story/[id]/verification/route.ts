@@ -7,7 +7,12 @@
 
 import { NextResponse } from "next/server";
 import { getServices } from "@/lib/services";
-import { loadVerificationResult, getSessionsDir, type VerificationResult } from "@composio/ao-core";
+import {
+  loadVerificationResult,
+  getSessionsDir,
+  getAgentRegistry,
+  type VerificationResult,
+} from "@composio/ao-core";
 
 export const dynamic = "force-dynamic";
 
@@ -17,16 +22,19 @@ export async function GET(
 ) {
   try {
     const { project: projectId, id: storyId } = await params;
-    const { config, registry } = await getServices();
+    const { config } = await getServices();
 
     const project = config.projects[projectId];
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
+    const sessionsDir = getSessionsDir(config.configPath, project.path);
+
     // Find the session (agent) assigned to this story
     // Note: only active assignments are tracked; completed stories return null
-    const assignment = registry.getByStory(storyId);
+    const agentRegistry = getAgentRegistry(sessionsDir, config);
+    const assignment = agentRegistry.getByStory(storyId);
     if (!assignment) {
       // No active session for this story — return null verification (may be completed or non-existent)
       return NextResponse.json(
@@ -40,7 +48,6 @@ export async function GET(
     }
 
     // Load verification result from session metadata
-    const sessionsDir = getSessionsDir(config.configPath, project.path);
     const verification: VerificationResult | null = loadVerificationResult(
       sessionsDir,
       assignment.agentId,

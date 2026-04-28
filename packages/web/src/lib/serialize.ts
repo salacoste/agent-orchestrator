@@ -59,6 +59,7 @@ export function sessionToDashboard(session: Session): DashboardSession {
     createdAt: session.createdAt.toISOString(),
     lastActivityAt: session.lastActivityAt.toISOString(),
     pr: session.pr ? basicPRToDashboard(session.pr) : null,
+    workspacePath: session.workspacePath,
     metadata: session.metadata,
   };
 }

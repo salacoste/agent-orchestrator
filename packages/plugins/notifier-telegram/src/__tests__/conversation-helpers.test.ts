@@ -61,8 +61,12 @@ describe("checkTimeout", () => {
   });
 
   it("does not throw at exact boundary (uses > not >=)", () => {
-    const boundary = Date.now() - 5_000;
+    vi.useFakeTimers();
+    const now = Date.now();
+    vi.setSystemTime(now);
+    const boundary = now - 5_000;
     expect(() => checkTimeout(boundary, 5_000)).not.toThrow();
+    vi.useRealTimers();
   });
 });
 

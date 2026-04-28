@@ -14,7 +14,11 @@ import { createHash } from "node:crypto";
 
 export const dynamic = "force-dynamic";
 
-const EMPTY_NOTEPAD = Object.freeze({ priority: "", working: "", manual: "" });
+const EMPTY_NOTEPAD: { priority: string; working: string; manual: string } = Object.freeze({
+  priority: "",
+  working: "",
+  manual: "",
+});
 
 function hashNotepad(notepad: { priority: string; working: string; manual: string }): string {
   return createHash("md5").update(JSON.stringify(notepad)).digest("hex");

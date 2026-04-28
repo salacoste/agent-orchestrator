@@ -8,11 +8,13 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 
 // ── Mocks (must be before route imports) ──────────────────────────────────────
 
-const { mockLoadVerificationResult, mockGetSessionsDir, mockGetByStory } = vi.hoisted(() => ({
-  mockLoadVerificationResult: vi.fn(),
-  mockGetSessionsDir: vi.fn(() => "/tmp/sessions"),
-  mockGetByStory: vi.fn(),
-}));
+const { mockLoadVerificationResult, mockGetSessionsDir, mockGetAgentRegistry, mockGetByStory } =
+  vi.hoisted(() => ({
+    mockLoadVerificationResult: vi.fn(),
+    mockGetSessionsDir: vi.fn(() => "/tmp/sessions"),
+    mockGetAgentRegistry: vi.fn(() => ({ getByStory: mockGetByStory })),
+    mockGetByStory: vi.fn(),
+  }));
 
 vi.mock("@/lib/services", () => ({
   getServices: vi.fn(async () => ({
@@ -26,9 +28,6 @@ vi.mock("@/lib/services", () => ({
         },
       },
     },
-    registry: {
-      getByStory: mockGetByStory,
-    },
   })),
 }));
 
@@ -38,6 +37,7 @@ vi.mock("@composio/ao-core", async (importOriginal) => {
     ...(actual as Record<string, unknown>),
     loadVerificationResult: mockLoadVerificationResult,
     getSessionsDir: mockGetSessionsDir,
+    getAgentRegistry: mockGetAgentRegistry,
   };
 });
 
@@ -145,7 +145,7 @@ describe("GET /api/sprint/[project]/story/[id]/verification", () => {
   });
 
   it("returns 500 on unexpected error", async () => {
-    mockGetByStory.mockImplementation(() => {
+    mockGetAgentRegistry.mockImplementation(() => {
       throw new Error("Registry corrupted");
     });
 

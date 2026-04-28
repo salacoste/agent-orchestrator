@@ -136,6 +136,15 @@ export function create(config?: Record<string, unknown>): SessionEnhancementProv
 
       // Create project-memory.json (overwrite if exists — idempotent)
       await writeFile(join(omcDir, "project-memory.json"), "{}", "utf-8");
+
+      // Create notepad.md with empty context (sections only)
+      await createNotepad(worktreePath, {
+        storyId: "",
+        storyTitle: "",
+        acceptanceCriteria: [],
+        relevantFiles: [],
+        dependencies: [],
+      });
     },
 
     // -----------------------------------------------------------------------

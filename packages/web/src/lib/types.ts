@@ -72,6 +72,7 @@ export interface DashboardSession {
   createdAt: string;
   lastActivityAt: string;
   pr: DashboardPR | null;
+  workspacePath: string | null;
   metadata: Record<string, string>;
 }
 

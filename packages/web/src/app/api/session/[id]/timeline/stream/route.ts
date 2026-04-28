@@ -9,7 +9,7 @@
 
 import { type NextRequest } from "next/server";
 import { getServices } from "@/lib/services";
-import { readTimeline } from "@composio/ao-core";
+import { readTimeline, type TimelineEntry } from "@composio/ao-core";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +43,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
             return;
           }
 
-          let entries;
+          let entries: TimelineEntry[];
           try {
             entries = await readTimeline(session.workspacePath, id);
           } catch {

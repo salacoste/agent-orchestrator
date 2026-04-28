@@ -10,6 +10,7 @@ import { NextResponse } from "next/server";
 import { getServices } from "@/lib/services";
 import {
   getSessionsDir,
+  getAgentRegistry,
   loadVerificationRetryHistory,
   getPersistentRequeueCount,
   getExecutionMode,
@@ -24,15 +25,18 @@ export async function GET(
 ) {
   try {
     const { project: projectId, id: storyId } = await params;
-    const { config, registry } = await getServices();
+    const { config } = await getServices();
 
     const project = config.projects[projectId];
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
+    const sessionsDir = getSessionsDir(config.configPath, project.path);
+
     // Find the session (agent) assigned to this story
-    const assignment = registry.getByStory(storyId);
+    const agentRegistry = getAgentRegistry(sessionsDir, config);
+    const assignment = agentRegistry.getByStory(storyId);
     const maxAttempts = project.verification?.retry?.maxAttempts ?? 2;
     if (!assignment) {
       return NextResponse.json(
@@ -46,7 +50,6 @@ export async function GET(
     }
 
     // Load retry history from session metadata
-    const sessionsDir = getSessionsDir(config.configPath, project.path);
     const retries: VerificationRetryAttempt[] = loadVerificationRetryHistory(
       sessionsDir,
       assignment.agentId,

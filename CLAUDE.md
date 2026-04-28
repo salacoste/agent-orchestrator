@@ -14,16 +14,16 @@ TypeScript (ESM), Node 20+, pnpm workspaces. Next.js 15 (App Router) + Tailwind.
 
 8 plugin slots — every abstraction is swappable:
 
-| Slot      | Interface   | Default Plugin |
-| --------- | ----------- | -------------- |
-| Runtime   | `Runtime`   | tmux           |
-| Agent     | `Agent`     | claude-code    |
-| Workspace | `Workspace` | worktree       |
-| Tracker   | `Tracker`   | github         |
-| SCM       | `SCM`       | github         |
-| Notifier  | `Notifier`  | desktop        |
-| Terminal  | `Terminal`  | iterm2         |
-| Lifecycle | (core)      | —              |
+| Slot      | Interface                    | Default Plugin |
+| --------- | ---------------------------- | -------------- |
+| Runtime   | `Runtime`                    | tmux           |
+| Agent     | `Agent`                      | claude-code    |
+| Workspace | `Workspace`                  | worktree       |
+| Tracker   | `Tracker`                    | github         |
+| SCM       | `SCM`                        | github         |
+| Notifier  | `Notifier`                   | desktop        |
+| Terminal  | `Terminal`                   | iterm2         |
+| Provider  | `SessionEnhancementProvider` | raw            |
 
 **All interfaces defined in `packages/core/src/types.ts` — read this file first.**
 

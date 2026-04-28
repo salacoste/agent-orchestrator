@@ -801,89 +801,89 @@ previous_cycle:
 
   # Epic 62: GitHub Pages Documentation
   # Complete documentation site with Just the Docs Jekyll theme
-  epic-62: in-progress
+  epic-62: done
 
   # Phase 1 — Infrastructure & Getting Started (P0)
   62-1-jekyll-github-pages-infrastructure-setup: done
-  62-2-landing-page: backlog
-  62-3-installation-guide: backlog
-  62-4-quick-start-tutorial: backlog
-  62-5-configuration-reference: backlog
-  62-6-architecture-overview: backlog
+  62-2-landing-page: done
+  62-3-installation-guide: done
+  62-4-quick-start-tutorial: done
+  62-5-configuration-reference: done
+  62-6-architecture-overview: done
 
   # Phase 2 — Core Concepts (P1)
-  62-7-sessions-lifecycle: backlog
-  62-8-stories-sprints: backlog
-  62-9-autopilot-modes: backlog
-  62-10-reactions-engine: backlog
-  62-11-memory-learning: backlog
-  62-12-verification-gate: backlog
-  62-13-model-routing: backlog
-  62-14-agent-assignment: backlog
+  62-7-sessions-lifecycle: done
+  62-8-stories-sprints: done
+  62-9-autopilot-modes: done
+  62-10-reactions-engine: done
+  62-11-memory-learning: done
+  62-12-verification-gate: done
+  62-13-model-routing: done
+  62-14-agent-assignment: done
 
   # Phase 3 — Plugin Reference (P2)
-  62-15-plugins-index: backlog
-  62-16-runtime-plugins-tmux-process: backlog
-  62-17-agent-plugins: backlog
-  62-18-workspace-plugins: backlog
-  62-19-tracker-plugins: backlog
-  62-20-scm-plugin-github: backlog
-  62-21-notifier-plugins: backlog
-  62-22-terminal-provider-eventbus-plugins: backlog
+  62-15-plugins-index: done
+  62-16-runtime-plugins-tmux-process: done
+  62-17-agent-plugins: done
+  62-18-workspace-plugins: done
+  62-19-tracker-plugins: done
+  62-20-scm-plugin-github: done
+  62-21-notifier-plugins: done
+  62-22-terminal-provider-eventbus-plugins: done
 
   # Phase 4 — CLI Reference (P3)
-  62-23-cli-index: backlog
-  62-24-cli-setup-commands: backlog
-  62-25-cli-session-commands: backlog
-  62-26-cli-sprint-commands: backlog
-  62-27-cli-story-commands: backlog
-  62-28-cli-monitoring-commands: backlog
-  62-29-cli-review-pr-commands: backlog
-  62-30-cli-intelligence-commands: backlog
-  62-31-cli-infrastructure-commands: backlog
+  62-23-cli-index: done
+  62-24-cli-setup-commands: done
+  62-25-cli-session-commands: done
+  62-26-cli-sprint-commands: done
+  62-27-cli-story-commands: done
+  62-28-cli-monitoring-commands: done
+  62-29-cli-review-pr-commands: done
+  62-30-cli-intelligence-commands: done
+  62-31-cli-infrastructure-commands: done
 
   # Phase 5 — Web Dashboard (P4)
-  62-32-web-dashboard-index: backlog
-  62-33-portfolio-view: backlog
-  62-34-sprint-board: backlog
-  62-35-session-detail: backlog
-  62-36-scenario-comparison: backlog
-  62-37-conflict-resolution: backlog
-  62-38-risk-management: backlog
-  62-39-workflow-events-fleet-pages: backlog
+  62-32-web-dashboard-index: done
+  62-33-portfolio-view: done
+  62-34-sprint-board: done
+  62-35-session-detail: done
+  62-36-scenario-comparison: done
+  62-37-conflict-resolution: done
+  62-38-risk-management: done
+  62-39-workflow-events-fleet-pages: done
 
   # Phase 6 — API Reference (P5)
-  62-40-api-index: backlog
-  62-41-sessions-api: backlog
-  62-42-sprints-stories-api: backlog
-  62-43-agents-api: backlog
-  62-44-events-api: backlog
-  62-45-portfolio-dependencies-api: backlog
-  62-46-scenarios-api: backlog
-  62-47-conflicts-risk-api: backlog
+  62-40-api-index: done
+  62-41-sessions-api: done
+  62-42-sprints-stories-api: done
+  62-43-agents-api: done
+  62-44-events-api: done
+  62-45-portfolio-dependencies-api: done
+  62-46-scenarios-api: done
+  62-47-conflicts-risk-api: done
 
   # Phase 7 — Advanced Topics (P6)
-  62-48-cross-project-management: backlog
-  62-49-monte-carlo-simulation: backlog
-  62-50-custom-plugin-development: backlog
-  62-51-hooks-extensions: backlog
-  62-52-prompt-layers: backlog
-  62-53-production-deployment: backlog
+  62-48-cross-project-management: done
+  62-49-monte-carlo-simulation: done
+  62-50-custom-plugin-development: done
+  62-51-hooks-extensions: done
+  62-52-prompt-layers: done
+  62-53-production-deployment: done
 
   # Phase 8 — Tutorials (P6)
-  62-54-tutorial-first-agent: backlog
-  62-55-tutorial-github-cicd-flow: backlog
-  62-56-tutorial-multi-agent-sprint: backlog
-  62-57-tutorial-portfolio-management: backlog
-  62-58-tutorial-custom-workflow: backlog
+  62-54-tutorial-first-agent: done
+  62-55-tutorial-github-cicd-flow: done
+  62-56-tutorial-multi-agent-sprint: done
+  62-57-tutorial-portfolio-management: done
+  62-58-tutorial-custom-workflow: done
 
   # Phase 9 — SDK, Contributing & About (P6)
-  62-59-sdk-reference: backlog
-  62-60-contributing-guide: backlog
-  62-61-development-setup: backlog
-  62-62-plugin-development-guide: backlog
-  62-63-testing-conventions: backlog
-  62-64-about-pages-changelog-license: backlog
+  62-59-sdk-reference: done
+  62-60-contributing-guide: done
+  62-61-development-setup: done
+  62-62-plugin-development-guide: done
+  62-63-testing-conventions: done
+  62-64-about-pages-changelog-license: done
 
   epic-62-retrospective: optional
 
